@@ -1,6 +1,6 @@
 # ERPBridge — Comprehensive Codebase Report
 
-> **Generated:** 2026-05-05  
+> **Generated:** 2026-05-05 | **Last Updated:** 2026-05-06  
 > **Repository:** [nmdra/ERPBridge](https://github.com/nmdra/ERPBridge)  
 > **Module:** `github.com/nimendra/ERPBridge`  
 > **Go Version:** 1.26.2 | **Python Version:** 3.11+
@@ -34,9 +34,10 @@
 12. [API Endpoints Reference](#12-api-endpoints-reference)
 13. [Docker & Deployment](#13-docker--deployment)
 14. [Release Pipeline (GoReleaser)](#14-release-pipeline-goreleaser)
-15. [Testing](#15-testing)
-16. [Key Design Patterns](#16-key-design-patterns)
-17. [Known Limitations & Future Work](#17-known-limitations--future-work)
+15. [CI/CD Workflow (GitHub Actions)](#15-cicd-workflow-github-actions)
+16. [Testing](#16-testing)
+17. [Key Design Patterns](#17-key-design-patterns)
+18. [Known Limitations & Future Work](#18-known-limitations--future-work)
 
 ---
 
@@ -57,6 +58,113 @@
 ---
 
 ## 2. Architecture Diagram
+
+### Mermaid Diagram
+
+```mermaid
+flowchart TB
+    subgraph Clients["Client Layer"]
+        direction LR
+        Agent["🤖 AI Agent / LLM\n(Claude, GPT, MCP Client)"]
+        CLI["🖥️ bridgectl CLI\n(Developer / Operator)"]
+    end
+
+    subgraph Middleware["Middleware Service · Go · :8080"]
+        direction TB
+        MCP["MCP Server\n(SSE + HTTP)"]
+        TR["Tool Registry\n(JSON Schemas)"]
+        CM["Cache Manager\nExact + Semantic"]
+        EC["ERP Connector\n(HTTP Client)"]
+
+        MCP -->|"register / lookup"| TR
+        MCP -->|"cache read/write/flush"| CM
+        MCP -->|"ERP call"| EC
+    end
+
+    subgraph CacheLayer["Cache Layer"]
+        Redis["Redis Stack :6379\n+ RediSearch\n+ RedisInsight :8001"]
+        Embedder["HuggingFace TEI :8083\nnomic-embed-text-v1\n768-dim vectors"]
+        CM --> Redis
+        CM -->|"embed args"| Embedder
+    end
+
+    subgraph ERP["Mock ERP · Python/FastAPI · :8081"]
+        Finance["Finance\n/api/v1/finance\ninvoices · payments"]
+        HR["HR\n/api/v1/hr\nemployees · departments"]
+        Inventory["Inventory\n/api/v1/inventory\nitems · stock"]
+    end
+
+    Agent -- "MCP/SSE\nGET /mcp/sse\nPOST /mcp/messages" --> MCP
+    CLI -- "REST\nPOST /api/tools/invoke\nGET /api/cache/*\nGET /api/logs/*" --> MCP
+    EC -- "REST HTTP\nAPI-Key / Basic / Bearer" --> Finance
+    EC --> HR
+    EC --> Inventory
+```
+
+### Component Interaction (Sequence)
+
+```mermaid
+sequenceDiagram
+    participant A as AI Agent
+    participant M as Middleware (MCP Server)
+    participant R as Redis Cache
+    participant E as HF Embedder
+    participant ERP as Mock ERP
+
+    A->>M: GET /mcp/sse (SSE handshake)
+    M-->>A: session_id + message endpoint
+
+    A->>M: listTools
+    M-->>A: [finance.list_invoices, ...]
+
+    A->>M: callTool(finance.list_invoices, {})
+    activate M
+
+    M->>R: GET exact:finance.list_invoices:shared:empty
+    R-->>M: MISS
+
+    M->>E: POST /embed ("search_query: {}")
+    E-->>M: float32[768]
+
+    M->>R: FT.SEARCH idx:semantic KNN 1
+    R-->>M: MISS (no similar entry)
+
+    M->>ERP: GET /api/v1/finance/invoices (X-API-Key)
+    ERP-->>M: {"data":[...],"total":2}
+
+    M->>R: SET exact:... (TTL 300s)
+    M->>R: HSET sem:{uuid} (embedding + response)
+
+    M-->>A: CallToolResult{text: JSON}
+    deactivate M
+```
+
+### Cache Decision Flow
+
+```mermaid
+flowchart LR
+    Start([Tool Call]) --> ExactLookup{Exact\nCache Hit?}
+    ExactLookup -- HIT --> ReturnCached([Return Cached\nX-Cache-Hit: exact])
+    ExactLookup -- MISS --> SemanticEnabled{Semantic\nEnabled?}
+    SemanticEnabled -- No --> ERPCall
+    SemanticEnabled -- Yes --> Embed[Embed args\nHF TEI]
+    Embed --> KNN[KNN-1 Search\nRediSearch]
+    KNN --> Threshold{similarity >=\nthreshold?}
+    Threshold -- Yes --> ReturnSemantic([Return Cached\nX-Cache-Hit: semantic])
+    Threshold -- No --> ERPCall[Call ERP\nconnector.Call]
+    ERPCall --> Validate{OutputSchema\ndefined?}
+    Validate -- Yes --> ValidateResp[Validate Response\njsonschema]
+    Validate -- No --> StoreCache
+    ValidateResp --> StoreCache[Store in\nExact + Semantic Cache]
+    StoreCache --> AutoFlush{FlushOn\nnon-empty?}
+    AutoFlush -- Yes --> Flush[AutoFlush\nrelated tools]
+    AutoFlush -- No --> Return([Return Result])
+    Flush --> Return
+```
+
+---
+
+### ASCII Diagram (plaintext fallback)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -98,7 +206,7 @@
        └──────────────────────────────┘
 ```
 
----
+
 
 ## 3. Repository Structure
 
@@ -163,7 +271,10 @@ ERPBridge/
 │       ├── finance.list_invoices_api_v1_finance_invoices_get.json
 │       └── finance.create_invoice_api_v1_finance_invoices_post.json
 │
-├── .env.example                # Environment variable template
+├── .env.example                # Environment variable template (all runtime vars)
+├── .github/
+│   └── workflows/
+│       └── release.yml         # GoReleaser CI/CD pipeline (lint → release → Docker)
 ├── .goreleaser.yaml            # Multi-platform release configuration
 ├── docker-compose.yml          # Full stack orchestration
 ├── Dockerfile.middleware       # Development middleware container
@@ -198,6 +309,7 @@ ERPBridge/
 | `fastapi` | REST API framework |
 | `uvicorn` | ASGI server |
 | `pydantic` | Request/response model validation |
+| `python-multipart` | Form/multipart body parsing (FastAPI dependency) |
 
 ### Infrastructure
 
@@ -302,6 +414,9 @@ main()
 | `REDIS_URL` | *(empty)* | Redis connection URL — cache disabled if absent |
 | `EMBEDDER_URL` | *(empty)* | HuggingFace TEI base URL — semantic cache disabled if absent |
 | `BASE_URL` | `http://localhost:{MCP_PORT}` | Public URL used in SSE handshake |
+| `ERP_BASE_URL` | *(empty)* | Base URL for the ERP service (used in docker-compose) |
+| `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `APP_ENV` | `development` | `production` enables JSON log format; otherwise text |
 
 ---
 
@@ -875,7 +990,7 @@ The Mock ERP implements full role-based access:
 current-context: local
 contexts:
   local:
-    server: http://localhost:8082      # Management API (cache, logs)
+    server: http://localhost:8080      # Management API (cache, logs, tool invoke)
     mcp-server: http://localhost:8080  # MCP SSE + tool invoke
     erp-base: http://localhost:8081    # Raw ERP URL
     auth:
@@ -905,6 +1020,35 @@ bridgectl --context prod tool list  # One-shot override without persisting
 2. `BRIDGE_*` environment variables
 3. `~/.bridgectl/config.yaml` file
 4. Hardcoded defaults (`localhost` URLs, `api-key` auth type)
+
+### `.env.example`
+
+A reference `.env.example` file is provided at the repository root documenting all runtime environment variables for both the middleware and the CLI:
+
+```
+# Middleware
+MCP_PORT=8080
+BASE_URL=http://localhost:8080
+SCHEMAS_DIR=./schemas
+REDIS_URL=redis://localhost:6379
+EMBEDDER_URL=http://localhost:8083
+ERP_BASE_URL=http://localhost:8081
+LOG_LEVEL=info
+APP_ENV=development
+
+# CLI (bridgectl)
+BRIDGE_CONTEXT=local
+BRIDGE_SERVER=http://localhost:8080
+BRIDGE_MCP_SERVER=http://localhost:8080
+BRIDGE_ERP_BASE=http://localhost:8081
+BRIDGE_AUTH_TYPE=api-key
+BRIDGE_API_KEY=your-api-key-here
+BRIDGE_AUTH_HEADER=X-API-Key
+
+# Mock ERP
+MOCK_ERP_PORT=8081
+MOCK_ERP_LOG_LEVEL=debug
+```
 
 ---
 
@@ -974,11 +1118,13 @@ embedder (healthy) ┘
 
 ### Dockerfiles
 
-| File | Purpose |
-|---|---|
-| `mock-erp/Dockerfile` | Python FastAPI mock ERP |
-| `Dockerfile.middleware` | Development middleware build |
-| `Dockerfile.middleware.releaser` | Production middleware (used by GoReleaser) |
+| File | Purpose | Base Image |
+|---|---|---|
+| `mock-erp/Dockerfile` | Python FastAPI mock ERP | `python:3.11-slim` |
+| `Dockerfile.middleware` | Development middleware build | `golang:1.23-alpine` → `alpine:latest` |
+| `Dockerfile.middleware.releaser` | Production middleware (GoReleaser) | Pre-built binary → `alpine:latest` |
+
+> **Note:** `Dockerfile.middleware` uses `golang:1.23-alpine` as its builder base, while the module requires Go 1.26.2 (`go.mod`). For production builds, GoReleaser compiles the binary in CI with the correct Go version and uses `Dockerfile.middleware.releaser` (which only copies the pre-built binary into `alpine:latest`).
 
 ---
 
@@ -1014,7 +1160,49 @@ Published to **GitHub Container Registry** (`ghcr.io`):
 
 ---
 
-## 15. Testing
+## 15. CI/CD Workflow (GitHub Actions)
+
+**File:** `.github/workflows/release.yml`
+
+The release pipeline is triggered on any tag push matching `v*` (e.g., `v0.1.0`).
+
+### Permissions Required
+
+| Permission | Reason |
+|---|---|
+| `contents: write` | Create GitHub Release with assets |
+| `packages: write` | Push Docker images to `ghcr.io` |
+| `issues: write` | GoReleaser release notes integration |
+| `id-token: write` | OIDC token for provenance signing |
+
+### Pipeline Stages
+
+```mermaid
+flowchart LR
+    Push["git push tag v*"] --> Lint["golangci-lint\n(Go 1.26.2)"]
+    Lint -->|pass| Release["GoReleaser release\n--clean"]
+    Release --> Binaries["Binary Archives\nmiddleware + bridgectl\nlinux/windows/darwin\namd64 + arm64"]
+    Release --> Docker["Docker Buildx\nghcr.io/{owner}/middleware\n:version + :latest\namd64 + arm64"]
+    Release --> Checksums["checksums.txt\nSHA256 for all artifacts"]
+    Release --> GHRelease["GitHub Release\nwith changelog"]
+```
+
+### Key Steps
+
+1. **Lint** (`golangci` job): runs `golangci-lint-action@v6` with the latest linter version
+2. **Setup** (`release` job): configures Docker Buildx + QEMU for multi-arch builds, logs in to `ghcr.io`
+3. **GoReleaser**: runs with `GITHUB_TOKEN`, `REPO_OWNER`, creating all artifacts defined in `.goreleaser.yaml`
+
+### Tags Released So Far
+
+| Tag | Description |
+|---|---|
+| `v0.1.0-alpha.1` | First alpha release |
+| `v0.1.0-alpha.2` | Second alpha release |
+
+---
+
+## 16. Testing
 
 ### Existing Test Files
 
@@ -1040,7 +1228,7 @@ go test ./...
 
 ---
 
-## 16. Key Design Patterns
+## 17. Key Design Patterns
 
 ### 1. Interface-Driven Dependencies
 
@@ -1087,7 +1275,7 @@ Both paths share identical caching, logging, and invalidation behaviour.
 
 ---
 
-## 17. Known Limitations & Future Work
+## 18. Known Limitations & Future Work
 
 ### Current Limitations
 
@@ -1115,4 +1303,4 @@ Both paths share identical caching, logging, and invalidation behaviour.
 
 ---
 
-*Report generated from source analysis of the ERPBridge repository at commit HEAD.*
+*Report generated from source analysis of the ERPBridge repository. Last updated 2026-05-06 to reflect `.env.example`, GitHub Actions CI/CD pipeline, Dockerfile notes, and Mermaid architecture diagrams.*
