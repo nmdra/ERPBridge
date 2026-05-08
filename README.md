@@ -72,6 +72,7 @@ Explore our comprehensive documentation in the [docs/](./docs) directory:
 - **[Documentation Wiki](./docs/README.md)**: Central hub for all guides.
 - **[Docker Deployment Guide](./docs/docker.md)**: Setup and manage ERPBridge with Docker.
 - **[Connectivity & Transport Guide](./docs/connectivity.md)**: Streamable HTTP, Stdio, and Postman setup.
+- **[MCP Client Guide (Python & TypeScript)](./docs/mcp-client-guide.md)**: Build MCP clients for HTTP or Stdio.
 - **[CLI Reference](./docs/cli/bridgectl.md)**: Detailed `bridgectl` command documentation.
 - **[AI Agent Integration](./AGENTS.md)**: Patterns for Claude, Cursor, and more.
 

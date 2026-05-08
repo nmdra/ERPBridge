@@ -19,6 +19,7 @@ Welcome to the ERPBridge documentation. This wiki-style guide will help you unde
 ## 🔌 Integration Guides
 
 - **[Postman Integration](./connectivity.md#postman-configuration)**: Testing MCP endpoints with Postman.
+- **[MCP Client Guide (Python & TypeScript)](./mcp-client-guide.md)**: Build MCP clients for Streamable HTTP and Stdio.
 - **[Mock ERP Setup](../mock-erp/README.md)**: Details about the simulated legacy ERP service.
 
 ## 🛡 System Features
