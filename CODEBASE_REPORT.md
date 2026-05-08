@@ -1,6 +1,6 @@
 # ERPBridge — Comprehensive Codebase Report
 
-> **Generated:** 2026-05-05 | **Last Updated:** 2026-05-06  
+> **Generated:** 2026-05-08 | **Last Updated:** 2026-05-08  
 > **Repository:** [nmdra/ERPBridge](https://github.com/nmdra/ERPBridge)  
 > **Module:** `github.com/nimendra/ERPBridge`  
 > **Go Version:** 1.26.2 | **Python Version:** 3.11+
@@ -15,7 +15,7 @@
 4. [Technology Stack](#4-technology-stack)
 5. [Component Deep-Dives](#5-component-deep-dives)
    - 5.1 [Mock ERP (Python/FastAPI)](#51-mock-erp-pythonfastapi)
-   - 5.2 [Middleware Service (Go/MCP)](#52-middleware-service-gomcp)
+   - 5.2 [ERPBridge Server (Go/MCP)](#52-erpbridge-server-gomcp)
    - 5.3 [bridgectl CLI (Go/Cobra)](#53-bridgectl-cli-gocobra)
 6. [Internal Packages Reference](#6-internal-packages-reference)
    - 6.1 [internal/mcp](#61-internalmcp)
@@ -26,6 +26,8 @@
    - 6.6 [internal/logger](#66-internallogger)
    - 6.7 [internal/output](#67-internaloutput)
    - 6.8 [internal/cli](#68-internalcli)
+   - 6.9 [internal/metrics](#69-internalmetrics)
+   - 6.10 [internal/types](#610-internaltypes)
 7. [Data Flow](#7-data-flow)
 8. [Semantic Caching System](#8-semantic-caching-system)
 9. [Tool Schema System](#9-tool-schema-system)
@@ -69,10 +71,10 @@ flowchart TB
         CLI["🖥️ bridgectl CLI\n(Developer / Operator)"]
     end
 
-    subgraph Middleware["Middleware Service · Go · :8080"]
+    subgraph Middleware["ERPBridge Server · Go · :8080"]
         direction TB
-        MCP["MCP Server\n(SSE + HTTP)"]
-        TR["Tool Registry\n(JSON Schemas)"]
+        MCP["MCP Server\n(Streamable HTTP + Stdio)"]
+        TR["Tool Registry\n(JSON Schemas + Native Tools)"]
         CM["Cache Manager\nExact + Semantic"]
         EC["ERP Connector\n(HTTP Client)"]
 
@@ -89,12 +91,13 @@ flowchart TB
     end
 
     subgraph ERP["Mock ERP · Python/FastAPI · :8081"]
-        Finance["Finance\n/api/v1/finance\ninvoices · payments"]
-        HR["HR\n/api/v1/hr\nemployees · departments"]
-        Inventory["Inventory\n/api/v1/inventory\nitems · stock"]
+        Finance["Finance\n/api/resource\nPurchase Invoice · Payment Entry · Journal Entry"]
+        HR["HR\n/api/resource\nEmployee · Department · Leave Application · Salary Slip"]
+        Inventory["Inventory\n/api/resource\nItem · Bin · Purchase Order"]
     end
 
-    Agent -- "MCP/SSE\nGET /mcp/sse\nPOST /mcp/messages" --> MCP
+    Agent -- "MCP Streamable HTTP\nPOST /mcp/" --> MCP
+    Agent -- "MCP Stdio\nerpbridge-server --stdio" --> MCP
     CLI -- "REST\nPOST /api/tools/invoke\nGET /api/cache/*\nGET /api/logs/*" --> MCP
     EC -- "REST HTTP\nAPI-Key / Basic / Bearer" --> Finance
     EC --> HR
@@ -106,21 +109,21 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     participant A as AI Agent
-    participant M as Middleware (MCP Server)
+    participant M as ERPBridge Server (MCP Server)
     participant R as Redis Cache
     participant E as HF Embedder
     participant ERP as Mock ERP
 
-    A->>M: GET /mcp/sse (SSE handshake)
-    M-->>A: session_id + message endpoint
+    A->>M: POST /mcp/ (initialize)
+    M-->>A: Mcp-Session-Id header
 
-    A->>M: listTools
-    M-->>A: [finance.list_invoices, ...]
+    A->>M: POST /mcp/ (tools/list)
+    M-->>A: [finance.list_purchase_invoice, ...]
 
-    A->>M: callTool(finance.list_invoices, {})
+    A->>M: POST /mcp/ (callTool: finance.list_purchase_invoice, {})
     activate M
 
-    M->>R: GET exact:finance.list_invoices:shared:empty
+    M->>R: GET exact:finance.list_purchase_invoice:shared:empty
     R-->>M: MISS
 
     M->>E: POST /embed ("search_query: {}")
@@ -129,7 +132,7 @@ sequenceDiagram
     M->>R: FT.SEARCH idx:semantic KNN 1
     R-->>M: MISS (no similar entry)
 
-    M->>ERP: GET /api/v1/finance/invoices (X-API-Key)
+    M->>ERP: GET /api/resource/Purchase Invoice (Authorization: token ...)
     ERP-->>M: {"data":[...],"total":2}
 
     M->>R: SET exact:... (TTL 300s)
@@ -144,13 +147,13 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     Start([Tool Call]) --> ExactLookup{Exact\nCache Hit?}
-    ExactLookup -- HIT --> ReturnCached([Return Cached\nX-Cache-Hit: exact])
+    ExactLookup -- HIT --> ReturnCached([Return Cached\nexact])
     ExactLookup -- MISS --> SemanticEnabled{Semantic\nEnabled?}
     SemanticEnabled -- No --> ERPCall
     SemanticEnabled -- Yes --> Embed[Embed args\nHF TEI]
     Embed --> KNN[KNN-1 Search\nRediSearch]
     KNN --> Threshold{similarity >=\nthreshold?}
-    Threshold -- Yes --> ReturnSemantic([Return Cached\nX-Cache-Hit: semantic])
+    Threshold -- Yes --> ReturnSemantic([Return Cached\nsemantic])
     Threshold -- No --> ERPCall[Call ERP\nconnector.Call]
     ERPCall --> Validate{OutputSchema\ndefined?}
     Validate -- Yes --> ValidateResp[Validate Response\njsonschema]
@@ -171,14 +174,15 @@ flowchart LR
 │                         AI Agent / LLM Client                       │
 │                   (Claude, GPT, Custom MCP Client)                  │
 └─────────────────────────────────┬───────────────────────────────────┘
-                                  │  MCP/SSE  (port 8080)
+                                  │  MCP Streamable HTTP / Stdio (port 8080)
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         MIDDLEWARE (Go)                              │
 │                                                                      │
 │   ┌───────────────┐   ┌───────────────┐   ┌──────────────────────┐ │
 │   │  MCP Server   │   │  Tool Registry│   │  Cache Manager       │ │
-│   │  (SSE + HTTP) │──▶│  (JSON Schemas│   │  Exact + Semantic    │ │
+│   │(Streamable HTTP│──▶│ (JSON Schemas│   │  Exact + Semantic    │ │
+│   │   + Stdio)     │   │ + Native Tools│  │                     │ │
 │   └───────┬───────┘   └───────────────┘   └──────────┬───────────┘ │
 │           │                                           │             │
 │   ┌───────▼───────┐                         ┌────────▼───────────┐ │
@@ -194,7 +198,7 @@ flowchart LR
 │                                                       │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │
 │  │  Finance    │  │    HR       │  │  Inventory  │  │
-│  │  /invoices  │  │  /employees │  │  /items     │  │
+│  │ Purchase Inv│  │  Employee   │  │   Item/Bin  │  │
 │  └─────────────┘  └─────────────┘  └─────────────┘  │
 └───────────────────────────────────────────────────────┘
 
@@ -214,8 +218,8 @@ flowchart LR
 ERPBridge/
 │
 ├── services/
-│   └── middleware/
-│       └── main.go             # Middleware entrypoint
+│   └── erpbridge-server/
+│       └── main.go             # ERPBridge server entrypoint (Streamable HTTP + Stdio)
 │
 ├── tools/
 │   └── bridgectl/
@@ -224,6 +228,10 @@ ERPBridge/
 ├── internal/                   # Shared Go libraries
 │   ├── mcp/
 │   │   ├── server.go           # MCP server + HTTP handlers
+│   │   ├── middleware.go       # Tool middleware chain (logging/metrics/cache)
+│   │   ├── notifications.go    # MCP custom notifications
+│   │   ├── resource.go         # MCP resource definitions
+│   │   ├── prompt.go           # MCP prompt templates
 │   │   └── tool.go             # Tool struct + Execute() logic
 │   ├── cache/
 │   │   ├── manager.go          # Two-layer cache orchestration
@@ -234,42 +242,58 @@ ERPBridge/
 │   │   └── manager_test.go     # Unit tests
 │   ├── connector/
 │   │   ├── client.go           # Outbound HTTP ERP client
-│   │   └── client_test.go      # Unit tests
+│   │   ├── client_test.go      # Unit tests
+│   │   └── resilience_test.go  # Retry + circuit breaker tests
 │   ├── config/
 │   │   ├── config.go           # Multi-context YAML config
 │   │   └── config_test.go      # Unit tests
 │   ├── idp/
 │   │   ├── registry.go         # API registration store
-│   │   └── generator.go        # Tool schema generator (incl. OpenAPI)
+│   │   ├── generator.go        # Tool schema generator (incl. OpenAPI)
+│   │   └── generator_test.go   # OpenAPI generator tests
 │   ├── logger/
-│   │   ├── logger.go           # Broadcast slog + SSE log streaming
-│   │   ├── context.go          # Request-scoped logger context
-│   │   └── sanitise.go         # Sensitive field redaction
+│   │   ├── logger.go           # Broadcast slog + log buffer
+│   │   ├── mcp_handler.go      # MCP log streaming + redaction
+│   │   ├── level.go            # RFC 5424 log level mapping
+│   │   └── context.go          # Request-scoped logger context
+│   ├── metrics/
+│   │   └── metrics.go          # Prometheus metrics
 │   ├── output/
 │   │   ├── formatter.go        # Table/JSON/YAML output formatter
 │   │   └── formatter_test.go   # Unit tests
-│   └── cli/
-│       ├── root.go             # Cobra root + global flags
-│       ├── context.go          # `bridgectl context` commands
-│       ├── api.go              # `bridgectl api` commands
-│       ├── tool.go             # `bridgectl tool` commands
-│       ├── log.go              # `bridgectl log` commands
-│       └── cache.go            # `bridgectl cache` commands
+│   ├── cli/
+│   │   ├── root.go             # Cobra root + global flags
+│   │   ├── context.go          # `bridgectl context` commands
+│   │   ├── api.go              # `bridgectl api` commands
+│   │   ├── tool.go             # `bridgectl tool` commands
+│   │   ├── log.go              # `bridgectl log` commands
+│   │   ├── cache.go            # `bridgectl cache` commands
+│   │   ├── doc.go              # `bridgectl doc` generator
+│   │   ├── version.go          # `bridgectl version`
+│   │   └── errors.go           # Actionable CLI errors
+│   └── types/
+│       └── sensitive.go        # Redaction marker types
 │
 ├── mock-erp/                   # Python FastAPI mock ERP
 │   ├── main.py                 # FastAPI app + router inclusion
-│   ├── dependencies.py         # Auth middleware (API key, Basic, Bearer)
-│   ├── requirements.txt        # Python dependencies
+│   ├── dependencies.py         # ERPNext-style auth + error helpers
+│   ├── openapi.yaml            # ERPNext-flavoured OpenAPI spec
+│   ├── pyproject.toml          # uv-managed Python dependencies
+│   ├── uv.lock                 # uv lockfile
 │   ├── Dockerfile              # Mock ERP container
 │   └── routers/
-│       ├── finance.py          # Invoices endpoints
-│       ├── hr.py               # Employees/departments endpoints
-│       └── inventory.py        # Items/stock endpoints
+│       ├── finance.py          # Purchase invoices, payments, journals
+│       ├── hr.py               # Employees, departments, leave, salary
+│       └── inventory.py        # Items, bins, purchase orders
 │
-├── schemas/                    # Auto-generated MCP tool schemas (JSON)
-│   └── finance/
-│       ├── finance.list_invoices_api_v1_finance_invoices_get.json
-│       └── finance.create_invoice_api_v1_finance_invoices_post.json
+├── docs/
+│   ├── README.md               # Wiki-style documentation index
+│   ├── connectivity.md         # MCP transport + Postman guide
+│   ├── docker.md               # Docker usage guide
+│   ├── mcp-client-guide.md     # MCP client integration guide
+│   └── cli/                    # Auto-generated bridgectl docs
+│
+├── schemas/                    # Generated MCP tool schemas (gitignored)
 │
 ├── .env.example                # Environment variable template (all runtime vars)
 ├── .github/
@@ -277,8 +301,12 @@ ERPBridge/
 │       └── release.yml         # GoReleaser CI/CD pipeline (lint → release → Docker)
 ├── .goreleaser.yaml            # Multi-platform release configuration
 ├── docker-compose.yml          # Full stack orchestration
-├── Dockerfile.middleware       # Development middleware container
-├── Dockerfile.middleware.releaser # Production middleware container
+├── Dockerfile.server           # Development server container
+├── Dockerfile.server.releaser  # Production server container
+├── CHANGELOG.md                # Release notes
+├── erpbridge_postman_collection.json # Postman collection for MCP HTTP
+├── .dockerignore               # Docker build ignore rules
+├── lefthook.yml                # Local git hooks (lint)
 ├── go.mod                      # Go module definition
 ├── go.sum                      # Go dependency checksums
 ├── README.md                   # Project documentation
@@ -289,11 +317,16 @@ ERPBridge/
 
 ## 4. Technology Stack
 
-### Go Layer (Middleware + CLI)
+### Go Layer (ERPBridge Server + CLI)
 
 | Library | Version | Purpose |
 |---|---|---|
-| `mark3labs/mcp-go` | v0.51.0 | MCP protocol server (SSE transport) |
+| `mark3labs/mcp-go` | v0.51.0 | MCP protocol server (Streamable HTTP + Stdio) |
+| `m-mizutani/masq` | v0.2.1 | Sensitive log redaction |
+| `prometheus/client_golang` | v1.23.2 | Prometheus metrics export |
+| `fsnotify/fsnotify` | v1.10.1 | Schema hot reloading |
+| `avast/retry-go/v4` | v4.7.0 | ERP retry logic |
+| `sony/gobreaker` | v1.0.0 | Circuit breaker for ERP calls |
 | `spf13/cobra` | v1.10.2 | CLI framework for `bridgectl` |
 | `redis/go-redis/v9` | v9.19.0 | Redis client (exact + vector search) |
 | `goccy/go-yaml` | v1.19.2 | YAML config parsing |
@@ -310,13 +343,14 @@ ERPBridge/
 | `uvicorn` | ASGI server |
 | `pydantic` | Request/response model validation |
 | `python-multipart` | Form/multipart body parsing (FastAPI dependency) |
+| `uv` | Dependency management for the mock ERP service |
 
 ### Infrastructure
 
 | Component | Technology | Port |
 |---|---|---|
 | Mock ERP | Python FastAPI | 8081 |
-| Middleware (MCP Server) | Go | 8080 |
+| ERPBridge Server (MCP) | Go | 8080 |
 | Redis + RediSearch | redis/redis-stack:7.2.0-v9 | 6379 / 8001 (RedisInsight) |
 | Text Embedder | HuggingFace TEI (`nomic-embed-text-v1`) | 8083 |
 
@@ -329,80 +363,82 @@ ERPBridge/
 **Location:** `mock-erp/`  
 **Port:** `8081`
 
-The Mock ERP simulates a real legacy ERP system with three business modules. It is intentionally simple but implements real authentication patterns.
+The Mock ERP now mirrors **ERPNext**-style APIs. It exposes resource-style endpoints under `/api/resource` and ships an OpenAPI spec (`mock-erp/openapi.yaml`) to drive MCP tool generation.
 
 #### Modules
 
 | Module | Prefix | Endpoints |
 |---|---|---|
-| Finance | `/api/v1/finance` | `GET /invoices`, `POST /invoices`, `GET /invoices/{id}` |
-| HR | `/api/v1/hr` | `GET /employees`, `GET /employees/{id}`, `GET /departments` |
-| Inventory | `/api/v1/inventory` | `GET /items`, `GET /items/{id}` |
+| Finance | `/api/resource` | `GET/POST Purchase Invoice`, `GET Payment Entry`, `GET Journal Entry` |
+| HR | `/api/resource` | `GET Employee`, `GET Department`, `GET Leave Application`, `GET Salary Slip` |
+| Inventory | `/api/resource` | `GET Item`, `GET Bin`, `GET Purchase Order` |
 
 #### Authentication (`dependencies.py`)
 
-The mock ERP supports three auth mechanisms, resolved in order:
+The mock ERP now follows ERPNext-style auth flows, resolved in order:
 
-1. **API Key** via `X-API-Key` header — maps key → role
-2. **HTTP Basic Auth** — decodes Base64 credentials, maps `user:pass` → role  
-3. **Bearer Token** — stub: `dev-stub-token` → `admin` role
+1. **ERPNext Token Auth** — `Authorization: token api_key:api_secret`
+2. **Session Cookie** — `sid` cookie for session-based access
+3. **HTTP Basic Auth** — fallback for browser simulation (`admin:admin`)
 
-**Predefined API Keys:**
+**Predefined Token Credentials:**
 
 ```
-finance-key-001  →  finance_viewer
-finance-key-002  →  finance_editor
-hr-key-001       →  hr_viewer
-hr-key-002       →  hr_manager
-inv-key-001      →  inv_viewer
-inv-key-002      →  inv_editor
-admin-key-001    →  admin
+fin_key_001:fin_sec_abc123  →  finance_viewer
+fin_key_002:fin_sec_def456  →  finance_editor
+hr_key_001:hr_sec_ghi789    →  hr_viewer
+hr_key_002:hr_sec_jkl012    →  hr_manager
+inv_key_001:inv_sec_mno345  →  inv_viewer
+inv_key_002:inv_sec_pqr678  →  inv_editor
+adm_key_001:adm_sec_stu901  →  admin
 ```
 
-**Role-Based Access Control:** The `check_role()` function enforces permissions on write operations. For example, `POST /invoices` requires the `finance_editor` role. The `admin` role bypasses all checks.
+**Role-Based Access Control:** The `check_role()` function enforces permissions on write operations. For example, `POST /api/resource/Purchase Invoice` requires the `finance_editor` role. The `admin` role bypasses all checks.
 
-#### Finance Data Model
+#### Finance Data Model (ERPNext Purchase Invoice)
 
 ```python
-class Invoice(BaseModel):
-    id: Optional[str]
-    number: str          # e.g. "INV-2026-001"
-    vendor_id: str
-    vendor_name: str
-    amount: float
-    currency: str        # e.g. "LKR"
-    status: str          # "pending" | "paid"
-    due_date: str
-    created_at: str
+class PurchaseInvoice(BaseModel):
+    name: str            # e.g. "ACC-PINV-2026-00001"
+    doctype: str         # "Purchase Invoice"
+    supplier: str
+    posting_date: str
+    grand_total: float
+    status: str          # "Unpaid" | "Paid"
 ```
 
 ---
 
-### 5.2 Middleware Service (Go/MCP)
+### 5.2 ERPBridge Server (Go/MCP)
 
-**Location:** `services/middleware/main.go`  
+**Location:** `services/erpbridge-server/main.go`  
 **Port:** `8080`
 
-The middleware is the heart of ERPBridge. It is a Go process that:
-1. Initialises the structured logger
-2. Optionally connects to Redis for caching
+The ERPBridge server is the heart of the platform. It is a Go process that:
+1. Initialises the structured logger (broadcast + MCP logging handler)
+2. Optionally connects to Redis + embedder for caching
 3. Creates the `connector.Client` (outbound HTTP to ERP)
-4. Creates the `mcp.Server` (wraps `mark3labs/mcp-go`)
-5. Walks the `schemas/` directory, deserialising every `.json` file into a `mcp.Tool` and registering it
-6. Starts an `http.ServeMux` that serves both the MCP SSE endpoints and the REST management API
+4. Creates the `mcp.Server` (tools, resources, prompts, middleware)
+5. Loads JSON tool schemas and native tools
+6. Starts recursive schema hot-reloading (fsnotify)
+7. Serves MCP over **Streamable HTTP** (`/mcp/`) or **Stdio** (`--stdio` / `MCP_TRANSPORT=stdio`)
+8. Exposes management endpoints, log streaming, and Prometheus metrics
 
 #### Startup Flow
 
 ```
 main()
-  ├── logger.Init()            → structured slog, broadcasts to SSE listeners
+  ├── parse --stdio / MCP_TRANSPORT
+  ├── logger.Init()            → structured slog + broadcast
   ├── redis.NewClient()        → optional Redis connection
   ├── cache.NewHFEmbedder()    → optional embedding client (HuggingFace TEI)
   ├── cache.NewManager()       → two-layer cache (exact + semantic)
   ├── connector.NewClient()    → HTTP client to ERP
-  ├── mcp.NewServer()          → MCP protocol wrapper
+  ├── mcp.NewServer()          → MCP protocol wrapper + middlewares
   ├── loadTools(dir)           → walk schemas/*.json → RegisterTool()
-  └── http.ListenAndServe()    → serve on :8080
+  ├── watchSchemas(dir)        → fsnotify recursive hot reload
+  ├── ServeStdio() (optional)  → MCP Stdio transport
+  └── ServeHTTP()              → /mcp/ + /api/* + /metrics
 ```
 
 #### Environment Variables
@@ -413,10 +449,13 @@ main()
 | `SCHEMAS_DIR` | `schemas` | Path to JSON tool schema directory |
 | `REDIS_URL` | *(empty)* | Redis connection URL — cache disabled if absent |
 | `EMBEDDER_URL` | *(empty)* | HuggingFace TEI base URL — semantic cache disabled if absent |
-| `BASE_URL` | `http://localhost:{MCP_PORT}` | Public URL used in SSE handshake |
+| `BASE_URL` | `http://localhost:{MCP_PORT}` | Base URL used in MCP HTTP logs and tooling |
 | `ERP_BASE_URL` | *(empty)* | Base URL for the ERP service (used in docker-compose) |
+| `MCP_TRANSPORT` | *(empty)* | Set to `stdio` to enable MCP Stdio transport |
 | `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
 | `APP_ENV` | `development` | `production` enables JSON log format; otherwise text |
+| `LOG_TO_STDERR` | `false` | When true, log output is sent to stderr (stdio mode) |
+| `LOG_LEVEL_{COMPONENT}` | *(empty)* | Per-component overrides (e.g., `LOG_LEVEL_MCP=debug`) |
 
 ---
 
@@ -424,7 +463,7 @@ main()
 
 **Location:** `tools/bridgectl/main.go`, `internal/cli/`
 
-`bridgectl` is the developer and agent operator CLI. It communicates with the Middleware's REST management API (`/api/*`). Built with Cobra, it has a hierarchical command structure.
+`bridgectl` is the developer and agent operator CLI. It communicates with the ERPBridge Server's REST management API (`/api/*`). Built with Cobra, it has a hierarchical command structure.
 
 #### Command Tree
 
@@ -448,6 +487,10 @@ bridgectl
     ├── stats                   # GET /api/cache/stats
     └── flush [tool]            # Flush by tool, module, or all
 
+Additional Commands:
+  ├── doc                        # Generate Markdown docs to docs/cli
+  └── version                    # Print bridgectl version
+
 Global Flags:
   -o, --output  table|json|yaml   (default: table)
   -c, --context <name>            Override active context
@@ -464,22 +507,23 @@ Every CLI command produces output through `internal/output.Formatter`. Each resp
 
 ### 6.1 `internal/mcp`
 
-**Files:** `server.go`, `tool.go`
+**Files:** `server.go`, `tool.go`, `middleware.go`, `notifications.go`, `resource.go`, `prompt.go`
 
-This package wraps `mark3labs/mcp-go` and provides the custom tool execution and HTTP handler logic.
+This package wraps `mark3labs/mcp-go` and provides tool/resource/prompt registration, streamable HTTP transport wiring, custom notifications, and the middleware chain (logging, metrics, cache).
 
 #### Key Types
 
 ```go
 // Tool — the full definition of an MCP Tool, loaded from a JSON schema file
 type Tool struct {
-    Name         string        // Unique identifier, e.g. "finance.list_invoices_..."
+    Name         string        // Unique identifier, e.g. "finance.list_purchase_invoice"
     Description  string        // Shown to AI agents during tool discovery
     Module       string        // ERP module grouping (finance, hr, inventory)
     InputSchema  InputSchema   // JSON Schema describing accepted arguments
     OutputSchema *any          // Optional JSON Schema for response validation
     Endpoint     *Endpoint     // HTTP endpoint config for the ERP call
     Cache        *cache.Config // Per-tool cache policy
+    Handler      func(ctx context.Context, args map[string]any) (*ToolResult, error) // Optional native Go handler
 }
 
 // Endpoint — routing info for the ERP call
@@ -495,23 +539,34 @@ type ToolResult struct {
     Error   any  // Error detail if any
     IsError bool // True if ERP returned 4xx/5xx
 }
+
+// Resource — MCP resource definition (URI template + endpoint)
+type Resource struct { /* ... */ }
+
+// Prompt — MCP prompt template definition
+type Prompt struct { /* ... */ }
 ```
+
+#### Custom Notifications
+
+`CustomNotifier` sends structured notifications to MCP clients (progress updates, alerts, and system messages). The server registers demo tools (`system.progress_test`, `system.sensitive_log_test`) to exercise progress notifications and log redaction.
 
 #### Tool Execution Flow (`tool.go → Execute()`)
 
 ```
 Execute(ctx, args, connector)
+  ├── If Handler is set → execute native Go handler
   ├── Build query params (GET) or JSON body (POST/PATCH)
-  ├── Resolve full URL (prepend localhost:8081 for relative paths)
+  ├── Resolve full URL (respect ERP_BASE_URL overrides)
   ├── connector.Call(ctx, ep, queryParams, body)
   ├── Decode JSON response
   ├── If OutputSchema set → validateResponse() via jsonschema
   └── Return ToolResult{Result, IsError}
 ```
 
-#### Cache Integration in `server.go`
+#### Middleware + Cache Integration in `server.go`
 
-Both `handleMCPToolCall` (SSE path) and `handleDirectInvoke` (CLI path) share an identical two-phase caching strategy:
+Both **MCP tool calls** (Streamable HTTP or Stdio) and **direct invoke** calls (`/api/tools/invoke`) share the same middleware chain (logging, metrics, cache):
 
 ```
 READ PHASE:
@@ -526,7 +581,7 @@ INVALIDATION:
   if tool.Cache.FlushOn is non-empty → AutoFlush(flushOn)
 ```
 
-The `X-Cache-Hit` HTTP response header is set on direct invoke cache hits.
+Cache hits increment Prometheus counters (`cache_hits_total`) and return cached content through the same MCP result format.
 
 ---
 
@@ -575,9 +630,9 @@ type Config struct {
 
 ### 6.3 `internal/connector`
 
-**Files:** `client.go`, `client_test.go`
+**Files:** `client.go`, `client_test.go`, `resilience_test.go`
 
-A minimal, dependency-free HTTP client that adds auth and structured logging to outbound ERP requests.
+A resilient HTTP client that adds auth, structured logging, retries, circuit breaking, and Prometheus metrics to outbound ERP requests.
 
 #### Auth Modes
 
@@ -603,7 +658,7 @@ Call(ctx, ep, queryParams, body)
   └── Return *http.Response with re-wrapped body
 ```
 
-Timeout is fixed at **10 seconds**.
+Timeout is fixed at **15 seconds**. Each request increments `erp_requests_total` and records latency in `erp_request_duration_seconds`.
 
 ---
 
@@ -624,14 +679,14 @@ current-context: local
 contexts:
   local:
     server: http://localhost:8082      # bridgectl management API
-    mcp-server: http://localhost:8080  # MCP SSE endpoint
+    mcp-server: http://localhost:8080  # MCP Streamable HTTP base
     erp-base: http://localhost:8081    # Direct ERP URL
     auth:
       type: api-key
       header: X-API-Key
       key: ${BRIDGE_API_KEY}           # Supports ${VAR} expansion
   prod:
-    server: https://middleware.company.com
+    server: https://erpbridge.company.com
     ...
 ```
 
@@ -693,26 +748,35 @@ Two generation modes:
 - Maps query parameters → `InputSchema.Properties`
 - Maps request body JSON properties → `InputSchema.Properties`
 - Infers `OutputSchema` from the `200`/`201` response schema (used for response validation)
-- Saves each tool as `schemas/{module}/{toolName}.json`
+- Saves each tool as `schemas/{module}/{toolName}.json` (schemas directory is gitignored)
 
 ---
 
 ### 6.6 `internal/logger`
 
-**Files:** `logger.go`, `context.go`, `sanitise.go`
+**Files:** `logger.go`, `context.go`, `level.go`, `mcp_handler.go`
 
 A structured logging subsystem built on Go's stdlib `log/slog`, extended with:
 
-#### Broadcast Handler
+#### Broadcast + Buffer
 
 Every log record is:
-1. Written to stdout (text format in dev, JSON in production based on `APP_ENV`)
-2. Re-serialised as JSON and broadcast to all **SSE subscriber channels** (for `bridgectl log tail`)
-3. Added to a **circular buffer** of the last 1000 records (for `bridgectl log stats` and `/api/logs/recent`)
+1. Written to stdout/stderr (text in dev, JSON in production via `APP_ENV`, stderr via `LOG_TO_STDERR`)
+2. Buffered (last 1000 records) for `/api/logs/recent`
+3. Streamed via **SSE** on `/api/logs/stream` for `bridgectl log tail`
+
+#### MCP Log Streaming + Redaction
+
+The `MCPHandler` forwards log notifications to MCP clients and applies **masq** redaction:
+- Redacts by custom types (`APIToken`, `Password`, `AuthHeader`, `SecretKey`, `PII`)
+- Redacts by struct tags (`secret`, `pii`, `masq`)
+- Redacts by field names/prefixes and token regex patterns
+
+Log levels are mapped to RFC 5424 (`level.go`) and filtered per MCP session.
 
 #### Per-Component Log Levels
 
-Any logger component can have its log level overridden via `LOG_LEVEL_{COMPONENT}` environment variables (e.g., `LOG_LEVEL_CACHE=debug` without changing the global level).
+Any logger component can have its log level overridden via `LOG_LEVEL_{COMPONENT}` environment variables (e.g., `LOG_LEVEL_MCP=debug`).
 
 #### Request-Scoped Logger
 
@@ -724,12 +788,6 @@ ctx = logger.WithLogger(ctx, reqLog)
 log := logger.FromContext(ctx)
 ```
 
-#### Sanitisation (`sanitise.go`)
-
-Sensitive argument keys are **always redacted** in DEBUG logs:
-`password`, `token`, `api_key`, `secret`, `authorization`, `ssn`, `national_id`, `bank_account`
-
-At INFO level, only argument **keys** (not values) are logged via `logger.ArgKeys()`.
 HTTP request/response bodies are truncated to 500 characters in DEBUG logs via `logger.Body()`.
 
 ---
@@ -766,7 +824,7 @@ This allows a single `formatter.Print(resp)` call that adapts to the user's chos
 
 ### 6.8 `internal/cli`
 
-**Files:** `root.go`, `context.go`, `api.go`, `tool.go`, `log.go`, `cache.go`
+**Files:** `root.go`, `context.go`, `api.go`, `tool.go`, `log.go`, `cache.go`, `doc.go`, `version.go`, `errors.go`
 
 The CLI package wires together all other internal packages via the Cobra command framework.
 
@@ -777,29 +835,43 @@ The CLI package wires together all other internal packages via the Cobra command
 
 ---
 
+### 6.9 `internal/metrics`
+
+**Files:** `metrics.go`, `metrics_test.go`
+
+Prometheus metrics definitions for ERP requests, tool invocations, and cache hits. Exposed via the `/metrics` HTTP endpoint on the ERPBridge server.
+
+---
+
+### 6.10 `internal/types`
+
+**Files:** `sensitive.go`
+
+Defines typed wrappers (`APIToken`, `Password`, `AuthHeader`, `SecretKey`, `PII`) used by the logger redaction pipeline to reliably scrub sensitive data.
+
+---
+
 ## 7. Data Flow
 
-### AI Agent Tool Call (SSE path)
+### AI Agent Tool Call (Streamable HTTP / Stdio path)
 
 ```
-1. Agent connects to GET /mcp/sse
-   └── SSE handshake, agent receives session ID + message endpoint
+1. Agent establishes MCP session via Streamable HTTP (POST /mcp/ initialize)
+   └── Server returns Mcp-Session-Id header for subsequent requests
+   └── In Stdio mode, the agent launches `erpbridge-server --stdio` and communicates over stdin/stdout
 
-2. Agent sends listTools request
+2. Agent sends tools/list request (POST /mcp/)
    └── mcp-go returns all registered tools with their JSON schemas
 
-3. Agent decides to call "finance.list_invoices_..."
-   └── POST /mcp/messages with CallToolRequest{name, arguments}
+3. Agent decides to call "finance.list_purchase_invoice"
+   └── POST /mcp/ with CallToolRequest{name, arguments}
 
 4. mcp.Server.handleMCPToolCall()
-   ├── Validate arguments type
-   ├── Attach request logger (with request_id, tool_name, role)
-   ├── CACHE READ:
-   │   ├── Exact key lookup in Redis → HIT? return cached JSON
-   │   └── Semantic KNN search in RediSearch → HIT? return cached JSON
+   ├── LoggingMiddleware + MetricsMiddleware
+   ├── CACHE READ (exact → semantic)
    ├── tool.Execute(ctx, args, connector)
    │   ├── Build HTTP request (GET with query params)
-   │   ├── connector.Call() → POST to http://mock-erp:8081/api/v1/finance/invoices
+   │   ├── connector.Call() → GET http://mock-erp:8081/api/resource/Purchase%20Invoice
    │   ├── Decode JSON response
    │   └── Optional: validateResponse() against OutputSchema
    ├── CACHE WRITE: store in exact + semantic caches
@@ -812,10 +884,9 @@ The CLI package wires together all other internal packages via the Cobra command
 ### Developer Direct Invoke (CLI path)
 
 ```
-bridgectl tool invoke finance.list_invoices '{}'
+bridgectl tool invoke finance.list_purchase_invoice '{}'
   └── POST http://localhost:8080/api/tools/invoke
-      └── Same cache read/write/invalidation flow as SSE path
-          └── Response includes X-Cache-Hit header
+      └── Same cache read/write/invalidation flow as MCP path
 ```
 
 ---
@@ -847,7 +918,7 @@ Query Flow:
 Storage Flow:
   args → JSON → embed → float32[768]
   Redis HSET sem:{uuid}:
-    tool:     "finance.list_invoices"
+    tool:     "finance.list_purchase_invoice"
     role:     "shared" | "finance_viewer"
     args_raw: '{"query":"Q1 invoices"}'
     response: '{"data":[...],"total":2}'
@@ -885,23 +956,23 @@ Tool schemas are self-contained JSON files stored in `schemas/{module}/{toolName
 
 ```json
 {
-  "name": "finance.list_invoices_api_v1_finance_invoices_get",
-  "description": "List Invoices",
+  "name": "finance.list_purchase_invoice",
+  "description": "List Purchase Invoices",
   "module": "finance",
   "inputSchema": {
     "type": "object",
     "properties": {
-      "page": { "type": "integer", "description": "Page number", "default": 1 }
+      "filters": { "type": "string", "description": "ERPNext filter JSON" }
     }
   },
   "outputSchema": {},
   "endpoint": {
     "method": "GET",
-    "path": "/api/v1/finance/invoices",
+    "path": "/api/resource/Purchase Invoice",
     "auth": {
       "type": "api-key",
-      "header": "X-API-Key",
-      "keyRef": "finance-key-001"
+      "header": "Authorization",
+      "keyRef": "token fin_key_001:fin_sec_abc123"
     }
   },
   "cache": {
@@ -916,7 +987,7 @@ Tool schemas are self-contained JSON files stored in `schemas/{module}/{toolName
 
 ### Schema Discovery at Startup
 
-The middleware walks the `SCHEMAS_DIR` recursively at startup, loading all `.json` files:
+The server walks the `SCHEMAS_DIR` recursively at startup, loading all `.json` files, and then starts a recursive fsnotify watcher for hot reloads:
 
 ```go
 filepath.Walk(dir, func(path, info, err) {
@@ -931,14 +1002,14 @@ filepath.Walk(dir, func(path, info, err) {
 ```bash
 # 1. Register the raw ERP API
 bridgectl api register \
-  --name finance.create-invoice \
-  --url http://localhost:8081/api/v1/finance/invoices \
+  --name finance.create-purchase-invoice \
+  --url http://localhost:8081/api/resource/Purchase%20Invoice \
   --method POST \
   --module finance \
-  --description "Create a new vendor invoice" \
+  --description "Create a new Purchase Invoice" \
   --auth-type api-key \
-  --auth-header X-API-Key \
-  --auth-key finance-key-002
+  --auth-header Authorization \
+  --auth-key "token fin_key_002:fin_sec_def456"
 
 # 2. Generate schema (basic or from OpenAPI)
 bridgectl tool generate --api finance.create-invoice
@@ -949,14 +1020,14 @@ bridgectl tool generate --api finance --openapi http://localhost:8081/openapi.js
 bridgectl tool list
 
 # 4. Test the tool
-bridgectl tool invoke finance.create-invoice '{"number":"INV-2026-003","vendor_id":"v-001",...}'
+bridgectl tool invoke finance.create-purchase-invoice '{"supplier":"SUP-00001","grand_total":125000,...}'
 ```
 
 ---
 
 ## 10. Authentication Model
 
-### Middleware → ERP Authentication
+### ERPBridge Server → ERP Authentication
 
 Each tool schema carries embedded auth credentials in the `endpoint.auth` field:
 
@@ -968,15 +1039,17 @@ Each tool schema carries embedded auth credentials in the `endpoint.auth` field:
 
 Currently, the `keyRef` / `token` / `key` values are stored **inline in the JSON schema file**. In production, these should be resolved from a secrets manager (HashiCorp Vault, AWS Secrets Manager, etc.).
 
-### Agent → Middleware Authentication
+For ERPNext-style tokens, schemas typically set `auth.type=api-key` with `header=Authorization` and `keyRef="token <api_key:api_secret>"`.
 
-The current implementation does **not** enforce authentication on the MCP SSE endpoint or the management API. This is appropriate for local development but would require an API gateway or auth middleware layer in production.
+### Agent → ERPBridge Server Authentication
+
+The current implementation does **not** enforce authentication on the MCP Streamable HTTP endpoint or the management API. This is appropriate for local development but would require an API gateway or auth middleware layer in production.
 
 ### Mock ERP Role Isolation
 
 The Mock ERP implements full role-based access:
-- `GET` endpoints: accessible to any valid API key
-- `POST /invoices`: requires `finance_editor` or `admin` role
+- `GET` endpoints: accessible to any valid ERPNext token or session
+- `POST /api/resource/Purchase Invoice`: requires `finance_editor` or `admin` role
 - 401 Unauthorized: returned for missing/invalid credentials
 - 403 Forbidden: returned for insufficient role
 
@@ -991,15 +1064,15 @@ current-context: local
 contexts:
   local:
     server: http://localhost:8080      # Management API (cache, logs, tool invoke)
-    mcp-server: http://localhost:8080  # MCP SSE + tool invoke
+    mcp-server: http://localhost:8080  # MCP Streamable HTTP + tool invoke
     erp-base: http://localhost:8081    # Raw ERP URL
     auth:
       type: api-key
       header: X-API-Key
       key: ${BRIDGE_API_KEY}
   staging:
-    server: https://middleware-staging.company.com
-    mcp-server: https://middleware-staging.company.com
+    server: https://erpbridge-staging.company.com
+    mcp-server: https://erpbridge-staging.company.com
     erp-base: https://erp-staging.company.com
     auth:
       type: bearer
@@ -1023,10 +1096,10 @@ bridgectl --context prod tool list  # One-shot override without persisting
 
 ### `.env.example`
 
-A reference `.env.example` file is provided at the repository root documenting all runtime environment variables for both the middleware and the CLI:
+A reference `.env.example` file is provided at the repository root documenting all runtime environment variables for both the ERPBridge server and the CLI:
 
 ```
-# Middleware
+# --- Middleware Configuration ---
 MCP_PORT=8080
 BASE_URL=http://localhost:8080
 SCHEMAS_DIR=./schemas
@@ -1036,7 +1109,7 @@ ERP_BASE_URL=http://localhost:8081
 LOG_LEVEL=info
 APP_ENV=development
 
-# CLI (bridgectl)
+# --- CLI (bridgectl) Configuration ---
 BRIDGE_CONTEXT=local
 BRIDGE_SERVER=http://localhost:8080
 BRIDGE_MCP_SERVER=http://localhost:8080
@@ -1044,8 +1117,11 @@ BRIDGE_ERP_BASE=http://localhost:8081
 BRIDGE_AUTH_TYPE=api-key
 BRIDGE_API_KEY=your-api-key-here
 BRIDGE_AUTH_HEADER=X-API-Key
+# BRIDGE_TOKEN=your-bearer-token
+# BRIDGE_USERNAME=admin
+# BRIDGE_PASSWORD=password
 
-# Mock ERP
+# --- Mock ERP Configuration ---
 MOCK_ERP_PORT=8081
 MOCK_ERP_LOG_LEVEL=debug
 ```
@@ -1058,35 +1134,42 @@ MOCK_ERP_LOG_LEVEL=debug
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/mcp/sse` | SSE transport for AI agents — initial handshake |
-| `POST` | `/mcp/messages` | MCP message handler (used post-handshake) |
+| `POST` | `/mcp/` | MCP Streamable HTTP endpoint (initialize, tools/list, callTool) |
+| `OPTIONS` | `/mcp/` | CORS preflight for Streamable HTTP |
 | `GET` | `/mcp/health` | Health check → `{"status":"ok"}` |
 
 ### Management API Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/tools/invoke` | Direct tool invocation (bypasses SSE) |
+| `POST` | `/api/tools/invoke` | Direct tool invocation (bypasses MCP transport) |
 | `GET` | `/api/cache/stats` | Cache status summary |
 | `GET` | `/api/cache/flush` | Flush cache by `?tool=`, `?module=`, or `?all=true` |
 | `GET` | `/api/cache/list` | List cache entries *(not yet implemented)* |
 | `GET` | `/api/cache/inspect` | Inspect a cache entry *(not yet implemented)* |
 | `GET` | `/api/logs/stream` | SSE stream of live log events |
 | `GET` | `/api/logs/recent` | JSON array of last 1000 log records |
+| `GET` | `/metrics` | Prometheus metrics export |
 
 ### Mock ERP Endpoints
 
 | Method | Path | Auth Required | Notes |
 |---|---|---|---|
 | `GET` | `/health` | None | Health check |
-| `GET` | `/api/v1/finance/invoices` | Any valid key | Returns all invoices |
-| `POST` | `/api/v1/finance/invoices` | `finance_editor` | Creates invoice |
-| `GET` | `/api/v1/finance/invoices/{id}` | Any valid key | Get by ID |
-| `GET` | `/api/v1/hr/employees` | Any valid key | Returns all employees |
-| `GET` | `/api/v1/hr/employees/{id}` | Any valid key | Get by ID |
-| `GET` | `/api/v1/hr/departments` | Any valid key | Returns all departments |
-| `GET` | `/api/v1/inventory/items` | Any valid key | Returns all items |
-| `GET` | `/api/v1/inventory/items/{id}` | Any valid key | Get by ID |
+| `GET` | `/api/resource/Purchase Invoice` | Token or session | List purchase invoices |
+| `POST` | `/api/resource/Purchase Invoice` | `finance_editor` | Create purchase invoice |
+| `GET` | `/api/resource/Purchase Invoice/{name}` | Token or session | Get by name |
+| `GET` | `/api/resource/Payment Entry` | Token or session | List payment entries |
+| `GET` | `/api/resource/Journal Entry` | Token or session | List journal entries |
+| `GET` | `/api/resource/Employee` | Token or session | List employees |
+| `GET` | `/api/resource/Employee/{name}` | Token or session | Get by name |
+| `GET` | `/api/resource/Department` | Token or session | List departments |
+| `GET` | `/api/resource/Leave Application` | Token or session | List leave applications |
+| `GET` | `/api/resource/Salary Slip` | Token or session | List salary slips |
+| `GET` | `/api/resource/Item` | Token or session | List items |
+| `GET` | `/api/resource/Item/{name}` | Token or session | Get by name |
+| `GET` | `/api/resource/Bin` | Token or session | List bins (supports filters) |
+| `GET` | `/api/resource/Purchase Order` | Token or session | List purchase orders |
 
 ---
 
@@ -1100,7 +1183,7 @@ Services:
   embedder   → ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
                --model-id nomic-ai/nomic-embed-text-v1 --port 8083
   redis      → redis/redis-stack:7.2.0-v9 → :6379 + :8001 (RedisInsight)
-  middleware → builds from ./Dockerfile.middleware → :8080
+  erpbridge-server → builds from ./Dockerfile.server → :8080
                depends_on: mock-erp, redis, embedder (all healthy)
 
 Volumes:
@@ -1112,7 +1195,7 @@ Volumes:
 
 ```
 redis (healthy) ─┐
-mock-erp (healthy)─┼──▶ middleware
+mock-erp (healthy)─┼──▶ erpbridge-server
 embedder (healthy) ┘
 ```
 
@@ -1121,10 +1204,8 @@ embedder (healthy) ┘
 | File | Purpose | Base Image |
 |---|---|---|
 | `mock-erp/Dockerfile` | Python FastAPI mock ERP | `python:3.11-slim` |
-| `Dockerfile.middleware` | Development middleware build | `golang:1.23-alpine` → `alpine:latest` |
-| `Dockerfile.middleware.releaser` | Production middleware (GoReleaser) | Pre-built binary → `alpine:latest` |
-
-> **Note:** `Dockerfile.middleware` uses `golang:1.23-alpine` as its builder base, while the module requires Go 1.26.2 (`go.mod`). For production builds, GoReleaser compiles the binary in CI with the correct Go version and uses `Dockerfile.middleware.releaser` (which only copies the pre-built binary into `alpine:latest`).
+| `Dockerfile.server` | Development ERPBridge server build | `golang:1.26.2-alpine` → `alpine:latest` |
+| `Dockerfile.server.releaser` | Production server (GoReleaser) | Pre-built binary → `alpine:latest` |
 
 ---
 
@@ -1138,7 +1219,7 @@ Produces multi-platform, multi-architecture releases via GoReleaser.
 
 | Binary | OS | Architecture |
 |---|---|---|
-| `middleware` | linux, windows, darwin | amd64, arm64 |
+| `erpbridge-server` | linux, windows, darwin | amd64, arm64 |
 | `bridgectl` | linux, windows, darwin | amd64, arm64 |
 
 All builds use `CGO_ENABLED=0` for fully static binaries with `-ldflags "-s -w -X main.version={{.Version}}"`.
@@ -1147,7 +1228,7 @@ All builds use `CGO_ENABLED=0` for fully static binaries with `-ldflags "-s -w -
 
 | Archive | Contents |
 |---|---|
-| `middleware_{OS}_{ARCH}.tar.gz` | `middleware` binary + `README.md` |
+| `erpbridge-server_{OS}_{ARCH}.tar.gz` | `erpbridge-server` binary + `README.md` |
 | `bridgectl_{OS}_{ARCH}.tar.gz` | `bridgectl` binary + `README.md` |
 | `erpbridge-full_{OS}_{ARCH}.tar.gz` | Both binaries + `README.md` |
 | `checksums.txt` | SHA256 checksums for all artifacts |
@@ -1155,8 +1236,8 @@ All builds use `CGO_ENABLED=0` for fully static binaries with `-ldflags "-s -w -
 ### Docker Images (via GoReleaser)
 
 Published to **GitHub Container Registry** (`ghcr.io`):
-- `ghcr.io/{owner}/middleware:{version}` — multi-arch manifest (amd64 + arm64)
-- `ghcr.io/{owner}/middleware:latest` — multi-arch manifest
+- `ghcr.io/{owner}/erpbridge-server:{version}` — multi-arch manifest (amd64 + arm64)
+- `ghcr.io/{owner}/erpbridge-server:latest` — multi-arch manifest
 
 ---
 
@@ -1181,8 +1262,8 @@ The release pipeline is triggered on any tag push matching `v*` (e.g., `v0.1.0`)
 flowchart LR
     Push["git push tag v*"] --> Lint["golangci-lint\n(Go 1.26.2)"]
     Lint -->|pass| Release["GoReleaser release\n--clean"]
-    Release --> Binaries["Binary Archives\nmiddleware + bridgectl\nlinux/windows/darwin\namd64 + arm64"]
-    Release --> Docker["Docker Buildx\nghcr.io/{owner}/middleware\n:version + :latest\namd64 + arm64"]
+    Release --> Binaries["Binary Archives\nerpbridge-server + bridgectl\nlinux/windows/darwin\namd64 + arm64"]
+    Release --> Docker["Docker Buildx\nghcr.io/{owner}/erpbridge-server\n:version + :latest\namd64 + arm64"]
     Release --> Checksums["checksums.txt\nSHA256 for all artifacts"]
     Release --> GHRelease["GitHub Release\nwith changelog"]
 ```
@@ -1199,6 +1280,9 @@ flowchart LR
 |---|---|
 | `v0.1.0-alpha.1` | First alpha release |
 | `v0.1.0-alpha.2` | Second alpha release |
+| `v0.1.0-alpha.3` | Docker fixes and routing updates |
+| `v0.1.0-alpha.4` | Documentation and schema hot reload updates |
+| `v0.1.0-alpha.5` | Logging pipeline + MCP log streaming |
 
 ---
 
@@ -1209,8 +1293,20 @@ flowchart LR
 | File | Coverage |
 |---|---|
 | `internal/cache/manager_test.go` | Cache manager unit tests |
-| `internal/connector/client_test.go` | HTTP connector unit tests |
+| `internal/cli/errors_test.go` | CLI actionable error handling tests |
 | `internal/config/config_test.go` | Config load/override unit tests |
+| `internal/connector/client_test.go` | HTTP connector unit tests |
+| `internal/connector/resilience_test.go` | Retry + circuit breaker tests |
+| `internal/idp/generator_test.go` | OpenAPI generator tests |
+| `internal/logger/level_test.go` | MCP log level mapping tests |
+| `internal/logger/logger_test.go` | Logger broadcast/buffer tests |
+| `internal/logger/mcp_handler_test.go` | MCP log streaming + redaction tests |
+| `internal/mcp/mock_test.go` | MCP mock utilities |
+| `internal/mcp/notifications_test.go` | Custom notification tests |
+| `internal/mcp/resource_test.go` | Resource handling tests |
+| `internal/mcp/server_test.go` | MCP server + middleware tests |
+| `internal/mcp/tool_test.go` | Tool execution tests |
+| `internal/metrics/metrics_test.go` | Prometheus metric tests |
 | `internal/output/formatter_test.go` | Output formatter unit tests |
 
 ### Running Tests
@@ -1221,10 +1317,10 @@ go test ./...
 
 ### Test Coverage Gaps
 
-- No integration tests for the full SSE tool call flow
+- No integration tests for Streamable HTTP or Stdio MCP transports
 - No tests for the semantic cache (requires Redis + embedder)
-- No tests for the OpenAPI generator
-- No tests for the CLI commands
+- No end-to-end tests for the CLI command flows
+- No tests covering schema hot-reload watchers
 
 ---
 
@@ -1244,14 +1340,14 @@ Similarly, `cache.Embedder` is an interface, allowing the `HFEmbedder` to be swa
 
 ### 2. Schema-Driven Tool Registration
 
-Tools are defined as JSON files, not code. This means:
+Tools are defined as JSON files (and optionally native Go handlers). This means:
 - Adding a new tool requires no Go code changes — just drop a `.json` file
-- Tool definitions are version-controllable and shareable
-- The schemas directory can be mounted as a Docker volume for live updates
+- Tool definitions are shareable even though `schemas/` is gitignored
+- The schemas directory can be mounted as a Docker volume and hot-reloaded via fsnotify
 
 ### 3. Request-Scoped Structured Logging
 
-Every tool invocation gets a unique `request_id` and attaches it to a child `slog.Logger` stored in `context.Context`. All downstream calls (connector, cache) pull this logger from context, ensuring all log lines from a single request share the same `request_id` for correlation.
+Every tool invocation gets a unique `request_id` and attaches it to a child `slog.Logger` stored in `context.Context`. All downstream calls (connector, cache) pull this logger from context, ensuring all log lines from a single request share the same `request_id` for correlation and can be streamed to MCP clients with per-session log levels.
 
 ### 4. Progressive Cache Fallback
 
@@ -1268,8 +1364,8 @@ The most precise and cheapest lookup is tried first. The semantic layer only act
 ### 6. Dual-Path Tool Execution
 
 The same tool execution logic runs via:
-1. **MCP SSE path** — for AI agents using the standard protocol
-2. **Direct HTTP path** (`/api/tools/invoke`) — for `bridgectl` and programmatic access without SSE
+1. **MCP Streamable HTTP / Stdio path** — for AI agents using the standard protocol
+2. **Direct HTTP path** (`/api/tools/invoke`) — for `bridgectl` and programmatic access without MCP transport
 
 Both paths share identical caching, logging, and invalidation behaviour.
 
@@ -1282,25 +1378,23 @@ Both paths share identical caching, logging, and invalidation behaviour.
 | Area | Limitation |
 |---|---|
 | **Auth** | API keys are stored in plaintext in JSON schema files |
-| **Middleware Auth** | No authentication on `/api/*` management endpoints |
-| **Tool Paths** | Hardcoded `localhost:8081` fallback for relative tool paths |
+| **Server Auth** | No authentication on `/api/*` management endpoints |
+| **Tool Paths** | Relative tool paths fall back to `localhost:8081` unless `ERP_BASE_URL` is set |
 | **Role Extraction** | Role is never actually extracted from the MCP request context (always empty string) |
 | **Cache List/Inspect** | `/api/cache/list` and `/api/cache/inspect` return 501 Not Implemented |
 | **Semantic TTL** | Semantic cache entries do not expire (no TTL set on `HSET`) |
-| **Connector Timeout** | Fixed 10-second timeout with no per-tool override |
+| **Connector Timeout** | Fixed 15-second timeout with no per-tool override |
 | **Windows Paths** | `filepath.Walk` for schemas uses OS-native path separators |
 
 ### Suggested Improvements
 
 1. **Secrets Management** — Resolve `keyRef` values from Vault/AWS Secrets Manager at runtime
-2. **Middleware Authentication** — Add JWT/API key validation on management and invoke endpoints
-3. **Dynamic Tool Reload** — Use filesystem watchers (e.g., `fsnotify`) to reload schemas without restart
-4. **Semantic Cache TTL** — Honour the `TTLSeconds` config for `HSET` entries via `EXPIRE`
-5. **Pagination** — Pass `page` parameter from tool input schema through to ERP calls
-6. **gRPC/HTTP/2** — Add an alternative MCP transport for higher throughput
-7. **Metrics** — Expose Prometheus metrics (cache hit rate, ERP latency, error rates)
-8. **Schema Validation** — Validate tool input against `InputSchema` before calling the ERP
+2. **ERPBridge Server Authentication** — Add JWT/API key validation on management and invoke endpoints
+3. **Semantic Cache TTL** — Honour the `TTLSeconds` config for `HSET` entries via `EXPIRE`
+4. **Pagination** — Pass `page` parameter from tool input schema through to ERP calls
+5. **gRPC/HTTP/2** — Add an alternative MCP transport for higher throughput
+6. **Schema Validation** — Validate tool input against `InputSchema` before calling the ERP
 
 ---
 
-*Report generated from source analysis of the ERPBridge repository. Last updated 2026-05-06 to reflect `.env.example`, GitHub Actions CI/CD pipeline, Dockerfile notes, and Mermaid architecture diagrams.*
+*Report generated from source analysis of the ERPBridge repository. Last updated 2026-05-08 to reflect Streamable HTTP/Stdio MCP transports, ERPBridge server rename, ERPNext-style mock ERP updates, logging/metrics pipeline, and documentation additions.*
