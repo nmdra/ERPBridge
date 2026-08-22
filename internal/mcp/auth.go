@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/nmdra/ERPBridge/internal/logger"
 )
 
 const (
@@ -25,6 +27,13 @@ func (s *Server) AuthHandler(next http.Handler, scope string, adminOnly bool) ht
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, status, err := s.authenticateHTTP(r, scope, adminOnly)
 		if status != 0 {
+			if s.log != nil {
+				s.log.Warn("HTTP authentication denied",
+					slog.Int("status", status),
+					slog.String("path", r.URL.Path),
+					slog.Any("headers", logger.RedactHeaders(r.Header)),
+				)
+			}
 			http.Error(w, http.StatusText(status), status)
 			return
 		}

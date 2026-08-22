@@ -2,6 +2,7 @@ package logger
 
 import (
 	"log/slog"
+	"net/http"
 	"reflect"
 	"regexp"
 	"strings"
@@ -13,6 +14,7 @@ import (
 const (
 	redactedPasswordKey = "password"
 	redactedAPIKey      = "api_key"
+	redactionMarker     = "[REDACTED]"
 )
 
 var redactAttr = masq.New(
@@ -48,6 +50,20 @@ func RedactArgs(value any) any {
 	return redactValue(reflect.ValueOf(value))
 }
 
+// RedactHeaders returns a copy of HTTP headers with credential-bearing values
+// replaced before they are attached to logs or diagnostics.
+func RedactHeaders(headers http.Header) http.Header {
+	redacted := make(http.Header, len(headers))
+	for key, values := range headers {
+		if sensitiveHeaderKey(key) {
+			redacted[http.CanonicalHeaderKey(key)] = []string{redactionMarker}
+			continue
+		}
+		redacted[http.CanonicalHeaderKey(key)] = append([]string(nil), values...)
+	}
+	return redacted
+}
+
 func redactValue(value reflect.Value) any {
 	if !value.IsValid() {
 		return nil
@@ -70,7 +86,7 @@ func redactValue(value reflect.Value) any {
 		for iter.Next() {
 			key := iter.Key().String()
 			if sensitiveArgKey(key) {
-				result[key] = "[REDACTED]"
+				result[key] = redactionMarker
 				continue
 			}
 			result[key] = redactValue(iter.Value())
@@ -103,4 +119,13 @@ func sensitiveArgKey(key string) bool {
 		}
 	}
 	return false
+}
+
+func sensitiveHeaderKey(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "api-key":
+		return true
+	default:
+		return false
+	}
 }

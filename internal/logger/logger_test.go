@@ -3,6 +3,7 @@ package logger
 import (
 	"encoding/json"
 	"log/slog"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -121,8 +122,8 @@ func TestRedactArgs(t *testing.T) {
 	}
 
 	assertRedacted := func(value any, name string) {
-		if value != "[REDACTED]" {
-			t.Errorf("%s = %v, want [REDACTED]", name, value)
+		if value != redactionMarker {
+			t.Errorf("%s = %v, want %s", name, value, redactionMarker)
 		}
 	}
 	assertRedacted(redacted[redactedPasswordKey], redactedPasswordKey)
@@ -130,6 +131,28 @@ func TestRedactArgs(t *testing.T) {
 	assertRedacted(redacted["items"].([]any)[0].(map[string]any)[redactedAPIKey], "items api_key")
 	if redacted["username"] != "alice" {
 		t.Errorf("safe value changed: %v", redacted["username"])
+	}
+}
+
+func TestRedactHeaders(t *testing.T) {
+	headers := http.Header{
+		"Authorization": []string{"Bearer secret-token"},
+		"X-Trace-ID":    []string{"trace-1"},
+	}
+
+	redacted := RedactHeaders(headers)
+	if got := redacted.Get("Authorization"); got != redactionMarker {
+		t.Fatalf("authorization header was not redacted: %q", got)
+	}
+	if got := redacted.Get("X-Trace-ID"); got != "trace-1" {
+		t.Fatalf("safe header changed: %q", got)
+	}
+	encoded, err := json.Marshal(redacted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "secret-token") {
+		t.Fatalf("redacted headers contain the original token: %v", redacted)
 	}
 }
 
