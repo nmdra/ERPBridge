@@ -1,0 +1,34 @@
+# ERPBridge ecosystem context
+
+## Components and boundaries
+
+| Component | Role | Use it when |
+| --- | --- | --- |
+| `erpbridge-server` | Runtime that exposes MCP and authenticated HTTP endpoints, executes registered tools, enforces roles, and owns cache/log behavior. | Diagnosing server behavior or MCP availability. |
+| `bridgectl` | Control CLI for contexts, API registration/testing, tool resources, tokens, logs, and cache. | Performing supported operations against an ERPBridge environment. |
+| MCP client | Discovers and calls tools through stdio or `/mcp/`. | Verifying user-visible tool discovery and calls. |
+| `@erpbridge/sdk` | TypeScript facade for MCP tools, registry/direct invoke, logs, metrics, health, and cache. | Diagnosing application integration or envelope-handling behavior. |
+| ERPBridge source repository | Source of truth for the checked-out revision, tests, and server implementation. | Reproducing, tracing, or fixing a defect. |
+
+## Documentation source order
+
+The published documentation site is <https://blog.nimendra.xyz/erpbridge-docs/>.
+When published guidance may have changed, fetch its
+[`llms.txt`](https://blog.nimendra.xyz/erpbridge-docs/llms.txt) index and then
+only the focused Server, Bridgectl, or SDK pages. Use
+[`llms-full.txt`](https://blog.nimendra.xyz/erpbridge-docs/llms-full.txt) only
+when the focused pages do not answer the question.
+
+Compare the published version with `bridgectl version` and the checked-out
+repository revision. The local source and generated `docs/cli/` reference own
+the current checkout; the site owns published user guidance. If the versions
+do not match, state that fact and do not transfer destructive instructions
+between versions without verification. If the site is unavailable, use the
+local `erpbridge-docs` checkout, then in-repo docs and source.
+
+## Protocol boundary
+
+MCP clients and the SDK must preserve the MCP result envelope. A text content
+item can contain a JSON-encoded ERPBridge compatibility result; it is not a
+replacement for the complete MCP response. REST direct invocation addresses
+registered tools only, not built-in MCP system tools.

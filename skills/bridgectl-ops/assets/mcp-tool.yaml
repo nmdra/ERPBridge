@@ -1,0 +1,31 @@
+apiVersion: erpbridge.io/v1
+kind: MCPTool
+metadata:
+  name: <tool_name>
+  version: 1.0.0
+  module: <module>
+spec:
+  description:
+    short: "<one concise user-facing outcome>"
+    whenToUse:
+      - "<user intent this tool fulfills>"
+    whenNotToUse:
+      - "<similar intent served by another tool>"
+    examples:
+      - "<example user request>"
+  inputSchema:
+    type: object
+    properties: {}
+    required: []
+  execution:
+    type: http
+    method: <METHOD>
+    endpoint: <PATH>
+    responsePath: <optional.response.path>
+  security:
+    authType: api-key
+    credentialRef: <ERP_CREDENTIAL_ENV_VAR>
+    allowedRoles: [] # Omit for an open tool; use verified role names for a guarded tool.
+  cache:
+    enabled: false
+    flushOn: []

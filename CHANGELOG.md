@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(auth): add hashed, scoped API tokens with expiry, revocation, admin roles, and one-time token disclosure
 - feat(cli): add bearer token precedence and `bridgectl token create|list|revoke`
 - feat(rbac): add optional per-tool role allow-lists with MCP discovery and direct-invoke selectors
+- Add the `bridgectl-ops` operations skill for onboarding, maintenance, diagnosis, and sanitized bug reporting
 
 ### Changed
 - build(deps): bump go-redis to v9.21.0, prometheus client_golang to v1.24.1, modernc.org/sqlite to v1.55.0, miniredis to v2.38.0, masq to v0.2.2
