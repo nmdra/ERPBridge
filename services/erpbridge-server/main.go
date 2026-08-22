@@ -132,7 +132,7 @@ func main() {
 	server.ServeHTTP(mux, baseURL)
 
 	// Metrics endpoint
-	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/metrics", server.AuthHandler(promhttp.Handler(), "metrics", false))
 
 	slog.Info("ERPBridge Server listening",
 		slog.String("port", mcpPort),

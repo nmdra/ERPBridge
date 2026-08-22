@@ -83,10 +83,10 @@ func NormalizeRoles(roles []string) ([]string, error) {
 
 // TokenCreateRequest contains the metadata assigned to a newly generated token.
 type TokenCreateRequest struct {
-	Name      string
-	Scopes    []string
-	Roles     []string
-	ExpiresAt *time.Time
+	Name      string     `json:"name"`
+	Scopes    []string   `json:"scopes,omitempty"`
+	Roles     []string   `json:"roles,omitempty"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 
 // TokenRecord contains persisted token metadata. TokenHash is internal and is

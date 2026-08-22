@@ -38,6 +38,7 @@ type Server struct {
 	TelemetryHooks  *TelemetryHooks
 	BusinessHooks   *BusinessHooks
 	toolMiddlewares []server.ToolHandlerMiddleware
+	authWarnOnce    sync.Once
 }
 
 const (
@@ -604,7 +605,7 @@ func (s *Server) ServeHTTP(mux *http.ServeMux, _ string) {
 		_, _ = w.Write(finalBody.Bytes())
 	})
 
-	mux.Handle("/mcp/", http.StripPrefix("/mcp", filteredStreamable))
+	mux.Handle("/mcp/", s.AuthHandler(http.StripPrefix("/mcp", filteredStreamable), scopeMCP, false))
 
 	// 3. Management & Utility Endpoints
 	mux.HandleFunc("/mcp/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -612,14 +613,16 @@ func (s *Server) ServeHTTP(mux *http.ServeMux, _ string) {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	mux.HandleFunc("/api/tools/invoke", s.handleDirectInvoke)
-	mux.HandleFunc("/api/cache/stats", s.handleCacheStats)
-	mux.HandleFunc("/api/cache/flush", s.handleCacheFlush)
-	mux.HandleFunc("/api/logs/stream", s.handleLogStream)
-	mux.HandleFunc("/api/logs/recent", s.handleLogRecent)
+	mux.Handle("/api/auth/tokens", http.HandlerFunc(s.handleTokenAPI))
+	mux.Handle("/api/auth/tokens/", http.HandlerFunc(s.handleTokenAPI))
+	mux.Handle("/api/tools/invoke", s.AuthHandler(http.HandlerFunc(s.handleDirectInvoke), "", true))
+	mux.Handle("/api/cache/stats", s.AuthHandler(http.HandlerFunc(s.handleCacheStats), "", true))
+	mux.Handle("/api/cache/flush", s.AuthHandler(http.HandlerFunc(s.handleCacheFlush), "", true))
+	mux.Handle("/api/logs/stream", s.AuthHandler(http.HandlerFunc(s.handleLogStream), "logs", false))
+	mux.Handle("/api/logs/recent", s.AuthHandler(http.HandlerFunc(s.handleLogRecent), "logs", false))
 
 	// 4. Kubernetes-Style Tool API
-	mux.HandleFunc("/apis/erpbridge.io/v1/tools", s.handleToolAPI)
+	mux.Handle("/apis/erpbridge.io/v1/tools", s.AuthHandler(http.HandlerFunc(s.handleToolAPI), "", true))
 }
 
 func (s *Server) handleToolAPI(w http.ResponseWriter, r *http.Request) {
