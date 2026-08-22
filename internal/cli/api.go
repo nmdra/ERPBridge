@@ -88,7 +88,7 @@ func (r *APIRegistrationResponse) RenderTable(w io.Writer) error {
 }
 
 var apiListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   cliListUse,
 	Short: "List all registered APIs",
 	Long:  `Display a table of all ERP API endpoints currently registered in the local registry.`,
 	Example: `  bridgectl api list

@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	outputFormat string
-	ctxOverride  string
-	verbose      bool
+	outputFormat  string
+	ctxOverride   string
+	tokenOverride string
+	verbose       bool
 
 	// Version is the current version of the bridgectl CLI.
 	Version = "dev"
@@ -28,6 +29,12 @@ var (
 
 	// RootLog is the global logger instance used by the CLI.
 	RootLog *slog.Logger
+)
+
+const (
+	cliListUse   = "list"
+	cliNameField = "name"
+	cliMCPScope  = "mcp"
 )
 
 // RootCmd represents the base command when called without any subcommands.
@@ -103,5 +110,6 @@ func handleError(err error) {
 func init() {
 	RootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "Output format: table, json, yaml")
 	RootCmd.PersistentFlags().StringVarP(&ctxOverride, "context", "c", "", "Override active context")
+	RootCmd.PersistentFlags().StringVar(&tokenOverride, "token", "", "API token for the ERPBridge server")
 	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Show full HTTP request/response detail")
 }

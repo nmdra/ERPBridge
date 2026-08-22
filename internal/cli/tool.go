@@ -116,13 +116,7 @@ var toolApplyCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("marshal tool (%s): %w", path, err)
 				}
-				req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, url, bytes.NewReader(payload))
-				if err != nil {
-					return err
-				}
-				req.Header.Set("Content-Type", "application/json")
-
-				resp, err := http.DefaultClient.Do(req)
+				resp, err := doBridgeRequestWithHeaders(cmd, http.MethodPost, url, bytes.NewReader(payload), http.Header{"Content-Type": []string{"application/json"}})
 				if err != nil {
 					return fmt.Errorf("apply failed (%s): %w", path, err)
 				}
@@ -161,7 +155,7 @@ var toolGetCmd = &cobra.Command{
 	Short: "Display one or many tool resources",
 	Example: `  bridgectl tool get
   bridgectl tool get list_employees -o yaml`,
-	ValidArgsFunction: func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) != 0 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -172,7 +166,7 @@ var toolGetCmd = &cobra.Command{
 		url := ctx.MCPServer + "/apis/erpbridge.io/v1/tools"
 
 		// #nosec G107 -- URL is dynamically constructed from configured server context
-		resp, err := http.Get(url)
+		resp, err := doBridgeRequest(cmd, http.MethodGet, url)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
@@ -200,7 +194,7 @@ var toolGetCmd = &cobra.Command{
 		name, version := "", ""
 		if len(args) > 0 {
 			name, version = mcp.ParseToolIdentifier(args[0])
-			query := url.Values{"name": []string{name}}
+			query := url.Values{cliNameField: []string{name}}
 			if version != "" {
 				query.Set("version", version)
 			}
@@ -208,7 +202,7 @@ var toolGetCmd = &cobra.Command{
 		}
 
 		// #nosec G107 -- URL is dynamically constructed from configured server context
-		resp, err := http.Get(listURL)
+		resp, err := doBridgeRequest(cmd, http.MethodGet, listURL)
 		if err != nil {
 			return err
 		}
@@ -290,14 +284,14 @@ var toolDescribeCmd = &cobra.Command{
 
 		name, version := mcp.ParseToolIdentifier(args[0])
 		listURL := fmt.Sprintf("%s/apis/erpbridge.io/v1/tools", ctx.MCPServer)
-		query := url.Values{"name": []string{name}}
+		query := url.Values{cliNameField: []string{name}}
 		if version != "" {
 			query.Set("version", version)
 		}
 		listURL += "?" + query.Encode()
 
 		// #nosec G107 -- URL is dynamically constructed from configured server context
-		resp, err := http.Get(listURL)
+		resp, err := doBridgeRequest(cmd, http.MethodGet, listURL)
 		if err != nil {
 			return err
 		}
@@ -466,12 +460,7 @@ var toolDeleteCmd = &cobra.Command{
 			url += "&hard=true"
 		}
 
-		req, err := http.NewRequestWithContext(cmd.Context(), http.MethodDelete, url, nil)
-		if err != nil {
-			return err
-		}
-
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := doBridgeRequest(cmd, http.MethodDelete, url)
 		if err != nil {
 			return err
 		}

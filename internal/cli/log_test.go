@@ -23,7 +23,7 @@ func TestShouldPrint(t *testing.T) {
 		t.Errorf("expected shouldPrint to be true")
 	}
 
-	logComponent = "mcp"
+	logComponent = cliMCPScope
 	if !shouldPrint(msg) {
 		t.Errorf("expected shouldPrint to be true with mcp component")
 	}
@@ -66,7 +66,7 @@ func TestShouldPrint(t *testing.T) {
 		t.Errorf("expected false")
 	}
 
-	logComponent = "mcp"
+	logComponent = cliMCPScope
 	if shouldPrint(`{"message":"component\":\"mcp"}`) {
 		t.Errorf("expected substring-only match to be filtered")
 	}

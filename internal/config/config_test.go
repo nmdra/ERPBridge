@@ -50,6 +50,8 @@ func TestLoad_EnvOverrides(t *testing.T) {
 
 	_ = os.Setenv("BRIDGE_SERVER", "http://overridden:8082")
 	defer func() { _ = os.Unsetenv("BRIDGE_SERVER") }()
+	_ = os.Setenv("BRIDGE_API_TOKEN", "env-token")
+	defer func() { _ = os.Unsetenv("BRIDGE_API_TOKEN") }()
 
 	cfg, err := Load()
 	if err != nil {
@@ -59,5 +61,8 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	ctx := cfg.ActiveContext()
 	if ctx.Server != "http://overridden:8082" {
 		t.Errorf("expected server 'http://overridden:8082', got '%s'", ctx.Server)
+	}
+	if ctx.APIToken != "env-token" {
+		t.Errorf("expected API token environment override, got %q", ctx.APIToken)
 	}
 }

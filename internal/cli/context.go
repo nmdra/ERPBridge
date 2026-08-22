@@ -20,7 +20,7 @@ middleware server URL, default ERP base URL, and authentication credentials.`,
 }
 
 var contextListCmd = &cobra.Command{
-	Use:     "list",
+	Use:     cliListUse,
 	Short:   "List saved contexts",
 	Long:    `Display a table of all configured contexts from your ~/.bridgectl/config.yaml.`,
 	Example: `  bridgectl context list`,

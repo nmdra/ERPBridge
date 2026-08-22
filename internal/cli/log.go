@@ -40,12 +40,7 @@ frequency analysis of log levels and tool invocations.`,
 		}
 
 		url := ctx.Server + "/api/logs/recent"
-		req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, url, nil)
-		if err != nil {
-			return err
-		}
-
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := doBridgeRequest(cmd, http.MethodGet, url)
 		if err != nil {
 			return err
 		}
@@ -101,12 +96,7 @@ log level, or a specific request ID.`,
 		}
 
 		url := ctx.Server + "/api/logs/stream"
-		req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, url, nil)
-		if err != nil {
-			return err
-		}
-
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := doBridgeRequest(cmd, http.MethodGet, url)
 		if err != nil {
 			return err
 		}

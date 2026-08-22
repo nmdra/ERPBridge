@@ -33,12 +33,7 @@ including total key counts and backend memory usage when available.`,
 				"Use 'bridgectl context set' to select an active environment.")
 		}
 
-		req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, ctx.Server+"/api/cache/stats", nil)
-		if err != nil {
-			return err
-		}
-
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := doBridgeRequest(cmd, http.MethodGet, ctx.Server+"/api/cache/stats")
 		if err != nil {
 			return err
 		}
@@ -90,12 +85,7 @@ or clear the entire cache with --all.`,
 		}
 		u.RawQuery = q.Encode()
 
-		req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, u.String(), nil)
-		if err != nil {
-			return err
-		}
-
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := doBridgeRequest(cmd, http.MethodGet, u.String())
 		if err != nil {
 			return err
 		}

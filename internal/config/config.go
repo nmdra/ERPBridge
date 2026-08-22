@@ -26,6 +26,7 @@ type Context struct {
 	Server    string     `yaml:"server"`
 	MCPServer string     `yaml:"mcp-server"`
 	ERPBase   string     `yaml:"erp-base"`
+	APIToken  string     `yaml:"api-token"`
 	Auth      AuthConfig `yaml:"auth"`
 }
 
@@ -76,6 +77,9 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("BRIDGE_ERP_BASE"); v != "" {
 		ctx.ERPBase = v
+	}
+	if v := os.Getenv("BRIDGE_API_TOKEN"); v != "" {
+		ctx.APIToken = v
 	}
 	if v := os.Getenv("BRIDGE_AUTH_TYPE"); v != "" {
 		ctx.Auth.Type = v
