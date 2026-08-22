@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - fix(security): fail closed for unresolved credential references and redact tool arguments across log handlers
 - fix(mcp): hide inactive tools on Stdio, harden registry state hashing and migrations, evict idle rate-limit identities, and validate nested response paths
 - fix(idp): dereference generated output schemas and report unresolved OpenAPI references with operation context
+- fix(server): gracefully shut down the HTTP listener on SIGTERM and SIGINT
 
 ### Security
 - security(auth): redact authorization headers and prevent denied guarded calls from reaching cache or downstream ERP execution

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,6 +26,30 @@ import (
 )
 
 var version = "dev"
+
+func serveHTTP(ctx context.Context, server *http.Server, listener net.Listener) error {
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- server.Serve(listener)
+	}()
+
+	select {
+	case err := <-serveErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+
+		shutdownErr := server.Shutdown(shutdownCtx)
+		if err := <-serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return shutdownErr
+	}
+}
 
 func main() {
 	// Print startup banner
@@ -134,16 +159,21 @@ func main() {
 	// Metrics endpoint
 	mux.Handle("/metrics", server.AuthHandler(promhttp.Handler(), "metrics", false))
 
-	slog.Info("ERPBridge Server listening",
-		slog.String("port", mcpPort),
-		slog.String("mcp_http", baseURL+"/mcp/"),
-	)
 	httpServer := &http.Server{
 		Addr:              ":" + mcpPort,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	listener, err := net.Listen("tcp", httpServer.Addr)
+	if err != nil {
+		slog.Error("server stopped with error", slog.String("error", err.Error()))
+		return
+	}
+	slog.Info("ERPBridge Server listening",
+		slog.String("port", mcpPort),
+		slog.String("mcp_http", baseURL+"/mcp/"),
+	)
+	if err := serveHTTP(ctx, httpServer, listener); err != nil {
 		slog.Error("server stopped with error", slog.String("error", err.Error()))
 	}
 }

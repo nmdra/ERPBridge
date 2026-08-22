@@ -89,6 +89,9 @@ You can use the local `bridgectl` binary to interact with the server running in 
 - **Metrics:**
   Prometheus metrics are available at `http://localhost:8080/metrics`.
 
+When the container receives `SIGTERM` or `SIGINT`, ERPBridge stops accepting new
+HTTP connections and gracefully shuts down the listener before the process exits.
+
 ## 6. Connecting MCP Clients
 
 ERPBridge supports the **Stdio** and **Streamable HTTP** transports.
