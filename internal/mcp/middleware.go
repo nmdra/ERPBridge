@@ -173,7 +173,10 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 			}
 
 			args, _ := req.Params.Arguments.(map[string]any)
-			role := "" // Extract from context if needed in future
+			role := ""
+			if len(t.Spec.Security.AllowedRoles) > 0 {
+				role, _ = CallerRoleFromContext(ctx)
+			}
 
 			if t.Spec.Cache.Enabled {
 				// READ from cache

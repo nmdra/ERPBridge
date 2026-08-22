@@ -15,6 +15,7 @@ const (
 	testRoleAdmin    = "admin"
 	testRoleOperator = "operator"
 	testRoleZeta     = "zeta"
+	testClientOne    = "client-1"
 )
 
 func TestValidateToolAllowedRoles(t *testing.T) {
@@ -30,11 +31,11 @@ func TestValidateToolAllowedRoles(t *testing.T) {
 	assert.Equal(t, []string{testRoleAlpha, testRoleZeta}, tool.Spec.Security.AllowedRoles)
 
 	tool.Spec.Security.AllowedRoles = []string{testRoleOperator}
-	tool.Spec.InputSchema.Properties["role"] = Property{Type: schemaTypeString}
+	tool.Spec.InputSchema.Properties[roleSelectorField] = Property{Type: schemaTypeString}
 	assert.Error(t, s.validateTool(tool))
 
 	tool.Spec.Security.AllowedRoles = []string{"Admin"}
-	delete(tool.Spec.InputSchema.Properties, "role")
+	delete(tool.Spec.InputSchema.Properties, roleSelectorField)
 	assert.Error(t, s.validateTool(tool))
 }
 
@@ -49,10 +50,10 @@ func TestSchemaForMCP_InjectsGuardedRoleSelectorWithoutMutatingTool(t *testing.T
 
 	schema, err := schemaForMCP(tool)
 	require.NoError(t, err)
-	assert.Equal(t, []string{testRoleAlpha, testRoleZeta}, schema.Properties["role"].Enum)
-	assert.NotContains(t, tool.Spec.InputSchema.Properties, "role")
+	assert.Equal(t, []string{testRoleAlpha, testRoleZeta}, schema.Properties[roleSelectorField].Enum)
+	assert.NotContains(t, tool.Spec.InputSchema.Properties, roleSelectorField)
 
-	schema.Properties["role"] = Property{Type: "integer"}
+	schema.Properties[roleSelectorField] = Property{Type: "integer"}
 	assert.Equal(t, []string{"number"}, []string{tool.Spec.InputSchema.Properties[testAmountField].Type})
 }
 
@@ -61,15 +62,15 @@ func TestSchemaForMCP_PreservesOpenBusinessRole(t *testing.T) {
 		Metadata: Metadata{Name: "open-tool", Version: testVersion100},
 		Spec: ToolSpec{
 			InputSchema: InputSchema{Type: schemaTypeObject, Properties: map[string]Property{
-				"role": {Type: "string", Description: "ERP business role"},
+				roleSelectorField: {Type: schemaTypeString, Description: "ERP business role"},
 			}},
 		},
 	}
 
 	schema, err := schemaForMCP(tool)
 	require.NoError(t, err)
-	assert.Equal(t, "ERP business role", schema.Properties["role"].Description)
-	assert.Empty(t, schema.Properties["role"].Enum)
+	assert.Equal(t, "ERP business role", schema.Properties[roleSelectorField].Description)
+	assert.Empty(t, schema.Properties[roleSelectorField].Enum)
 }
 
 func TestRegisterTool_ExposesGuardedRoleSelectorToMCP(t *testing.T) {
@@ -77,7 +78,7 @@ func TestRegisterTool_ExposesGuardedRoleSelectorToMCP(t *testing.T) {
 	tool := &Tool{
 		Metadata: Metadata{Name: "listed-role-tool", Version: testVersion100},
 		Spec: ToolSpec{
-			InputSchema: InputSchema{Type: schemaTypeObject, Properties: map[string]Property{testAmountField: {Type: "number"}}},
+			InputSchema: InputSchema{Type: schemaTypeObject, Properties: map[string]Property{testAmountField: {Type: schemaTypeNumber}}},
 			Security:    Security{AllowedRoles: []string{testRoleOperator, testRoleAdmin}},
 		},
 	}
@@ -93,7 +94,7 @@ func TestRegisterTool_ExposesGuardedRoleSelectorToMCP(t *testing.T) {
 	require.True(t, ok)
 	properties, ok := inputSchema["properties"].(map[string]any)
 	require.True(t, ok)
-	role, ok := properties["role"].(map[string]any)
+	role, ok := properties[roleSelectorField].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, []any{testRoleAdmin, testRoleOperator}, role["enum"])
 }
