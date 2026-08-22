@@ -156,9 +156,9 @@ func TestServer_RegisterToolMarshaling(t *testing.T) {
 	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 
 	schema := InputSchema{
-		Type: "object",
+		Type: schemaTypeObject,
 		Properties: map[string]Property{
-			testString: {Type: "string"},
+			testString: {Type: schemaTypeString},
 		},
 	}
 

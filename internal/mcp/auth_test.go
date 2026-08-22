@@ -36,7 +36,7 @@ func TestAuthHandler_ValidatesAdminAndScopedToken(t *testing.T) {
 	record, raw, err := s.store.CreateToken(TokenCreateRequest{
 		Name:   "mcp-client",
 		Scopes: []string{scopeMCP},
-		Roles:  []string{"operator"},
+		Roles:  []string{testRoleOperator},
 	})
 	require.NoError(t, err)
 
@@ -44,7 +44,7 @@ func TestAuthHandler_ValidatesAdminAndScopedToken(t *testing.T) {
 		identity, ok := CallerIdentityFromContext(r.Context())
 		require.True(t, ok)
 		assert.Equal(t, record.ID, identity.PrincipalID)
-		assert.Equal(t, []string{"operator"}, identity.Roles)
+		assert.Equal(t, []string{testRoleOperator}, identity.Roles)
 		assert.False(t, identity.IsAdmin)
 		assert.Equal(t, record.ID, rateLimitPrincipal(r.Context()))
 		w.WriteHeader(http.StatusNoContent)

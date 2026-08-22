@@ -464,7 +464,12 @@ func (s *Server) RegisterTool(t *Tool) {
 	}
 
 	// Serialize the input schema to JSON.RawMessage
-	schemaJSON, err := json.Marshal(t.Spec.InputSchema)
+	inputSchema, err := schemaForMCP(t)
+	if err != nil {
+		s.log.Error("failed to prepare input schema", slog.String("tool_name", t.Metadata.Name), slog.String("error", err.Error()))
+		return
+	}
+	schemaJSON, err := json.Marshal(inputSchema)
 	if err != nil {
 		s.log.Error("failed to marshal input schema", slog.String("tool_name", t.Metadata.Name), slog.String("error", err.Error()))
 		return
@@ -757,7 +762,45 @@ func (s *Server) validateTool(t *Tool) error {
 		return fmt.Errorf("endpoint should not contain raw secrets, use credentialRef instead")
 	}
 
+	roles, err := NormalizeRoles(t.Spec.Security.AllowedRoles)
+	if err != nil {
+		return fmt.Errorf("invalid security.allowedRoles: %w", err)
+	}
+	if len(roles) > 0 {
+		if _, exists := t.Spec.InputSchema.Properties["role"]; exists || slices.Contains(t.Spec.InputSchema.Required, "role") {
+			return fmt.Errorf("guarded tools must reserve role selector input for authorization")
+		}
+		t.Spec.Security.AllowedRoles = roles
+	}
+
 	return nil
+}
+
+func schemaForMCP(t *Tool) (InputSchema, error) {
+	var schema InputSchema
+	encoded, err := json.Marshal(t.Spec.InputSchema)
+	if err != nil {
+		return InputSchema{}, fmt.Errorf("copy input schema: %w", err)
+	}
+	if err := json.Unmarshal(encoded, &schema); err != nil {
+		return InputSchema{}, fmt.Errorf("copy input schema: %w", err)
+	}
+	if len(t.Spec.Security.AllowedRoles) == 0 {
+		return schema, nil
+	}
+	if schema.Properties == nil {
+		schema.Properties = make(map[string]Property)
+	}
+	roles, err := NormalizeRoles(t.Spec.Security.AllowedRoles)
+	if err != nil {
+		return InputSchema{}, fmt.Errorf("prepare role selector: %w", err)
+	}
+	schema.Properties["role"] = Property{
+		Type:        schemaTypeString,
+		Description: "Authorization role used for this tool call",
+		Enum:        roles,
+	}
+	return schema, nil
 }
 
 func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {

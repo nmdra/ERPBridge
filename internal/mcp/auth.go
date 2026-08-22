@@ -17,6 +17,7 @@ import (
 const (
 	authTokenEnv      = "API_AUTH_TOKEN" // #nosec G101 -- this is an environment-variable name.
 	authAdminRolesEnv = "API_AUTH_ADMIN_ROLES"
+	adminPrincipal    = "admin"
 )
 
 // AuthHandler protects an HTTP route with the configured bearer credential.
@@ -68,7 +69,7 @@ func (s *Server) authenticateHTTP(r *http.Request, scope string, adminOnly bool)
 
 	identity := CallerIdentity{}
 	if secureTokenEqual(presented, adminToken) {
-		identity = CallerIdentity{PrincipalID: "admin", Roles: adminRoles, IsAdmin: true}
+		identity = CallerIdentity{PrincipalID: adminPrincipal, Roles: adminRoles, IsAdmin: true}
 	} else {
 		if s.store == nil {
 			return nil, http.StatusUnauthorized, nil

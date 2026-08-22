@@ -26,9 +26,9 @@ func TestServer_RegisterTool(t *testing.T) {
 		Spec: ToolSpec{
 			Description: Description{Short: "A test tool"},
 			InputSchema: InputSchema{
-				Type: "object",
+				Type: schemaTypeObject,
 				Properties: map[string]Property{
-					"param1": {Type: "string"},
+					"param1": {Type: schemaTypeString},
 				},
 			},
 		},

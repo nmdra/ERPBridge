@@ -17,6 +17,12 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
+const (
+	schemaTypeObject = "object"
+	schemaTypeString = "string"
+	schemaTypeNumber = "number"
+)
+
 // Tool represents a versioned, protocol-compliant MCP tool resource.
 type Tool struct {
 	APIVersion string   `json:"apiVersion"`
@@ -83,8 +89,9 @@ type Execution struct {
 
 // Security defines the authentication requirements for the tool.
 type Security struct {
-	AuthType      string `json:"authType"`      // api-key, basic, bearer
-	CredentialRef string `json:"credentialRef"` // Env var name or vault key
+	AuthType      string   `json:"authType"`      // api-key, basic, bearer
+	CredentialRef string   `json:"credentialRef"` // Env var name or vault key
+	AllowedRoles  []string `json:"allowedRoles,omitempty"`
 }
 
 // Routing provides metadata to improve LLM tool selection accuracy.

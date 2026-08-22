@@ -18,12 +18,12 @@ func TestStore_TokenLifecycle(t *testing.T) {
 	record, raw, err := store.CreateToken(TokenCreateRequest{
 		Name:   "integration-client",
 		Scopes: []string{scopeMCP},
-		Roles:  []string{"zeta", "alpha"},
+		Roles:  []string{testRoleZeta, testRoleAlpha},
 	})
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(raw, "erpbt_"))
 	assert.Len(t, strings.TrimPrefix(raw, "erpbt_"), 64)
-	assert.Equal(t, []string{"alpha", "zeta"}, record.Roles)
+	assert.Equal(t, []string{testRoleAlpha, testRoleZeta}, record.Roles)
 	assert.Equal(t, []string{scopeMCP}, record.Scopes)
 	assert.NotContains(t, record.TokenHash, raw)
 
@@ -77,18 +77,18 @@ func TestStore_LookupTokenRejectsExpiredToken(t *testing.T) {
 }
 
 func TestCallerIdentityContextCopiesRoles(t *testing.T) {
-	original := CallerIdentity{PrincipalID: "token-1", Roles: []string{"admin"}, IsAdmin: true}
+	original := CallerIdentity{PrincipalID: "token-1", Roles: []string{adminPrincipal}, IsAdmin: true}
 	ctx := WithCallerIdentity(context.Background(), original)
 	original.Roles[0] = "changed"
 
 	identity, ok := CallerIdentityFromContext(ctx)
 	require.True(t, ok)
-	assert.Equal(t, "admin", identity.Roles[0])
+	assert.Equal(t, adminPrincipal, identity.Roles[0])
 
 	identity.Roles[0] = "mutated"
 	second, ok := CallerIdentityFromContext(ctx)
 	require.True(t, ok)
-	assert.Equal(t, "admin", second.Roles[0])
+	assert.Equal(t, adminPrincipal, second.Roles[0])
 }
 
 func ptrTime(value time.Time) *time.Time {
