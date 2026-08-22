@@ -96,6 +96,40 @@ func configuredAdminRoles() ([]string, error) {
 	return NormalizeRoles(roles)
 }
 
+func configuredCORSOrigins() []string {
+	value := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if value == "" {
+		if token, enabled := os.LookupEnv(authTokenEnv); enabled && token != "" {
+			return nil
+		}
+		return []string{"*"}
+	}
+	parts := strings.Split(value, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if origin := strings.TrimSpace(part); origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+	return origins
+}
+
+func allowedCORSOrigin(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	for _, allowed := range configuredCORSOrigins() {
+		if allowed == "*" || allowed == origin {
+			return true
+		}
+	}
+	return false
+}
+
+func isAllowedMCPPreflight(r *http.Request) bool {
+	return r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" && allowedCORSOrigin(r.Header.Get("Origin"))
+}
+
 func bearerToken(value string) (string, bool) {
 	parts := strings.Fields(value)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || parts[1] == "" {

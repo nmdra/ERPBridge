@@ -206,6 +206,8 @@ func TestServer_ServeHTTP(t *testing.T) {
 }
 
 func TestServer_MCPBrowserCORS(t *testing.T) {
+	t.Setenv("API_AUTH_TOKEN", "")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	log := logger.Init()
 	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 	mux := http.NewServeMux()
@@ -222,6 +224,29 @@ func TestServer_MCPBrowserCORS(t *testing.T) {
 	assert.Contains(t, w.Header().Get("Access-Control-Allow-Headers"), "MCP-Protocol-Version")
 	assert.Contains(t, w.Header().Get("Access-Control-Allow-Headers"), "Mcp-Session-Id")
 	assert.Contains(t, w.Header().Get("Access-Control-Expose-Headers"), "Mcp-Session-Id")
+}
+
+func TestServer_MCPCORSPreflightRunsBeforeAuthentication(t *testing.T) {
+	t.Setenv("API_AUTH_TOKEN", "admin-secret")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	log := logger.Init()
+	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	mux := http.NewServeMux()
+	s.ServeHTTP(mux, "http://localhost:8080")
+
+	preflight := httptest.NewRequest(http.MethodOptions, "/mcp/", nil)
+	preflight.Header.Set("Origin", "http://localhost:3000")
+	preflight.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	preflight.Header.Set("Access-Control-Request-Headers", "Authorization, Content-Type")
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, preflight)
+	assert.Less(t, recorder.Code, http.StatusMultipleChoices)
+	assert.Equal(t, "http://localhost:3000", recorder.Header().Get("Access-Control-Allow-Origin"))
+
+	request := httptest.NewRequest(http.MethodGet, "/mcp/", nil)
+	recorder = httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 }
 
 func TestServer_LogStream(t *testing.T) {

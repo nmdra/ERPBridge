@@ -17,6 +17,11 @@ This transport is the MCP streamable HTTP specification. It suits stateless or w
       responses expose `Mcp-Session-Id` so browser clients can maintain the
       stateful session.
 
+Set `CORS_ALLOWED_ORIGINS` to a comma-separated list of browser origins. An
+allowed preflight does not require a bearer token, but the following MCP
+request does when `API_AUTH_TOKEN` is configured. In open mode, the server
+keeps the existing wildcard CORS behavior.
+
 The CORS policy applies to the MCP endpoint only. The management, direct
 invoke, cache, logs, metrics, and health endpoints are not part of the
 cross-origin browser contract.
@@ -49,6 +54,8 @@ The server exposes direct HTTP endpoints for internal management, performance mo
 | `/api/cache/flush` | `GET` | Flush specific or all cache entries. |
 | `/api/logs/stream` | `GET` | Real-time structured log stream (SSE). |
 | `/api/logs/recent` | `GET` | Fetch recent log history in JSON format. |
+| `/api/auth/tokens` | `POST/GET` | Create and list API tokens. Requires the admin credential when authentication is enabled. |
+| `/api/auth/tokens/{id}` | `DELETE` | Revoke an API token. Requires the admin credential when authentication is enabled. |
 
 For the full endpoint reference, see the [REST API Reference](./api.md).
 

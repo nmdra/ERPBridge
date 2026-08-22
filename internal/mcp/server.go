@@ -532,6 +532,7 @@ func (s *Server) MCPServer() *server.MCPServer {
 
 // ServeHTTP handles the various MCP transports and management endpoints.
 func (s *Server) ServeHTTP(mux *http.ServeMux, _ string) {
+	corsOrigins := configuredCORSOrigins()
 	// 1. Streamable HTTP Transport (Modern clients, Postman)
 	// MUST strip prefix so the server sees "/" internally
 	streamableServer := server.NewStreamableHTTPServer(s.mcpServer,
@@ -539,7 +540,7 @@ func (s *Server) ServeHTTP(mux *http.ServeMux, _ string) {
 		server.WithSessionIdleTTL(30*time.Minute),
 		server.WithEndpointPath("/"), // Tell the server it is mounted at /
 		server.WithStreamableHTTPCORS(
-			server.WithCORSAllowedOrigins("*"),
+			server.WithCORSAllowedOrigins(corsOrigins...),
 			server.WithCORSAllowedMethods("POST", "GET", "OPTIONS"),
 			server.WithCORSAllowedHeaders("Content-Type", "Mcp-Session-Id", "Last-Event-ID", "Authorization", "MCP-Protocol-Version"),
 			server.WithCORSExposedHeaders("Mcp-Session-Id"),
@@ -605,7 +606,15 @@ func (s *Server) ServeHTTP(mux *http.ServeMux, _ string) {
 		_, _ = w.Write(finalBody.Bytes())
 	})
 
-	mux.Handle("/mcp/", s.AuthHandler(http.StripPrefix("/mcp", filteredStreamable), scopeMCP, false))
+	mcpHandler := http.StripPrefix("/mcp", filteredStreamable)
+	authenticatedMCP := s.AuthHandler(mcpHandler, scopeMCP, false)
+	mux.Handle("/mcp/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isAllowedMCPPreflight(r) {
+			mcpHandler.ServeHTTP(w, r)
+			return
+		}
+		authenticatedMCP.ServeHTTP(w, r)
+	}))
 
 	// 3. Management & Utility Endpoints
 	mux.HandleFunc("/mcp/health", func(w http.ResponseWriter, _ *http.Request) {
