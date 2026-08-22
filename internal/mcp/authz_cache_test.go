@@ -8,6 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/logger"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,4 +64,34 @@ func TestReadOnlyGuardedCacheRemainsShared(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Equal(t, 1, calls)
+}
+
+func TestGuardedCacheRejectsRoleAfterAllowListChange(t *testing.T) {
+	s := NewServer(nil, cache.NewMemoryManager(10, logger.Init()), logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	tool := &Tool{
+		Metadata: Metadata{Name: "mutable-role-cache", Version: testVersion100},
+		Spec: ToolSpec{
+			Security: Security{AllowedRoles: []string{testRoleOperator}},
+			Cache:    &cache.Config{Enabled: true, IsReadOnly: false},
+		},
+	}
+	calls := 0
+	handler := s.RoleAuthzMiddleware(tool)(s.CacheMiddleware(tool)(func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls++
+		return mcp.NewToolResultText("fresh"), nil
+	}))
+
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{roleSelectorField: testRoleOperator, testAmountField: 1}
+	identity := WithCallerIdentity(context.Background(), CallerIdentity{PrincipalID: testClientOne, Roles: []string{testRoleOperator}})
+	result, err := handler(identity, request)
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+	require.Equal(t, 1, calls)
+
+	tool.Spec.Security.AllowedRoles = []string{testRoleAdmin}
+	result, err = handler(identity, request)
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Equal(t, 1, calls)
 }

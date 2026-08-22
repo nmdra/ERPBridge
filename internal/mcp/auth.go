@@ -87,9 +87,6 @@ func (s *Server) authenticateHTTP(r *http.Request, scope string, adminOnly bool)
 		}
 	}
 
-	if adminOnly {
-		return WithRateLimitPrincipal(WithCallerIdentity(r.Context(), identity), identity.PrincipalID), 0, nil
-	}
 	return WithRateLimitPrincipal(WithCallerIdentity(r.Context(), identity), identity.PrincipalID), 0, nil
 }
 
