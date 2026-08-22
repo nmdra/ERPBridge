@@ -2,6 +2,24 @@
 
 The ERPBridge server exposes direct HTTP endpoints. They do not require an MCP handshake. They serve the `bridgectl` CLI, scripts, and monitoring tools.
 
+## Authentication
+
+HTTP authentication is enabled when `API_AUTH_TOKEN` is non-empty. Send the
+configured admin credential or a bearer API token in every protected request:
+
+```http
+Authorization: Bearer <token>
+```
+
+The admin credential is accepted for every route. API tokens are limited by
+scope: `mcp` for `/mcp/`, `metrics` for `/metrics`, and `logs` for the log
+endpoints. The registry, direct invoke, cache, and token lifecycle endpoints
+require the admin credential. `/mcp/health` remains open.
+
+When authentication is disabled, HTTP routes keep their open-mode behavior.
+This does not grant a caller a role: guarded tools still deny calls without a
+verified identity. Stdio has the same fail-closed behavior for guarded tools.
+
 ## Base URL
 
 `http://localhost:8080` (or the value of `MCP_PORT`)
@@ -53,6 +71,9 @@ The server rejects tool definitions when:
 
 - The tool name starts with `get-` or `post-`.
 - The endpoint path contains embedded secrets (for example `token ` or `key=`).
+- `spec.security.allowedRoles` contains an invalid, duplicate, empty, or more
+  than 32 roles.
+- A guarded tool defines its own `role` input property or requires that field.
 
 ## Tool Invocation
 
@@ -73,6 +94,12 @@ Body:
 ```
 
 The call goes through the middleware chain: rate limiting, cache, and resilience.
+
+This endpoint is admin-only when HTTP authentication is enabled. For a guarded
+tool, pass the verified role in `X-ERPBridge-Role`; do not put `role` in the
+JSON body. The header value must be present in both the caller identity and the
+tool's `allowedRoles` list. A missing or invalid selector returns `403` and a
+body/header collision returns `400`.
 
 This endpoint resolves registered tools only. MCP built-ins such as `system.progress_test` are available through MCP `tools/call`, but not through this REST endpoint.
 
@@ -99,6 +126,25 @@ The REST endpoint returns the legacy `ToolResult` compatibility shape. MCP clien
 | `/mcp/` | `POST` | MCP JSON-RPC requests (Streamable HTTP). |
 | `/mcp/` | `GET` | SSE notification stream for the session. |
 | `/mcp/health` | `GET` | Returns `{"status": "ok"}`. |
+
+For a guarded MCP tool, select a role in the generated optional
+`arguments.role` field. The server checks the role against the authenticated
+token and the tool allow-list, then removes the selector before sending the
+arguments to the ERP. Open tools do not reserve `role`, so existing business
+payloads remain unchanged. Guarded read-only cache entries are shared by
+verified roles; other guarded cache entries are role-scoped.
+
+## Token Lifecycle
+
+The admin-only token endpoints create, list, and revoke scoped API tokens. The
+raw `erpbt_` token is returned only by creation; the server stores only its
+SHA-256 hash.
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/auth/tokens` | `POST` | Create a token. |
+| `/api/auth/tokens` | `GET` | List token metadata without token values or hashes. |
+| `/api/auth/tokens/{id}` | `DELETE` | Revoke a token. |
 
 ## Observability
 

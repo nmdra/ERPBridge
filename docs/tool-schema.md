@@ -57,6 +57,19 @@ Technical mapping to the ERP API.
 Authentication strategy.
 - **`authType`**: `api-key`, `bearer`, or `basic`.
 - **`credentialRef`**: The name of the environment variable containing the secret. **Never embed raw secrets here.**
+- **`allowedRoles`**: (Optional array) Roles that may call this tool. Each role must match `[a-z][a-z0-9_-]{0,63}`; the list must contain unique values and no more than 32 roles.
+
+When `allowedRoles` is present, the tool is guarded. MCP clients select one of
+the advertised roles with `arguments.role`. Direct API callers select a role
+with `X-ERPBridge-Role`. The caller must have a verified identity and the
+selected role must be present in both the identity and `allowedRoles`. The
+server removes the MCP selector before executing the ERP request. A guarded
+tool cannot define or require its own `role` argument.
+
+When `allowedRoles` is absent, the tool is open and `role` remains an ordinary
+business argument. In HTTP open-auth mode, a guarded tool still denies calls
+because no caller identity is available. This also applies to guarded tools
+over stdio.
 
 ---
 
@@ -93,6 +106,7 @@ spec:
   security:
     authType: api-key
     credentialRef: ERP_FINANCE_KEY # Resolves to ENV["ERP_FINANCE_KEY"]
+    allowedRoles: [finance_reader, finance_writer]
   cache:
     enabled: false # Don't cache write operations
     flushOn: ["list_purchase_invoices"] # Flush list cache when a new one is created

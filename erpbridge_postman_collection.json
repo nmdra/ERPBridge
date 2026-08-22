@@ -2,10 +2,99 @@
 	"info": {
 		"_postman_id": "erpbridge-mcp-collection",
 		"name": "ERPBridge MCP",
-		"description": "Collection for testing ERPBridge using Model Context Protocol (Streamable HTTP)",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-	},
-	"item": [
+			"description": "Collection for testing ERPBridge using Model Context Protocol (Streamable HTTP)",
+			"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+		},
+		"auth": {
+			"type": "bearer",
+			"bearer": [
+				{
+					"key": "token",
+					"value": "{{api_token}}",
+					"type": "string"
+				}
+			]
+		},
+		"item": [
+		{
+			"name": "Authentication (Admin)",
+			"description": "Set api_token to the admin credential before using these requests. API tokens are returned only once by Create API Token.",
+			"item": [
+				{
+					"name": "Create API Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"postman-client\",\n    \"scopes\": [\"mcp\"],\n    \"roles\": [\"finance_reader\"],\n    \"expiresAt\": \"2030-01-01T00:00:00Z\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/tokens",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"tokens"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List API Tokens",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/auth/tokens",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"tokens"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Revoke API Token",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/auth/tokens/{{token_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"tokens",
+								"{{token_id}}"
+							]
+						},
+						"description": "Set token_id to the metadata ID, not the raw token value."
+					},
+					"response": []
+				}
+			]
+		},
 		{
 			"name": "MCP Transport (Streamable)",
 			"item": [
@@ -151,7 +240,14 @@
 					"name": "Direct Tool Invoke",
 					"request": {
 						"method": "POST",
-						"header": [],
+						"header": [
+							{
+								"key": "X-ERPBridge-Role",
+								"value": "{{role}}",
+								"disabled": true,
+								"description": "Enable for a guarded tool. The role must be allowed by the bearer identity and the tool."
+							}
+						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"name\": \"list_purchase_invoices\",\n    \"arguments\": {}\n}",
@@ -205,6 +301,19 @@
 		{
 			"key": "session_id",
 			"value": ""
+		},
+		{
+			"key": "api_token",
+			"value": "",
+			"description": "Admin credential or an API token. Use an admin credential for management requests; scoped tokens require mcp, metrics, or logs."
+		},
+		{
+			"key": "token_id",
+			"value": ""
+		},
+		{
+			"key": "role",
+			"value": "finance_reader"
 		}
 	]
 }

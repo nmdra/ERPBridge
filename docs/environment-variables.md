@@ -22,6 +22,9 @@ The server reads these variables directly from the environment. It does not load
 | `APP_ENV` | (unset) | `production` uses JSON log output. Any other value uses text output. |
 | `LOG_TO_STDERR` | (unset) | `true` writes logs to stderr. The server sets this automatically in stdio mode. |
 | `ERP_PRIMARY_KEY` | (unset) | Credential referenced by `credentialRef` in tool schemas. Resolved at tool-call time. |
+| `API_AUTH_TOKEN` | (unset) | Enables HTTP bearer authentication when non-empty. This is the admin credential and is never returned by the server. |
+| `API_AUTH_ADMIN_ROLES` | (unset) | Comma-separated roles assigned to the admin identity. Roles must match `[a-z][a-z0-9_-]{0,63}` and the list may contain at most 32 unique roles. |
+| `CORS_ALLOWED_ORIGINS` | wildcard in open mode; disabled in auth mode when unset | Comma-separated browser origins allowed for the MCP endpoint. CORS does not apply to management or metrics routes. |
 
 ## CLI Variables (`bridgectl`)
 
@@ -39,6 +42,21 @@ The CLI reads these variables to override the active context.
 | `BRIDGE_TOKEN` | Parsed into the context. Not used by any command. |
 | `BRIDGE_USERNAME` | Parsed into the context. Not used by any command. |
 | `BRIDGE_PASSWORD` | Parsed into the context. Not used by any command. |
+| `BRIDGE_API_TOKEN` | Overrides the active context `api-token` for bridge HTTP requests. |
+
+The persistent `bridgectl --token` flag has higher precedence than
+`BRIDGE_API_TOKEN`, which has higher precedence than the active context's
+`api-token` value. The CLI sends this value as a bearer token to the ERPBridge
+server; it does not change upstream ERP authentication settings.
+
+An active context can store the token in `~/.bridgectl/config.yaml`:
+
+```yaml
+contexts:
+  local:
+    server: http://localhost:8080
+    api-token: erpbt_...
+```
 
 The CLI reads its defaults from `~/.bridgectl/config.yaml`. The default context uses:
 

@@ -26,6 +26,11 @@ The CORS policy applies to the MCP endpoint only. The management, direct
 invoke, cache, logs, metrics, and health endpoints are not part of the
 cross-origin browser contract.
 
+When `API_AUTH_TOKEN` is configured, use `Authorization: Bearer <token>` for
+the MCP request. API tokens require the `mcp` scope. The admin credential has
+implicit access. A preflight is handled before bearer authentication so a
+browser can complete its CORS negotiation without exposing credentials.
+
 ### Postman Configuration
 
 - **Transport Type:** Streamable HTTP
@@ -57,6 +62,10 @@ The server exposes direct HTTP endpoints for internal management, performance mo
 | `/api/auth/tokens` | `POST/GET` | Create and list API tokens. Requires the admin credential when authentication is enabled. |
 | `/api/auth/tokens/{id}` | `DELETE` | Revoke an API token. Requires the admin credential when authentication is enabled. |
 
+The registry, direct invoke, cache, and token endpoints are admin-only. Log
+endpoints accept an API token with the `logs` scope, and `/metrics` accepts a
+token with the `metrics` scope. `/mcp/health` is always open.
+
 For the full endpoint reference, see the [REST API Reference](./api.md).
 
 ## 4. Protection & Limits
@@ -65,6 +74,9 @@ ERPBridge includes built-in protection for underlying ERP systems.
 
 - **Rate Limiting:** Request throttling is enforced per-session (token bucket).
 - **Default Limits:** 5 requests per second with a burst of 10 (configurable via environment variables).
+
+Authenticated HTTP requests use the token principal for rate limiting. Open
+HTTP requests and stdio use their existing session or process fallback.
 
 ## 5. Monitoring & Health
 
