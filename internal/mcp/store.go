@@ -52,6 +52,17 @@ func (s *Store) init() error {
 		PRIMARY KEY (name, version)
 	);
 	CREATE INDEX IF NOT EXISTS idx_tools_module ON tools(module);
+	CREATE TABLE IF NOT EXISTS api_tokens (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		token_hash TEXT NOT NULL UNIQUE,
+		scopes TEXT NOT NULL DEFAULT '[]',
+		roles TEXT NOT NULL DEFAULT '[]',
+		expires_at TEXT,
+		revoked_at TEXT,
+		created_at TEXT NOT NULL DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'NOW'))
+	);
+	CREATE INDEX IF NOT EXISTS idx_api_tokens_name ON api_tokens(name);
 	`
 	_, err := s.db.Exec(query)
 	if err != nil {
