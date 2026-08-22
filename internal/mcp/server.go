@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -489,6 +490,7 @@ func (s *Server) RegisterTool(t *Tool) {
 
 	// Apply tool-specific middlewares
 	handler = s.CacheMiddleware(t)(handler)
+	handler = s.RoleAuthzMiddleware(t)(handler)
 
 	// Apply global middlewares
 	for _, v := range slices.Backward(s.toolMiddlewares) {
@@ -826,10 +828,20 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	args := req.Arguments
+	if args == nil {
+		args = map[string]any{}
+	}
+	directContext, authorizedArgs, authzErr := s.authorizeDirectInvoke(r.Context(), t, args, r.Header.Get("X-ERPBridge-Role"))
+	if authzErr != nil {
+		writeRoleAuthorizationError(w, authzErr)
+		return
+	}
+
 	// Create a bridge to the MCP middleware chain
 	mcpReq := mcp.CallToolRequest{}
 	mcpReq.Params.Name = req.Name
-	mcpReq.Params.Arguments = req.Arguments
+	mcpReq.Params.Arguments = authorizedArgs
 
 	// Base handler for direct invoke
 	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -847,6 +859,7 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 
 	// Apply tool-specific middlewares
 	handler = s.CacheMiddleware(t)(handler)
+	handler = s.RoleAuthzMiddleware(t)(handler)
 
 	// Apply global middlewares
 	for _, v := range slices.Backward(s.toolMiddlewares) {
@@ -854,7 +867,7 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute through the middleware chain
-	mcpResult, err := handler(r.Context(), mcpReq)
+	mcpResult, err := handler(directContext, mcpReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -878,6 +891,15 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = json.NewEncoder(w).Encode(ToolResult{Result: result})
+}
+
+func writeRoleAuthorizationError(w http.ResponseWriter, err error) {
+	status := http.StatusForbidden
+	var roleErr *RoleAuthorizationError
+	if errors.As(err, &roleErr) && roleErr.Status != 0 {
+		status = roleErr.Status
+	}
+	http.Error(w, err.Error(), status)
 }
 
 func (s *Server) handleCacheFlush(w http.ResponseWriter, r *http.Request) {
