@@ -83,3 +83,13 @@ var (
 		Help: "Number of active MCP sessions",
 	})
 )
+
+// InitializeToolMetrics creates zero-valued MCP metric series for a registered tool.
+//
+// Prometheus vectors do not export a labeled series until the label values have
+// been accessed. Initializing the known series at registration makes cold-start
+// scrapes useful without changing the values recorded by middleware.
+func InitializeToolMetrics(toolName string) {
+	ToolInvocationsTotal.WithLabelValues(toolName, "SUCCESS")
+	ToolLatency.WithLabelValues(toolName)
+}

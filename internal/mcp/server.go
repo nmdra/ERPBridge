@@ -21,6 +21,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/logger"
+	"github.com/nmdra/ERPBridge/internal/metrics"
 )
 
 // Server is the primary MCP server implementation for ERPBridge.
@@ -151,6 +152,7 @@ func (s *Server) RegisterBuiltinTools() {
 	}
 
 	s.mcpServer.AddTool(progressTool, progressHandler)
+	metrics.InitializeToolMetrics(progressTool.Name)
 
 	// system.sensitive_log_test
 	type SensitiveLogTestInput struct {
@@ -183,6 +185,7 @@ func (s *Server) RegisterBuiltinTools() {
 	}
 
 	s.mcpServer.AddTool(sensitiveLogTool, sensitiveLogHandler)
+	metrics.InitializeToolMetrics(sensitiveLogTool.Name)
 }
 
 // ResourceCompletionProvider implements the mcp-go completion provider for resources.
@@ -498,6 +501,7 @@ func (s *Server) RegisterTool(t *Tool) {
 	}
 
 	s.mcpServer.AddTool(mcpTool, handler)
+	metrics.InitializeToolMetrics(t.Metadata.Name)
 	s.log.Info("registered MCP tool", slog.String("tool_name", t.Metadata.Name), slog.String("version", t.Metadata.Version))
 
 	// Notify clients that tools have changed

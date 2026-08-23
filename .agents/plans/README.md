@@ -20,6 +20,8 @@ risks. Create a new finalized execution plan after that review.
 
 ## Completed
 
+- [`[COMPLETED]Plan-Issue-8.md`](./completed/[COMPLETED]Plan-Issue-8.md) — fix
+  cold-start MCP invocation metric families.
 - [`[COMPLETED]AuthN-AuthZ-Plan.md`](./completed/[COMPLETED]AuthN-AuthZ-Plan.md)
   — API-token authentication and per-tool authorization.
 - [`[COMPLETED]Plan-main.md`](./completed/[COMPLETED]Plan-main.md) — cache,

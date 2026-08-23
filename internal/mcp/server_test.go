@@ -16,6 +16,7 @@ import (
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/connector"
 	"github.com/nmdra/ERPBridge/internal/logger"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -189,6 +190,66 @@ func TestServer_RegisterToolMarshaling(t *testing.T) {
 	data, err := json.Marshal(mcpTool)
 	assert.NoError(t, err, "Tool marshaling should not fail")
 	assert.Contains(t, string(data), "\"inputSchema\":{\"type\":\"object\"")
+}
+
+func TestServer_RegisterToolInitializesMetrics(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	toolName := "issue-8-cold-start-tool"
+
+	s.RegisterTool(&Tool{
+		Metadata: Metadata{
+			Name:    toolName,
+			Version: testVersion100,
+		},
+		Spec: ToolSpec{
+			Description: Description{Short: testDescShort},
+			InputSchema: InputSchema{Type: schemaTypeObject},
+		},
+	})
+
+	assertToolMetricSeriesInitialized(t, toolName, true)
+}
+
+func TestServer_NewServerInitializesBuiltinMetrics(t *testing.T) {
+	log := logger.Init()
+	NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+
+	assertToolMetricSeriesInitialized(t, "system.progress_test", false)
+	assertToolMetricSeriesInitialized(t, "system.sensitive_log_test", false)
+}
+
+func assertToolMetricSeriesInitialized(t *testing.T, toolName string, assertZero bool) {
+	t.Helper()
+	families, err := prometheus.DefaultGatherer.Gather()
+	assert.NoError(t, err)
+
+	invocationInitialized := false
+	durationInitialized := false
+	for _, family := range families {
+		for _, metric := range family.GetMetric() {
+			labels := make(map[string]string, len(metric.GetLabel()))
+			for _, label := range metric.GetLabel() {
+				labels[label.GetName()] = label.GetValue()
+			}
+
+			if family.GetName() == "mcp_tool_invocations_total" && labels["tool"] == toolName && labels["cache_status"] == "SUCCESS" {
+				if assertZero {
+					assert.Equal(t, float64(0), metric.GetCounter().GetValue())
+				}
+				invocationInitialized = true
+			}
+			if family.GetName() == "mcp_tool_duration_seconds" && labels["tool"] == toolName {
+				if assertZero {
+					assert.Equal(t, uint64(0), metric.GetHistogram().GetSampleCount())
+				}
+				durationInitialized = true
+			}
+		}
+	}
+
+	assert.True(t, invocationInitialized, "tool invocation metric should be exported before the first call")
+	assert.True(t, durationInitialized, "tool duration metric should be exported before the first call")
 }
 
 func TestServer_ServeHTTP(t *testing.T) {

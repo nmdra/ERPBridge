@@ -152,6 +152,11 @@ SHA-256 hash.
 | :--- | :--- | :--- |
 | `/metrics` | `GET` | Prometheus-formatted metrics. |
 
+MCP tool invocation and duration series are initialized when each tool is
+registered, so their metric families and zero-valued samples are available on
+cold-start scrapes before the first tool call. Error-status invocation series
+are added when an error is observed.
+
 ## Error Responses
 
 The server uses standard HTTP status codes. A configured Redis backend remains the selected backend when Redis is unreachable; the server does not silently fall back to memory in that case.

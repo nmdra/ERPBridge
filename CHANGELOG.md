@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Initialize MCP tool invocation and duration metric series at registration so
+  cold-start `/metrics` scrapes expose zero-valued samples.
+
 ## [v0.3.0-alpha.1] - 2026-08-22
 
 ### Added
