@@ -1,0 +1,5 @@
+# Local-only Lefthook override: keep pre-push tests, skip the mirror sync.
+pre-push:
+  commands:
+    sync-mirror:
+      skip: true

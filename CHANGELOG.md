@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.0-alpha.2] - 2026-08-23
+
 ### Fixed
 - Initialize MCP tool invocation and duration metric series at registration so
   cold-start `/metrics` scrapes expose zero-valued samples.
@@ -201,5 +203,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - chore: prepare for versioning and release
 - chore: rename middleware to erpbridge-server
 
-[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.1...HEAD
+[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.2...HEAD
+[v0.3.0-alpha.2]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.1...v0.3.0-alpha.2
 [v0.3.0-alpha.1]: https://github.com/nmdra/ERPBridge/compare/v0.2.0-alpha.5...v0.3.0-alpha.1
