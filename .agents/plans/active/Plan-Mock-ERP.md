@@ -8,7 +8,7 @@ Products (Pvt) Ltd (SCP)**: a fictional Sri Lankan FMCG manufacturer, importer,
 and wholesale distributor. The service moves to the new public repository
 `nmdra/mockerp`, preserving the Mock ERP subtree's Git history. ERPBridge
 consumes the published, version-pinned image
-`ghcr.io/nmdra/mockerp:0.1.1` and fetches its matching versioned OpenAPI contract;
+`ghcr.io/nmdra/mockerp:0.2.1` and fetches its matching versioned OpenAPI contract;
 it no longer builds or vendors the Mock ERP source tree.
 
 The completed system will model SCP's Peliyagoda head office and warehouse,
@@ -145,8 +145,8 @@ industrial cleaning products.
    ERPNext DocType. A future ERPNext adapter maps this documented subset; it is
    not part of this plan.
 10. **Pin the downstream runtime contract.** ERPBridge uses
-    `ghcr.io/nmdra/mockerp:0.1.1` and the matching
-    `https://raw.githubusercontent.com/nmdra/mockerp/v0.1.1/openapi.yaml` rather
+    `ghcr.io/nmdra/mockerp:0.2.1` and the matching
+    `https://raw.githubusercontent.com/nmdra/mockerp/v0.2.1/openapi.yaml` rather
     than `latest` or a mutable branch. Upgrades change both values in one
     reviewed task, run the compatibility suite, and publish a new image tag.
 
@@ -428,7 +428,7 @@ numbered descriptions mean the corresponding path under the standalone
   uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 6: Implement the finance foundation and immutable double-entry ledger.**
+- [x] **Task 6: Implement the finance foundation and immutable double-entry ledger.**
   Start with red tests for chart hierarchy, Decimal/minor-unit conversion,
   balanced Journal Entry submission, prohibited unbalanced postings,
   cancellation reversals, AR/AP outstanding balances, and partial payment
@@ -442,22 +442,23 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** submitted finance document → accounting posting service → balanced
   GL/payment-ledger rows in one SQLite transaction.
 
-  **Files:** `mock-erp/migrations/003_finance.py` (new),
-  `mock-erp/repositories/finance.py` (new),
-  `mock-erp/services/accounting.py` (new), `mock-erp/routers/finance.py`,
-  `mock-erp/openapi.yaml`, `mock-erp/seed.py`,
-  `mock-erp/tests/test_accounting.py` (new),
-  `mock-erp/tests/test_finance_routes.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/003_finance.py` (new),
+  `../mockerp/repositories/finance.py` (new),
+  `../mockerp/services/accounting.py` (new), `../mockerp/routers/finance.py`,
+  `../mockerp/openapi.yaml`, `../mockerp/seed.py`,
+  `../mockerp/tests/test_accounting.py` (new),
+  `../mockerp/tests/test_finance_routes.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_accounting.py tests/test_finance_routes.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_accounting.py tests/test_finance_routes.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 7: Implement HR core and leave workflow.**
+- [x] **Task 7: Implement HR core and leave workflow.**
   Add employee, branch/department transfer, resignation, safe document
   metadata, attendance, leave type, leave allocation, and leave-application
   tables and services. Use the four Frappe HR attendance states, prevent future
@@ -470,20 +471,21 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** employee/manager request → HR service → approval workflow and
   leave/attendance repository.
 
-  **Files:** `mock-erp/migrations/004_hr.py` (new),
-  `mock-erp/repositories/hr.py` (new), `mock-erp/services/hr.py` (new),
-  `mock-erp/routers/hr.py`, `mock-erp/openapi.yaml`, `mock-erp/seed.py`,
-  `mock-erp/tests/test_hr.py` (new), `mock-erp/tests/test_hr_routes.py` (new),
-  `mock-erp/README.md`, `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/004_hr.py` (new),
+  `../mockerp/repositories/hr.py` (new), `../mockerp/services/hr.py` (new),
+  `../mockerp/routers/hr.py`, `../mockerp/openapi.yaml`, `../mockerp/seed.py`,
+  `../mockerp/tests/test_hr.py` (new), `../mockerp/tests/test_hr_routes.py` (new),
+  `../mockerp/README.md`, `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_hr.py tests/test_hr_routes.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_hr.py tests/test_hr_routes.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 8: Add payroll, employee advances, and expense claims.**
+- [x] **Task 8: Add payroll, employee advances, and expense claims.**
   Add salary components, salary structures/assignments, salary slips/lines,
   employee advances, expense claims/lines, and reimbursement/payment
   references. Calculate a monthly slip from approved structure components and
@@ -495,22 +497,23 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** approved payroll/expense document → HR calculation service →
   accounting posting service → GL and employee balance.
 
-  **Files:** `mock-erp/migrations/005_payroll.py` (new),
-  `mock-erp/repositories/payroll.py` (new), `mock-erp/services/payroll.py` (new),
-  `mock-erp/services/expenses.py` (new), `mock-erp/routers/hr.py`,
-  `mock-erp/routers/finance.py`, `mock-erp/openapi.yaml`, `mock-erp/seed.py`,
-  `mock-erp/tests/test_payroll.py` (new),
-  `mock-erp/tests/test_expenses.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/005_payroll.py` (new),
+  `../mockerp/repositories/payroll.py` (new), `../mockerp/services/payroll.py` (new),
+  `../mockerp/services/expenses.py` (new), `../mockerp/routers/hr.py`,
+  `../mockerp/routers/finance.py`, `../mockerp/openapi.yaml`, `../mockerp/seed.py`,
+  `../mockerp/tests/test_payroll.py` (new),
+  `../mockerp/tests/test_expenses.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_payroll.py tests/test_expenses.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_payroll.py tests/test_expenses.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 9: Add party, product, warehouse, and batch masters.**
+- [x] **Task 9: Add party, product, warehouse, and batch masters.**
   Add Customers/Suppliers with contacts and addresses; item groups; UOMs;
   Items; and the SCP warehouse tree: Katunayake Raw Material, WIP, Finished
   Goods, Scrap; Peliyagoda Main; Kandy DC; and Galle DC. Model purchase/sales/
@@ -524,22 +527,21 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** validated master command → master repository → supported DocType
   resource response.
 
-  **Files:** `mock-erp/migrations/006_masters.py` (new),
-  `mock-erp/repositories/masters.py` (new), `mock-erp/services/masters.py` (new),
-  `mock-erp/routers/masters.py` (new), `mock-erp/routers/inventory.py`,
-  `mock-erp/openapi.yaml`, `mock-erp/seed.py`,
-  `mock-erp/tests/test_masters.py` (new),
-  `mock-erp/tests/test_master_routes.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/006_masters.py` (new),
+  `../mockerp/repositories/masters.py` (new), `../mockerp/routers/inventory.py`,
+  `../mockerp/openapi.yaml`, `../mockerp/seed.py`,
+  `../mockerp/tests/test_masters.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_masters.py tests/test_master_routes.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_masters.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 10: Implement stock transactions, stock ledger, and Bin balances.**
+- [x] **Task 10: Implement stock transactions, stock ledger, and Bin balances.**
   Create Stock Entry/Stock Entry Item and append-only Stock Ledger tables and
   services. Support Material Receipt, Material Issue, Material Transfer,
   Manufacturing Consumption, Manufacturing Receipt, and Stock Adjustment;
@@ -552,22 +554,23 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** submitted Stock Entry → stock service → stock ledger/Bin projection
   and optional GL posting atomically.
 
-  **Files:** `mock-erp/migrations/007_inventory.py` (new),
-  `mock-erp/repositories/inventory.py` (new),
-  `mock-erp/services/inventory.py` (new), `mock-erp/routers/inventory.py`,
-  `mock-erp/openapi.yaml`, `mock-erp/seed.py`,
-  `mock-erp/tests/test_inventory.py` (new),
-  `mock-erp/tests/test_inventory_routes.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/007_inventory.py` (new),
+  `../mockerp/repositories/inventory.py` (new),
+  `../mockerp/services/inventory.py` (new), `../mockerp/routers/inventory.py`,
+  `../mockerp/openapi.yaml`, `../mockerp/seed.py`,
+  `../mockerp/tests/test_inventory.py` (new),
+  `../mockerp/tests/test_inventory_routes.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_inventory.py tests/test_inventory_routes.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_inventory.py tests/test_inventory_routes.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 11: Implement procure-to-pay.**
+- [x] **Task 11: Implement procure-to-pay.**
   Add Material Request, Purchase Order, Purchase Receipt, and Purchase Invoice
   headers/items and their source links. Enforce the SCP flow Material Request →
   approved Purchase Order → Purchase Receipt → Purchase Invoice → Payment
@@ -579,22 +582,23 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** submitted source document → procurement service → next-document
   mapper plus stock/accounting posting services.
 
-  **Files:** `mock-erp/migrations/008_purchasing.py` (new),
-  `mock-erp/repositories/purchasing.py` (new),
-  `mock-erp/services/purchasing.py` (new), `mock-erp/routers/purchasing.py` (new),
-  `mock-erp/routers/finance.py`, `mock-erp/openapi.yaml`, `mock-erp/seed.py`,
-  `mock-erp/tests/test_purchasing.py` (new),
-  `mock-erp/tests/test_purchasing_routes.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/008_purchasing.py` (new),
+  `../mockerp/repositories/purchasing.py` (new),
+  `../mockerp/services/purchasing.py` (new), `../mockerp/routers/purchasing.py` (new),
+  `../mockerp/routers/finance.py`, `../mockerp/openapi.yaml`, `../mockerp/seed.py`,
+  `../mockerp/tests/test_purchasing.py` (new),
+  `../mockerp/tests/test_purchasing_routes.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_purchasing.py tests/test_purchasing_routes.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_purchasing.py tests/test_purchasing_routes.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 12: Implement order-to-cash.**
+- [x] **Task 12: Implement order-to-cash.**
   Add optional Quotation, Sales Order, Delivery Note, Sales Invoice, and linked
   Payment Entry flows. Support partial delivery, partial billing, and partial
   payment; reserve/validate warehouse stock at the agreed point; make Delivery
@@ -606,22 +610,23 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** submitted sales document → sales service → source progress,
   stock/COGS, AR/income, and payment-allocation services.
 
-  **Files:** `mock-erp/migrations/009_sales.py` (new),
-  `mock-erp/repositories/sales.py` (new), `mock-erp/services/sales.py` (new),
-  `mock-erp/routers/sales.py` (new), `mock-erp/routers/finance.py`,
-  `mock-erp/openapi.yaml`, `mock-erp/seed.py`,
-  `mock-erp/tests/test_sales.py` (new),
-  `mock-erp/tests/test_sales_routes.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/009_sales.py` (new),
+  `../mockerp/repositories/sales.py` (new), `../mockerp/services/sales.py` (new),
+  `../mockerp/routers/sales.py` (new), `../mockerp/routers/finance.py`,
+  `../mockerp/openapi.yaml`, `../mockerp/seed.py`,
+  `../mockerp/tests/test_sales.py` (new),
+  `../mockerp/tests/test_sales_routes.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_sales.py tests/test_sales_routes.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_sales.py tests/test_sales_routes.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 13: Implement manufacturing-lite.**
+- [x] **Task 13: Implement manufacturing-lite.**
   Add active single-level BOM/BOM Item and Production Order tables/services.
   Seed the Floor Cleaner 5L BOM. Allow a submitted production order to transfer
   raw materials to WIP, consume the actual or BOM quantities, receive finished
@@ -633,22 +638,22 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** production order action → manufacturing service → Stock Entry and
   accounting services with production-order source references.
 
-  **Files:** `mock-erp/migrations/010_manufacturing.py` (new),
-  `mock-erp/repositories/manufacturing.py` (new),
-  `mock-erp/services/manufacturing.py` (new),
-  `mock-erp/routers/manufacturing.py` (new), `mock-erp/openapi.yaml`,
-  `mock-erp/seed.py`, `mock-erp/tests/test_manufacturing.py` (new),
-  `mock-erp/tests/test_manufacturing_routes.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/010_manufacturing.py` (new),
+  `../mockerp/services/manufacturing.py` (new),
+  `../mockerp/routers/manufacturing.py` (new), `../mockerp/openapi.yaml`,
+  `../mockerp/seed.py`, `../mockerp/tests/test_manufacturing.py` (new),
+  `../mockerp/tests/test_manufacturing_routes.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_manufacturing.py tests/test_manufacturing_routes.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_manufacturing.py tests/test_manufacturing_routes.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 14: Add fixed assets and depreciation.**
+- [x] **Task 14: Add fixed assets and depreciation.**
   Add Asset Category, Asset, assignment/location, depreciation schedule,
   transfer, and disposal records. Seed a safe sample set of delivery trucks,
   forklifts, mixing/filling machines, computers, furniture, air conditioners,
@@ -660,21 +665,22 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** approved asset event → asset service → depreciation schedule and
   accounting posting transaction.
 
-  **Files:** `mock-erp/migrations/011_assets.py` (new),
-  `mock-erp/repositories/assets.py` (new), `mock-erp/services/assets.py` (new),
-  `mock-erp/routers/assets.py` (new), `mock-erp/openapi.yaml`,
-  `mock-erp/seed.py`, `mock-erp/tests/test_assets.py` (new),
-  `mock-erp/tests/test_asset_routes.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/011_assets.py` (new),
+  `../mockerp/services/assets.py` (new), `../mockerp/routers/assets.py` (new),
+  `../mockerp/openapi.yaml`, `../mockerp/seed.py`,
+  `../mockerp/tests/test_assets.py` (new),
+  `../mockerp/tests/test_asset_routes.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_assets.py tests/test_asset_routes.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_assets.py tests/test_asset_routes.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 15: Deliver constrained dashboards, audit readback, and the full deterministic scenario.**
+- [x] **Task 15: Deliver constrained dashboards, audit readback, and the full deterministic scenario.**
   Add fixed, role-gated report endpoints for employee attendance/leave,
   AR/AP ageing and GL trial balance, stock by Item/Warehouse, sales order
   fulfilment, purchasing status, production consumption, and asset/depreciation
@@ -687,21 +693,22 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** reporting query service → SQLite ledger/master projections →
   role-gated JSON report response.
 
-  **Files:** `mock-erp/services/reports.py` (new),
-  `mock-erp/routers/reports.py` (new), `mock-erp/routers/organization.py`,
-  `mock-erp/openapi.yaml`, `mock-erp/seed.py`,
-  `mock-erp/tests/test_reports.py` (new),
-  `mock-erp/tests/test_end_to_end_scenario.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/services/reports.py` (new),
+  `../mockerp/routers/reports.py` (new), `../mockerp/routers/organization.py`,
+  `../mockerp/openapi.yaml`, `../mockerp/seed.py`,
+  `../mockerp/tests/test_reports.py` (new),
+  `../mockerp/tests/test_end_to_end_scenario.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_reports.py tests/test_end_to_end_scenario.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_reports.py tests/test_end_to_end_scenario.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
-- [ ] **Task 16: Publish the supported contract and complete integration quality gates.**
+- [x] **Task 16: Publish the supported contract and complete integration quality gates.**
   Document the SCP scenario, data-reset workflow, required environment-only
   credentials, security/redaction guarantees, supported document lifecycle,
   known non-goals, and exact ERPNext DocType/field/workflow mappings. Expand
@@ -718,25 +725,31 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** documented OpenAPI → generated ERPBridge tool → authenticated Mock
   ERP → deterministic SQLite-backed response.
 
-  **Files:** `mock-erp/openapi.yaml`, `mock-erp/README.md`,
+  **Files:** `../mockerp/openapi.yaml`, `../mockerp/README.md`,
   `docs/mock-erp.md` (new), `docs/docker.md`, `docs/onboarding.md`,
   `docs/faq.md`, `docs/README.md`, `CHANGELOG.md`,
-  `mock-erp/tests/test_openapi_contract.py` (new),
-  `mock-erp/tests/test_erpbridge_contract.py` (new),
+  `../mockerp/tests/test_openapi_contract.py` (new),
   `../erpbridge-docs/.agents/plans/Plan-mock-erp.md` (new),
-  `../erpbridge-docs/docs/erpbridge/` (matching Mock ERP/API/Docker pages),
+  `../erpbridge-docs/docs/erpbridge/mock-erp.mdx` (new),
+  `../erpbridge-docs/docs/erpbridge/api.mdx`,
+  `../erpbridge-docs/docs/erpbridge/docker.mdx`,
+  `../erpbridge-docs/docs/erpbridge/environment-variables.mdx`,
+  `../erpbridge-docs/docs/erpbridge/onboarding.mdx`,
+  `../erpbridge-docs/docs/erpbridge/faq.mdx`,
   `../erpbridge-docs/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest -q
-  uv run python -c 'import yaml; yaml.safe_load(open("openapi.yaml", encoding="utf-8")); print("valid OpenAPI YAML")'
-  cd ..
+  cd ../mockerp
+  uv run --locked --group test pytest -q
+  uv run --locked --group test python -c 'import yaml; yaml.safe_load(open("openapi.yaml", encoding="utf-8")); print("valid OpenAPI YAML")'
+  cd ../ERPBridge
   make test
+  docker compose config --quiet
   git diff --check
-  git status --short
+  cd ../erpbridge-docs
+  npm run build
   ```
 
 ## Verification

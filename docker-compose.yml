@@ -1,6 +1,6 @@
 services:
   mock-erp:
-    image: ${MOCK_ERP_IMAGE:-ghcr.io/nmdra/mockerp:0.1.1}
+    image: ${MOCK_ERP_IMAGE:-ghcr.io/nmdra/mockerp:0.2.1}
     ports:
       - "8081:8081"
     environment:

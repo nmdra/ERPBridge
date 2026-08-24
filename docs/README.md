@@ -8,6 +8,7 @@ Welcome to the ERPBridge documentation. This wiki-style guide helps you understa
 - **[Onboarding New APIs](./onboarding.md)**: Standard workflow for registering APIs and generating MCP tools.
 - **[Tool Schema Reference (V2)](./tool-schema.md)**: Detailed guide to creating versioned, intent-based MCP tool definitions.
 - **[Docker Deployment Guide](./docker.md)**: Detailed instructions for running the full stack using Docker Compose.
+- **[MockERP Integration Contract](./mock-erp.md)**: Pinned image, SQLite seed, credentials, reset, and supported DocTypes.
 - **[Connectivity & Transport Guide](./connectivity.md)**: Understanding Streamable HTTP, Stdio, and Direct API transports.
 - **[Agentic Tools MCP Integration](./agent-integrations.md)**: Connect Codex CLI, OpenCode, OpenClaw, and Hermes Agent with secure stdio or HTTP configuration.
 - **[AI Agent Integration](../AGENTS.md)**: Specific patterns for connecting Claude, Cursor, and other agents.

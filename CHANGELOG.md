@@ -15,8 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Pin the standalone MockERP image and versioned OpenAPI contract to `0.1.1`,
-  which includes the authenticated integration fixtures.
+- Pin the standalone MockERP image and versioned OpenAPI contract to `0.2.1`,
+  which includes the SQLite-backed SCP scenario and integration fixtures.
+- Document the MockERP integration contract, credentials boundary, reset flow,
+  and supported fixture groups.
 - Pass MockERP credential-source settings through Compose and persist its named
   data volume configuration.
 
