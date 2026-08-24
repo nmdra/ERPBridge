@@ -50,6 +50,10 @@ spec:
 The only supported phase is `after_response`. Bindings run in ascending
 priority order after a successful tool result has passed its output schema.
 The default failure policy is `continue`; `fail` returns a generic tool error.
+Plugin and binding resources are versioned declarative records. A soft delete
+sets `isActive: false` and retains the record. A plugin cannot be hard-deleted
+while an active binding references that exact plugin version. Inactive
+bindings remain retained until they are explicitly hard-deleted.
 
 ## Plugin HTTP contract
 

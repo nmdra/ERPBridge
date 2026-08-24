@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	// Register pure Go SQLite driver
 	_ "modernc.org/sqlite"
@@ -14,7 +15,8 @@ import (
 
 // Store handles the persistence of Tool resources using SQLite.
 type Store struct {
-	db *sql.DB
+	db      *sql.DB
+	writeMu sync.Mutex
 }
 
 // NewStore initializes a new SQLite store at the specified path.
@@ -28,6 +30,11 @@ func NewStore(dbPath string) (*Store, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
+	}
+
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
 	s := &Store{db: db}
@@ -52,6 +59,32 @@ func (s *Store) init() error {
 		PRIMARY KEY (name, version)
 	);
 	CREATE INDEX IF NOT EXISTS idx_tools_module ON tools(module);
+	CREATE TABLE IF NOT EXISTS plugins (
+		name TEXT,
+		version TEXT,
+		is_active INTEGER DEFAULT 1,
+		data TEXT,
+		created_at DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
+		updated_at DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
+		PRIMARY KEY (name, version)
+	);
+	CREATE INDEX IF NOT EXISTS idx_plugins_identity ON plugins(name, version);
+	CREATE TABLE IF NOT EXISTS plugin_bindings (
+		name TEXT PRIMARY KEY,
+		plugin_name TEXT NOT NULL,
+		plugin_version TEXT NOT NULL,
+		tool_name TEXT NOT NULL,
+		tool_version TEXT NOT NULL,
+		priority INTEGER DEFAULT 0,
+		is_active INTEGER DEFAULT 1,
+		data TEXT,
+		created_at DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
+		updated_at DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
+	);
+	CREATE INDEX IF NOT EXISTS idx_plugin_bindings_plugin_ref
+		ON plugin_bindings(plugin_name, plugin_version, is_active);
+	CREATE INDEX IF NOT EXISTS idx_plugin_bindings_tool_ref
+		ON plugin_bindings(tool_name, tool_version, is_active, priority);
 	CREATE TABLE IF NOT EXISTS api_tokens (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
@@ -183,10 +216,28 @@ func (s *Store) ListByModule(module string) ([]*Tool, error) {
 	return tools, nil
 }
 
-// GetStateHash returns a string representing the current state of the tools table.
-// This is used to short-circuit reconciliation if no changes have occurred.
+// GetStateHash returns a hash of all persisted declarative resources. It is
+// used to short-circuit reconciliation when no tool, plugin, or binding state
+// has changed.
 func (s *Store) GetStateHash() (string, error) {
-	rows, err := s.db.Query(`SELECT name, version, is_active, updated_at FROM tools ORDER BY name, version`)
+	rows, err := s.db.Query(`
+		SELECT resource_kind, resource_name, resource_version, is_active, updated_at, resource_data
+		FROM (
+			SELECT 'tool' AS resource_kind, name AS resource_name, version AS resource_version,
+				is_active, updated_at, COALESCE(data, '') AS resource_data
+			FROM tools
+			UNION ALL
+			SELECT 'plugin' AS resource_kind, name AS resource_name, version AS resource_version,
+				is_active, updated_at, COALESCE(data, '') AS resource_data
+			FROM plugins
+			UNION ALL
+			SELECT 'binding' AS resource_kind, name AS resource_name,
+				plugin_name || '@' || plugin_version || '|' || tool_name || '@' || tool_version AS resource_version,
+				is_active, updated_at, COALESCE(data, '') AS resource_data
+			FROM plugin_bindings
+		)
+		ORDER BY resource_kind, resource_name, resource_version
+	`)
 	if err != nil {
 		return "", fmt.Errorf("get state hash: %w", err)
 	}
@@ -194,13 +245,13 @@ func (s *Store) GetStateHash() (string, error) {
 
 	hash := sha256.New()
 	for rows.Next() {
-		var name, version string
+		var kind, name, version, data string
 		var updatedAt sql.NullString
 		var isActive int
-		if err := rows.Scan(&name, &version, &isActive, &updatedAt); err != nil {
+		if err := rows.Scan(&kind, &name, &version, &isActive, &updatedAt, &data); err != nil {
 			return "", fmt.Errorf("scan state hash row: %w", err)
 		}
-		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%d\x00%s\x00", name, version, isActive, updatedAt.String)
+		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%s\x00%d\x00%s\x00%s\x00", kind, name, version, isActive, updatedAt.String, data)
 	}
 	if err := rows.Err(); err != nil {
 		return "", fmt.Errorf("iterate state hash rows: %w", err)
