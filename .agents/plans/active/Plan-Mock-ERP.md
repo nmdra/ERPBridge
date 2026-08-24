@@ -367,7 +367,7 @@ numbered descriptions mean the corresponding path under the standalone
     .agents/plans/upcoming/Plan-Generic-External-Plugins.md
   ```
 
-- [ ] **Task 4: Introduce the SQLite application platform and deterministic SCP bootstrap.**
+- [x] **Task 4: Introduce the SQLite application platform and deterministic SCP bootstrap.**
   Write migration and lifecycle tests first. Add settings for an injected
   database path and credential source; enable foreign keys and transactional
   migrations; create a monotonic document-name sequence; make startup safe to
@@ -380,20 +380,21 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** app lifespan → SQLite connection/migration manager → deterministic
   seed service; configuration → credential resolver.
 
-  **Files:** `mock-erp/settings.py` (new), `mock-erp/database.py` (new),
-  `mock-erp/migrations/001_platform.py` (new), `mock-erp/seed.py` (new),
-  `mock-erp/dependencies.py`, `mock-erp/main.py`, `mock-erp/.gitignore`,
-  `mock-erp/Dockerfile`, `docker-compose.yml`,
-  `mock-erp/tests/test_database.py` (new),
-  `mock-erp/tests/test_authentication.py` (new), `mock-erp/README.md`,
-  `docs/docker.md`, `CHANGELOG.md`.
+  **Files:** `../mockerp/settings.py` (new), `../mockerp/database.py` (new),
+  `../mockerp/migrations/001_platform.py` (new), `../mockerp/seed.py` (new),
+  `../mockerp/dependencies.py`, `../mockerp/main.py`, `../mockerp/.gitignore`,
+  `../mockerp/Dockerfile`, `docker-compose.yml`,
+  `../mockerp/tests/test_database.py` (new),
+  `../mockerp/tests/test_authentication.py` (new), `../mockerp/README.md`,
+  `docs/docker.md`, `docs/environment-variables.md`, `CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_database.py tests/test_authentication.py -q
-  uv run python -m compileall -q .
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_database.py tests/test_authentication.py -q
+  uv run --locked --group test python -m compileall -q .
+  cd ../ERPBridge
   docker compose config --quiet
   ```
 

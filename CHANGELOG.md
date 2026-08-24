@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Pin the standalone MockERP image and versioned OpenAPI contract to `0.1.1`,
   which includes the authenticated integration fixtures.
+- Pass MockERP credential-source settings through Compose and persist its named
+  data volume configuration.
 
 ### Fixed
 
@@ -164,6 +166,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - fix(logger): use t.Setenv and remove unused os import in tests
 
 ### Changed
+
 - refactor(mcp): remove unused resource and prompt completion handlers
 - style(cli): standardize error messages and improve context usage
 - style(idp): update GenerateFromOpenAPI to accept context

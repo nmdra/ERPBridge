@@ -6,6 +6,8 @@ services:
     environment:
       - LOG_LEVEL=debug
       - MOCK_ERP_DB_PATH=/data/mockerp.db
+      - MOCK_ERP_CREDENTIALS_JSON=${MOCK_ERP_CREDENTIALS_JSON:-}
+      - MOCK_ERP_CREDENTIALS_FILE=${MOCK_ERP_CREDENTIALS_FILE:-}
     volumes:
       - mockerp-data:/data
     healthcheck:

@@ -32,12 +32,20 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | `MOCK_ERP_IMAGE` | MockERP image used by Compose. | `ghcr.io/nmdra/mockerp:0.1.1` |
 | `MOCK_ERP_VERSION` | MockERP release used for OpenAPI generation. | `0.1.1` |
 | `MOCK_ERP_OPENAPI_URL` | Versioned MockERP OpenAPI URL. | `https://raw.githubusercontent.com/nmdra/mockerp/v0.1.1/openapi.yaml` |
+| `MOCK_ERP_DB_PATH` | SQLite database path inside MockERP. | `/data/mockerp.db` |
+| `MOCK_ERP_CREDENTIALS_JSON` | JSON credential configuration for local/container use. | (required) |
+| `MOCK_ERP_CREDENTIALS_FILE` | Mounted JSON credential file path. | (required alternative) |
 | `REDIS_URL` | URL for the Redis cache. | `redis://redis:6379` |
 | `DATABASE_PATH` | Path of the SQLite tool registry inside the container. | `/app/data/erpbridge.db` |
 | `RATE_LIMIT_RPS` | Per-session requests per second. | `10` |
 | `RATE_LIMIT_BURST` | Token bucket burst size. | `20` |
 
 For the full list of server environment variables, see the [Environment Variables Reference](./environment-variables.md).
+
+MockERP fails closed when neither `MOCK_ERP_CREDENTIALS_JSON` nor
+`MOCK_ERP_CREDENTIALS_FILE` is configured. Use the JSON environment variable for
+local development, or mount a Docker secret and set the file path. Do not commit
+credential values to this repository.
 
 ## 3. Tool Registry
 

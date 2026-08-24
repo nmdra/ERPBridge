@@ -76,3 +76,8 @@ The CLI reads its defaults from `~/.bridgectl/config.yaml`. The default context 
 | `MOCK_ERP_IMAGE` | MockERP image used by Docker Compose. | `ghcr.io/nmdra/mockerp:0.1.1` |
 | `MOCK_ERP_VERSION` | MockERP release used for OpenAPI generation. | `0.1.1` |
 | `MOCK_ERP_OPENAPI_URL` | Versioned OpenAPI contract URL. | `https://raw.githubusercontent.com/nmdra/mockerp/v0.1.1/openapi.yaml` |
+| `MOCK_ERP_DB_PATH` | SQLite database path inside MockERP. | `/data/mockerp.db` |
+| `MOCK_ERP_CREDENTIALS_JSON` | JSON credential configuration for local/container use. Required when no secret file is set. | (required) |
+| `MOCK_ERP_CREDENTIALS_FILE` | Path to a JSON credential configuration file, such as a mounted Docker secret. | (required alternative) |
+| `MOCK_ERP_ENV` | Runtime environment used to gate destructive development commands. | `development` |
+| `MOCK_ERP_ALLOW_RESET` | Enables the development-only database reset command when set to `true`. | `false` |
