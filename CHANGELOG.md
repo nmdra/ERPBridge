@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add agent-integration guidance for Codex CLI, OpenCode, OpenClaw, and Hermes
+  Agent, including scoped HTTP bearer authentication and stdio credential
+  boundaries.
+
+### Fixed
+
+- Keep ERPBridge stdio stdout reserved for MCP JSON-RPC by routing the startup
+  banner to stderr.
+
 ## [v0.3.0-alpha.2] - 2026-08-23
 
 ### Fixed

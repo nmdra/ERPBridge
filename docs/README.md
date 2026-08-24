@@ -9,6 +9,7 @@ Welcome to the ERPBridge documentation. This wiki-style guide helps you understa
 - **[Tool Schema Reference (V2)](./tool-schema.md)**: Detailed guide to creating versioned, intent-based MCP tool definitions.
 - **[Docker Deployment Guide](./docker.md)**: Detailed instructions for running the full stack using Docker Compose.
 - **[Connectivity & Transport Guide](./connectivity.md)**: Understanding Streamable HTTP, Stdio, and Direct API transports.
+- **[Agentic Tools MCP Integration](./agent-integrations.md)**: Connect Codex CLI, OpenCode, OpenClaw, and Hermes Agent with secure stdio or HTTP configuration.
 - **[AI Agent Integration](../AGENTS.md)**: Specific patterns for connecting Claude, Cursor, and other agents.
 - **[Environment Variables Reference](./environment-variables.md)**: All server and CLI environment variables.
 - **[REST API Reference](./api.md)**: Direct HTTP endpoints of the server.

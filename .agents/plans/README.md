@@ -5,8 +5,10 @@ starting implementation work.
 
 ## Active
 
-There are currently no active implementation plans. The `active/` section is
-reserved for work that has been explicitly approved for execution.
+- [`Plan-Agentic-Tools-MCP-Integration.md`](./active/Plan-Agentic-Tools-MCP-Integration.md)
+  — approved execution plan for backward-compatible Stdio hardening, agent
+  interoperability verification, and Codex/OpenCode/OpenClaw/Hermes
+  documentation.
 
 ## Upcoming
 

@@ -7,7 +7,7 @@ ERPBridge supports multiple transport protocols. It works with modern AI agents,
 This transport is the MCP streamable HTTP specification. It suits stateless or web-friendly environments. It is the recommended way to connect Postman and other modern MCP clients.
 
 - **Base URL:** `http://localhost:8080/mcp/`
-- **Handshake:** `POST /mcp/initialize`
+- **Handshake:** `POST /mcp/` with a JSON-RPC `initialize` request
 - **Transport Specification:** MCP 2025-03-26. The server negotiates up to `2025-11-25` when the client supports it.
 - **Features:**
     - Request and response via standard POST.
@@ -46,6 +46,15 @@ Stdio is the preferred transport for local integrations. The client starts the E
 ```bash
 erpbridge-server --stdio
 ```
+
+The stdio stream reserves stdout for MCP JSON-RPC. ERPBridge writes its
+startup banner and diagnostics to stderr in this mode, so agents can parse
+stdout without a wrapper-specific preamble. HTTP bearer authentication does
+not apply to stdio; the child process must receive any upstream ERP
+credentials it needs through its environment.
+
+See the [Agentic Tools MCP Integration Guide](./agent-integrations.md) for
+Codex CLI, OpenCode, OpenClaw, and Hermes Agent configuration examples.
 
 ## 3. Direct API (Internal/CLI)
 
