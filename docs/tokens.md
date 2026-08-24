@@ -9,7 +9,7 @@ credential configured with `API_AUTH_TOKEN`.
 Set a non-empty admin credential before starting the HTTP server:
 
 ```bash
-export API_AUTH_TOKEN='change-this-admin-secret'
+export API_AUTH_TOKEN='<set-in-environment>'
 export API_AUTH_ADMIN_ROLES='finance_reader,finance_admin'
 erpbridge-server
 ```
@@ -17,7 +17,7 @@ erpbridge-server
 Send the credential as a bearer token:
 
 ```bash
-curl -H 'Authorization: Bearer change-this-admin-secret' \
+curl -H 'Authorization: Bearer ${API_AUTH_TOKEN}' \
   http://localhost:8080/api/auth/tokens
 ```
 
@@ -28,7 +28,7 @@ optional `API_AUTH_ADMIN_ROLES` value gives that identity verified roles.
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/tokens \
-  -H 'Authorization: Bearer change-this-admin-secret' \
+  -H 'Authorization: Bearer ${API_AUTH_TOKEN}' \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "finance-agent",
@@ -48,11 +48,11 @@ match `[a-z][a-z0-9_-]{0,63}`. A token can contain at most 32 unique roles.
 ## List and revoke tokens
 
 ```bash
-curl -H 'Authorization: Bearer change-this-admin-secret' \
+curl -H 'Authorization: Bearer ${API_AUTH_TOKEN}' \
   http://localhost:8080/api/auth/tokens
 
 curl -X DELETE \
-  -H 'Authorization: Bearer change-this-admin-secret' \
+  -H 'Authorization: Bearer ${API_AUTH_TOKEN}' \
   http://localhost:8080/api/auth/tokens/<id>
 ```
 
@@ -62,7 +62,7 @@ tokens without the required scope receive `403`.
 ## Use a token
 
 ```bash
-curl -H 'Authorization: Bearer erpbt_...' \
+curl -H 'Authorization: Bearer <token-from-environment>' \
   -H 'Content-Type: application/json' \
   http://localhost:8080/mcp/
 ```

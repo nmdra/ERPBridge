@@ -93,13 +93,11 @@ Within 10 seconds. The reconciliation controller ticks every 10 seconds. A tool 
 
 Tool schemas reference a credential by name (`credentialRef`). The server resolves the reference from environment variables at call time. Schemas never contain raw secrets.
 
-The mock ERP accepts:
+MockERP accepts the configured ERPNext token header, session cookie, or Basic
+Auth identity. Credential values are supplied through environment variables or
+an external secret file; they are not documented or stored in schemas.
 
-- Token header: `token adm_key_001:adm_sec_stu901`
-- Session cookie (`sid`)
-- Basic auth: `admin:admin`
-
-See the [MockERP README](https://github.com/nmdra/mockerp/blob/main/README.md) for details.
+See the [MockERP Integration Contract](./mock-erp.md) for details.
 
 ## Upgrades
 

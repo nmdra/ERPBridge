@@ -55,7 +55,7 @@ An active context can store the token in `~/.bridgectl/config.yaml`:
 contexts:
   local:
     server: http://localhost:8080
-    api-token: erpbt_...
+    api-token: <token-from-environment>
 ```
 
 The CLI reads its defaults from `~/.bridgectl/config.yaml`. The default context uses:

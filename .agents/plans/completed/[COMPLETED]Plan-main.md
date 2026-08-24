@@ -9,16 +9,19 @@ Remediate the non-auth findings from the repository analysis: caching works with
 ## Current State (evidence)
 
 **Cache**
+
 - No Redis ⇒ no cache at all: `cacheMgr` stays nil when `REDIS_URL` empty (services/erpbridge-server/main.go:55,77-90); `CacheMiddleware` bypasses on `s.cache == nil` (internal/mcp/middleware.go:137). Docs say "cache disabled" (docs/caching.md:94, docs/faq.md:40).
 - Keys truncated to 32 bits: `argsHash` uses `h[:4]` → 8 hex chars (internal/cache/manager.go:96-113).
 - `CachedAt` fabricated at read time; `EnsureIndex` is a no-op (manager.go:43-46); `scanAndDelete` DELs one key per round-trip (internal/cache/flush.go:76-83); `handleCacheList`/`handleCacheInspect` are 501 stubs (internal/mcp/server.go:812-818).
 
 **Security**
+
 - Silent credential fallback: `os.Getenv(CredentialRef)` falls back to the literal ref string as the credential (internal/mcp/tool.go:199-203).
 - Redaction only on the MCP stream handler (internal/logger/mcp_handler.go); `broadcastHandler` (internal/logger/logger.go:52-87) and `LoggingMiddleware` (internal/mcp/middleware.go:91 — logs full `req.Params.Arguments`) emit raw values.
-- Hardcoded credential in docker-compose.yml:44 (`ERP_PRIMARY_KEY=token adm_key_001:adm_sec_stu901`).
+- Hardcoded credential in docker-compose.yml:44 (the committed value was removed).
 
 **Correctness**
+
 - Ghost tools: deactivated tools hidden only by the HTTP SSE line filter (internal/mcp/server.go:370, 477-531); Stdio transport advertises them (main.go:111 uses `mcp_server.ServeStdio`).
 - Weak state hash: count+activeSum+maxUpdated (internal/mcp/store.go:121).
 - Migration ignores errors: `_, _ = s.db.Exec("ALTER TABLE tools ADD COLUMN is_active ...")` (store.go:60).
@@ -26,6 +29,7 @@ Remediate the non-auth findings from the repository analysis: caching works with
 - ResponsePath: top-level map key only; missing path silently returns full response (internal/mcp/tool.go:226-233).
 
 **CLI & docs**
+
 - `log tail` filters via `strings.Contains` on raw JSON (internal/cli/log.go:146-160).
 - `tool get`/`describe` fetch the whole tool list and filter client-side (internal/cli/tool.go:106-235); server `handleToolList` has no query filters (internal/mcp/server.go:620).
 - idp registry is a plain JSON file, no locking (internal/idp/registry.go:39, 62-66).
@@ -36,7 +40,7 @@ Remediate the non-auth findings from the repository analysis: caching works with
 ## Decisions
 
 | # | Decision | Rationale / rejected |
-|---|---|---|
+| --- | --- | --- |
 | B-D1 | Cache backend interface: `Backend` includes `FlushAll`; `RedisBackend` is used whenever `REDIS_URL` is set, even if unreachable; `MemoryBackend` is a mutex-protected LRU used only when Redis is not configured. `CACHE_MEMORY_MAX_ENTRIES` defaults to 10,000, invalid values warn and use the default, and zero disables memory caching. `ttlSeconds: 0` means no expiry. | Do not silently mask Redis deployment errors; no `CACHE_BACKEND` override is needed. |
 | B-D2 | Full SHA-256 hex (64 chars) cache keys. | Old short keys become harmless misses; no migration. |
 | B-D3 | Store `{response, cachedAt}` envelopes and treat decode failure as a miss. Cache hits restore the same MCP result semantics as uncached calls. | Rewrapping cached content as a text result changes the protocol contract. |
@@ -104,7 +108,7 @@ All claims verified against the codebase. Findings below.
 Files have grown since the plan was written. Locate seams by code pattern, not line number:
 
 | File | Plan max reference | Actual line count |
-|---|---|---|
+| --- | --- | --- |
 | `internal/mcp/server.go` | ~818 | 873 |
 | `internal/mcp/store.go` | ~121 | 177 |
 | `internal/mcp/middleware.go` | ~176 | 176 (unchanged) |
@@ -121,7 +125,7 @@ Most references are off by 1–10 lines. Search by function name or string liter
 - ✅ `EnsureIndex` is a no-op, still called from main.go:85
 - ✅ credentialRef fallback sends env var *name* as credential (tool.go:199-203) — **real vulnerability**
 - ✅ `LoggingMiddleware` logs raw `req.Params.Arguments` with no redaction (middleware.go:91)
-- ✅ Hardcoded `ERP_PRIMARY_KEY=token adm_key_001:adm_sec_stu901` in docker-compose.yml:44
+- ✅ Hardcoded ERP_PRIMARY_KEY value in docker-compose.yml:44 was removed
 - ✅ Stdio path uses `mcp_server.ServeStdio()` with no tool filter (main.go:111)
 - ✅ State hash is `count-activeSum-maxUpdated` — renamed tools don't change hash (store.go:121-130)
 - ✅ Migration error swallowed: `_, _ = s.db.Exec("ALTER TABLE ...")` (store.go:60)
@@ -155,7 +159,6 @@ Run security fixes first regardless of plan priority:
 9. D1 → D2 → D3                      — CLI (build on A8's newRequest helper)
 10. ../stalled/Plan-Auth.md A10, A11 + D4/D5     — CORS and documentation release
 ```
-
 
 ## Historical Audit Addendum (2026-08-19) — Do Not Execute
 

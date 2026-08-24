@@ -337,7 +337,7 @@ numbered descriptions mean the corresponding path under the standalone
   patch release `v0.1.1` so the fixture contract is available in the image, then
   update ERPBridge's image and matching OpenAPI pin from `0.1.0` to `0.1.1`.
   Update both plan indexes to describe the broader staged plan while retaining
-  this file's active path `../active/Plan-Mock-ERP.md` for those dependencies.
+  this file's completed path `../completed/[COMPLETED]Plan-Mock-ERP.md` for those dependencies.
 
   **Seam:** checked-in OpenAPI contract → versioned MockERP image → ERPBridge
   tool generator and plan-to-plan fixture dependency.
