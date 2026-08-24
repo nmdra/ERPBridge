@@ -9,16 +9,27 @@ starting implementation work.
   — approved execution plan for backward-compatible Stdio hardening, agent
   interoperability verification, and Codex/OpenCode/OpenClaw/Hermes
   documentation.
+- [`Plan-SDK-Integration-Testing.md`](./active/Plan-SDK-Integration-Testing.md)
+  — approved SDK/ERPBridge integration remediation plan.
 
 ## Upcoming
 
+- [`Plan-Generic-External-Plugins.md`](./upcoming/Plan-Generic-External-Plugins.md)
+  — proposed generic external-plugin control-plane plan. It is not execution
+  authorization.
+- [`Plan-Mock-ERP-Fixtures.md`](./upcoming/Plan-Mock-ERP-Fixtures.md) — shared
+  deterministic Mock ERP fixture plan for integration tests.
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
-  specification evaluation and migration. This is the next candidate, not an
-  authorization to begin implementation.
+  specification evaluation and migration. It is not authorization to begin
+  implementation.
 
-The upcoming plan must first be refreshed against the current `mcp-go`
-release, deployed protocol version, compatibility requirements, and migration
-risks. Create a new finalized execution plan after that review.
+Reference evidence for the SDK integration plan:
+
+- [`rca-sdk-integration-testing.md`](./upcoming/rca-sdk-integration-testing.md)
+
+Upcoming plans must first be refreshed against current dependencies, protocol
+versions, compatibility requirements, and operational constraints before
+promotion to `active/`.
 
 ## Completed
 

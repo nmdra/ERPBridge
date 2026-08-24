@@ -1,6 +1,10 @@
 # Active Plans
 
-There are currently no active implementation plans.
+- [`Plan-Agentic-Tools-MCP-Integration.md`](./Plan-Agentic-Tools-MCP-Integration.md)
+— agent interoperability and MCP contract verification; remaining tasks are
+release checks.
+- [`Plan-SDK-Integration-Testing.md`](./Plan-SDK-Integration-Testing.md) —
+authenticated SDK/ERPBridge integration remediation.
 
-Move an approved plan here only when execution is authorized. Keep the plan's
-task order and verification commands intact while it is active.
+These plans are approved for execution. Keep their task order and verification
+commands intact while active.
