@@ -26,7 +26,7 @@ Welcome to the ERPBridge documentation. This wiki-style guide helps you understa
 ## 🔌 Integration Guides
 
 - **[Postman Integration](./connectivity.md#postman-configuration)**: Testing MCP endpoints with Postman.
-- **[Mock ERP Setup](../mock-erp/README.md)**: Details about the simulated legacy ERP service.
+- **[MockERP Repository](https://github.com/nmdra/mockerp)**: Details about the pinned simulated legacy ERP service and its API contract.
 - **[MCP Client Implementation Guide](../docs/mcp-client-guide.md)**: How to implement an MCP client for this server.
 - **[FAQ](./faq.md)**: Common questions about configuration, troubleshooting, and upgrades.
 

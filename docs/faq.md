@@ -49,8 +49,7 @@ No. The cache uses a bounded in-memory LRU when `REDIS_URL` is empty. Set `CACHE
 The `schemas/` directory is not tracked by git. Generate the schemas from the OpenAPI spec of your ERP:
 
 ```bash
-bridgectl api register --name erp --url http://localhost:8081 --module erp --description "Mock ERP"
-bridgectl tool generate --api erp --openapi mock-erp/openapi.yaml -o yaml > schemas/erp/generated.yaml
+make generate-tools
 bridgectl tool apply -f schemas/erp/
 ```
 
@@ -100,7 +99,7 @@ The mock ERP accepts:
 - Session cookie (`sid`)
 - Basic auth: `admin:admin`
 
-See the [Mock ERP README](../mock-erp/README.md) for details.
+See the [MockERP README](https://github.com/nmdra/mockerp/blob/main/README.md) for details.
 
 ## Upgrades
 

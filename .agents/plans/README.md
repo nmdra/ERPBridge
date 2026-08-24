@@ -5,6 +5,9 @@ starting implementation work.
 
 ## Active
 
+- [`Plan-Mock-ERP.md`](./active/Plan-Mock-ERP.md) — approved execution plan
+  for extracting Mock ERP to `nmdra/mockerp`, publishing a pinned GHCR image,
+  and implementing the ERPNext-aligned SQLite service.
 - [`Plan-Agentic-Tools-MCP-Integration.md`](./active/Plan-Agentic-Tools-MCP-Integration.md)
   — approved execution plan for backward-compatible Stdio hardening, agent
   interoperability verification, and Codex/OpenCode/OpenClaw/Hermes
@@ -17,8 +20,6 @@ starting implementation work.
 - [`Plan-Generic-External-Plugins.md`](./upcoming/Plan-Generic-External-Plugins.md)
   — proposed generic external-plugin control-plane plan. It is not execution
   authorization.
-- [`Plan-Mock-ERP-Fixtures.md`](./upcoming/Plan-Mock-ERP-Fixtures.md) — shared
-  deterministic Mock ERP fixture plan for integration tests.
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
   specification evaluation and migration. It is not authorization to begin
   implementation.

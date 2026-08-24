@@ -16,8 +16,8 @@
 - **Resilience & Fault Tolerance**: Circuit breakers (Sony/GoBreaker) and retry logic (Avast/Retry-Go) handle the instability of legacy systems.
 - **Secure Log Streaming**: Real-time structured log streaming to MCP clients. Sensitive data (API keys, passwords, PII) is redacted with `masq` and RFC 5424 level control.
 - **Multi-Transport Support**:
-    - **Streamable HTTP**: For remote agents and web-based integrations.
-    - **Stdio**: Native integration for local IDEs and CLI-based agents.
+  - **Streamable HTTP**: For remote agents and web-based integrations.
+  - **Stdio**: Native integration for local IDEs and CLI-based agents.
 - **Developer-Centric CLI (`bridgectl`)**: A tool for environment management, schema validation, tool invocation, and real-time monitoring.
 - **Metrics & Monitoring**: Native Prometheus integration for tracking performance and health.
 
@@ -35,7 +35,7 @@ graph TD
 ```
 
 - **`services/erpbridge-server/`**: The core Go service. It acts as the MCP gateway and Declarative Control Plane.
-- **`mock-erp/`**: A Python FastAPI service. It simulates legacy ERP modules (Finance, HR, Inventory) for development and testing.
+- **MockERP**: An independent FastAPI service in [`nmdra/mockerp`](https://github.com/nmdra/mockerp). ERPBridge runs its pinned GHCR image as the legacy ERP dependency.
 - **`tools/bridgectl/`**: Management CLI for developers and AI agents (Kubernetes-style tool management).
 - **`internal/`**: Go libraries for configuration, protocol handling, caching, and resilience.
 
@@ -44,7 +44,6 @@ graph TD
 ### Prerequisites
 
 - **Go**: 1.26.2+
-- **Python**: 3.11+ (managed via `uv` is recommended)
 - **Docker & Docker Compose**: For containerized deployment.
 - **Redis**: Optional for the caching layer. Without it, the server uses a bounded in-memory LRU cache.
 - **SQLite**: (Built-in) used for the Tool Registry.
@@ -58,6 +57,7 @@ docker compose up -d --build
 ```
 
 This launches:
+
 - **ERPBridge Server**: `http://localhost:8080`
 - **Mock ERP**: `http://localhost:8081`
 - **Redis**: Port `6379`
@@ -66,50 +66,52 @@ Then build the CLI and load the default schemas:
 
 ```bash
 make build
-./bridgectl api register --name erp --url http://localhost:8081 --module erp --description "Mock ERP"
-mkdir -p schemas/erp
-./bridgectl tool generate --api erp --openapi mock-erp/openapi.yaml -o yaml > schemas/erp/generated.yaml
-./bridgectl tool apply -f schemas/erp/
+make generate-tools
 ```
 
-> **Note:** `schemas/` is not tracked by git. Each machine that runs `bridgectl` must generate the schemas first. See the [Onboarding Guide](./docs/onboarding.md) for the full workflow.
+> **Note:** `schemas/` is not tracked by git. `make generate-tools` fetches the pinned MockERP OpenAPI contract from GitHub before generating tools. Override `MOCK_ERP_VERSION` and `MOCK_ERP_OPENAPI_URL` together when upgrading. See the [Onboarding Guide](./docs/onboarding.md) for the full workflow.
 
 ### Local Development
 
-1. **Start the Mock ERP**:
+1. **Start the pinned MockERP image**:
+
    ```bash
-   cd mock-erp
-   uv run main.py
+   make run-mock
    ```
 
 2. **Run ERPBridge Server**:
+
    ```bash
    # Server creates data/erpbridge.db automatically
    go run services/erpbridge-server/main.go
    ```
 
 3. **Install `bridgectl`**:
+
    ```bash
    go install ./tools/bridgectl
    ```
 
 4. **Initialize Tools**:
+
    ```bash
-   bridgectl api register --name erp --url http://localhost:8081 --module erp --description "Mock ERP"
-   bridgectl tool generate --api erp --openapi mock-erp/openapi.yaml -o yaml > schemas/erp/generated.yaml
-   bridgectl tool apply -f schemas/erp/
+   make generate-tools
    ```
 
 ## 🔌 AI Integration
 
 ### Local Agents (Claude/Cursor)
+
 Configure your agent to use the Stdio transport via the server binary:
+
 ```bash
 erpbridge-server --stdio
 ```
 
 ### Remote / Web Clients
+
 Connect via Streamable HTTP:
+
 - **Base URL**: `http://localhost:8080/mcp/`
 - **Transport**: MCP 2025-03-26 (the server negotiates up to `2025-11-25`)
 
@@ -128,13 +130,17 @@ For detailed setup instructions, including Postman collections, see the [Connect
 ## 🛠️ Development & Contributing
 
 ### Testing
+
 Run the full test suite:
+
 ```bash
 make test
 ```
 
 ### Quality Control
+
 We enforce quality with `golangci-lint` and `lefthook` for pre-commit checks.
+
 ```bash
 # Install hooks
 lefthook install

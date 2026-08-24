@@ -1,11 +1,13 @@
 services:
   mock-erp:
-    build:
-      context: ./mock-erp
+    image: ${MOCK_ERP_IMAGE:-ghcr.io/nmdra/mockerp:0.1.0}
     ports:
       - "8081:8081"
     environment:
       - LOG_LEVEL=debug
+      - MOCK_ERP_DB_PATH=/data/mockerp.db
+    volumes:
+      - mockerp-data:/data
     healthcheck:
       test:
         [
@@ -53,5 +55,6 @@ services:
         condition: service_healthy
 
 volumes:
+  mockerp-data:
   redis-data:
   erpbridge-data:

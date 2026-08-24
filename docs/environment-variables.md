@@ -70,6 +70,9 @@ The CLI reads its defaults from `~/.bridgectl/config.yaml`. The default context 
 
 ## Mock ERP Variables
 
-| Variable | Purpose |
-| :--- | :--- |
-| `MOCK_ERP_PORT` | Declared in `.env.example` and the Makefile. The mock ERP hardcodes port `8081` in `main.py`. |
+| Variable | Purpose | Default |
+| :--- | :--- | :--- |
+| `MOCK_ERP_PORT` | Host port exposed for the MockERP container. | `8081` |
+| `MOCK_ERP_IMAGE` | MockERP image used by Docker Compose. | `ghcr.io/nmdra/mockerp:0.1.0` |
+| `MOCK_ERP_VERSION` | MockERP release used for OpenAPI generation. | `0.1.0` |
+| `MOCK_ERP_OPENAPI_URL` | Versioned OpenAPI contract URL. | `https://raw.githubusercontent.com/nmdra/mockerp/v0.1.0/openapi.yaml` |
