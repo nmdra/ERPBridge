@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -52,18 +53,20 @@ func serveHTTP(ctx context.Context, server *http.Server, listener net.Listener) 
 }
 
 func main() {
-	// Print startup banner
-	banner.Print(os.Stdout, "ERPBridge Server", version)
-
 	stdioFlag := flag.Bool("stdio", false, "Run in STDIO transport mode")
 	flag.Parse()
 
 	transport := os.Getenv("MCP_TRANSPORT")
 	useStdio := *stdioFlag || transport == "stdio"
 
+	bannerWriter := io.Writer(os.Stdout)
 	if useStdio {
 		_ = os.Setenv("LOG_TO_STDERR", "true")
+		bannerWriter = os.Stderr
 	}
+
+	// Stdio reserves stdout for the MCP JSON-RPC stream.
+	banner.Print(bannerWriter, "ERPBridge Server", version)
 
 	// Initialize Logger
 	rootLog := logger.Init()
