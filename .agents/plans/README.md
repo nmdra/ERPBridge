@@ -9,8 +9,6 @@ starting implementation work.
   — approved execution plan for backward-compatible Stdio hardening, agent
   interoperability verification, and Codex/OpenCode/OpenClaw/Hermes
   documentation.
-- [`Plan-SDK-Integration-Testing.md`](./active/Plan-SDK-Integration-Testing.md)
-  — approved SDK/ERPBridge integration remediation plan.
 
 ## Upcoming
 
@@ -52,6 +50,9 @@ lists as new work.
 
 ## Stalled and superseded
 
+- [`[STALLED]Plan-SDK-Integration-Testing.md`](./stalled/[STALLED]Plan-SDK-Integration-Testing.md)
+  — incomplete authenticated SDK/ERPBridge integration remediation plan,
+  archived before implementation completed.
 - [`Plan-Auth.md`](./stalled/Plan-Auth.md) — superseded by the completed
   AuthN/AuthZ plan.
 - [`[DRAFT]Plan-RBAC.md`](./stalled/[DRAFT]Plan-RBAC.md) — superseded by the

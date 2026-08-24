@@ -1,5 +1,7 @@
 # Plan: Harden ERPBridge SDK Integration Verification
 
+> **Status: STALLED / INCOMPLETE** — archived at user request before implementation completed. Task 1 verification was not run.
+
 ## Goal
 
 Make the governed workflow-engine integration prove the real ERPBridge contract.
