@@ -116,7 +116,7 @@ func TestCacheMiddleware_PreservesMCPResult(t *testing.T) {
 	next := func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		called++
 		return &mcp.CallToolResult{
-			Content:           []mcp.Content{mcp.TextContent{Type: "text", Text: "cached"}},
+			Content:           []mcp.Content{mcp.TextContent{Type: textContentType, Text: "cached"}},
 			StructuredContent: map[string]any{testValue: "cached"},
 		}, nil
 	}

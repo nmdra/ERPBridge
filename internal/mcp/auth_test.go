@@ -193,6 +193,107 @@ func TestServer_StreamableMCPReceivesAuthenticatedCallerIdentity(t *testing.T) {
 	assert.Equal(t, testRoleOperator, receivedRole)
 }
 
+func TestServer_StreamableHTTPPreservesAgentClientContract(t *testing.T) {
+	t.Setenv("API_AUTH_TOKEN", "admin-secret")
+	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	_, raw, err := s.store.CreateToken(TokenCreateRequest{Name: "mcp-compat", Scopes: []string{scopeMCP}})
+	require.NoError(t, err)
+	s.RegisterTool(&Tool{
+		Metadata: Metadata{Name: "compatibility-tool", Version: testVersion100},
+		Spec: ToolSpec{
+			Description: Description{Short: "Compatibility test tool"},
+			InputSchema: InputSchema{Type: schemaTypeObject},
+		},
+		Handler: func(_ context.Context, _ map[string]any) (*ToolResult, error) {
+			return &ToolResult{Result: map[string]any{"status": testStatusOk}}, nil
+		},
+	})
+
+	mux := http.NewServeMux()
+	s.ServeHTTP(mux, "http://localhost:8080")
+
+	for _, protocolVersion := range []string{"2025-03-26", "2025-11-25"} {
+		t.Run(protocolVersion, func(t *testing.T) {
+			initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + protocolVersion + `","capabilities":{},"clientInfo":{"name":"agent-compatibility-test","version":"1.0"}}}`
+			initRequest := httptest.NewRequest(http.MethodPost, "/mcp/", strings.NewReader(initialize))
+			setMCPHeaders(initRequest, raw, "")
+			initRecorder := httptest.NewRecorder()
+			mux.ServeHTTP(initRecorder, initRequest)
+			require.Equal(t, http.StatusOK, initRecorder.Code)
+			sessionID := initRecorder.Header().Get("Mcp-Session-Id")
+			require.NotEmpty(t, sessionID)
+			initResponse := decodeMCPResponse(t, initRecorder, 1)
+			assert.Equal(t, protocolVersion, initResponse["result"].(map[string]any)["protocolVersion"])
+
+			listRequest := httptest.NewRequest(http.MethodPost, "/mcp/", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`))
+			setMCPHeaders(listRequest, raw, sessionID)
+			listRecorder := httptest.NewRecorder()
+			mux.ServeHTTP(listRecorder, listRequest)
+			require.Equal(t, http.StatusOK, listRecorder.Code)
+			listResponse := decodeMCPResponse(t, listRecorder, 2)
+			tools := listResponse["result"].(map[string]any)["tools"].([]any)
+			foundTool := false
+			for _, rawTool := range tools {
+				tool, ok := rawTool.(map[string]any)
+				if ok && tool["name"] == "compatibility-tool" {
+					foundTool = true
+					assert.Equal(t, "Compatibility test tool", tool["description"])
+				}
+			}
+			assert.True(t, foundTool, "tools/list should expose compatibility-tool")
+
+			callRequest := httptest.NewRequest(http.MethodPost, "/mcp/", strings.NewReader(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"compatibility-tool","arguments":{}}}`))
+			setMCPHeaders(callRequest, raw, sessionID)
+			callRecorder := httptest.NewRecorder()
+			mux.ServeHTTP(callRecorder, callRequest)
+			require.Equal(t, http.StatusOK, callRecorder.Code)
+			callResponse := decodeMCPResponse(t, callRecorder, 3)
+			assert.Equal(t, float64(3), callResponse["id"])
+			callResult := callResponse["result"].(map[string]any)
+			assert.NotEqual(t, true, callResult["isError"])
+			assert.Contains(t, callResult["content"], map[string]any{"type": textContentType, "text": `{"status":"ok"}`})
+
+			unauthenticatedCall := httptest.NewRequest(http.MethodPost, "/mcp/", strings.NewReader(`{"jsonrpc":"2.0","id":4,"method":"tools/list","params":{}}`))
+			unauthenticatedCall.Header.Set("Content-Type", "application/json")
+			unauthenticatedCall.Header.Set("Mcp-Session-Id", sessionID)
+			unauthenticatedRecorder := httptest.NewRecorder()
+			mux.ServeHTTP(unauthenticatedRecorder, unauthenticatedCall)
+			assert.Equal(t, http.StatusUnauthorized, unauthenticatedRecorder.Code)
+		})
+	}
+}
+
+func setMCPHeaders(request *http.Request, token, sessionID string) {
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	if sessionID != "" {
+		request.Header.Set("Mcp-Session-Id", sessionID)
+	}
+}
+
+func decodeMCPResponse(t *testing.T, recorder *httptest.ResponseRecorder, id float64) map[string]any {
+	t.Helper()
+	body := strings.TrimSpace(recorder.Body.String())
+	if strings.HasPrefix(body, "{") {
+		var response map[string]any
+		require.NoError(t, json.Unmarshal([]byte(body), &response))
+		assert.Equal(t, id, response["id"])
+		return response
+	}
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "data: ") {
+			var response map[string]any
+			require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &response))
+			if response["id"] == id {
+				return response
+			}
+		}
+	}
+	t.Fatalf("MCP response did not contain response id %v: %q", id, recorder.Body.String())
+	return nil
+}
+
 func TestTokenAPI_AdminOnlyAndOneTimeValue(t *testing.T) {
 	t.Setenv("API_AUTH_TOKEN", "admin-secret")
 	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")

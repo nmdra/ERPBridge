@@ -45,6 +45,7 @@ type Server struct {
 
 const (
 	statusKey          = "status"
+	textContentType    = "text"
 	toolNameQueryParam = "name"
 )
 
@@ -326,7 +327,7 @@ func (s *Server) handleMCPPromptGet(_ context.Context, request mcp.GetPromptRequ
 			{
 				Role: mcp.RoleUser,
 				Content: mcp.TextContent{
-					Type: "text",
+					Type: textContentType,
 					Text: text,
 				},
 			},
