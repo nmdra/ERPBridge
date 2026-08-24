@@ -168,6 +168,10 @@ func MetricsMiddleware() server.ToolHandlerMiddleware {
 func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			if s.cache != nil && t.Spec.Cache != nil && t.Spec.Cache.Enabled {
+				s.pluginLifecycleMu.RLock()
+				defer s.pluginLifecycleMu.RUnlock()
+			}
 			if s.cache == nil || t.Spec.Cache == nil {
 				return next(ctx, req)
 			}

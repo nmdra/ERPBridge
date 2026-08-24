@@ -65,6 +65,23 @@ DELETE /apis/erpbridge.io/v1/tools?name=<name>&version=<version>&hard=true
 
 Returns `204 No Content` on success.
 
+## External Plugin Registry
+
+Plugin and binding resources use the admin-only Kubernetes-style control-plane
+routes. Authentication follows the tool registry rules above.
+
+| Resource | Apply/List | Delete |
+| :--- | :--- | :--- |
+| Plugin | `POST`/`GET /apis/erpbridge.io/v1/plugins` | `DELETE .../plugins?name=<name>&version=<version>` |
+| PluginBinding | `POST`/`GET /apis/erpbridge.io/v1/pluginbindings` | `DELETE .../pluginbindings?name=<name>` |
+
+Plugin deletion is soft by default. Use `hard=true` for permanent deletion. A
+plugin with an active binding returns `409 Conflict` and cannot be hard-deleted.
+Binding admission requires an active exact plugin version and active exact MCP
+tool version. Use `name` and `version` filters for plugins, and `name`,
+`pluginName`, `pluginVersion`, `toolName`, or `toolVersion` filters for
+bindings.
+
 ### Admission Rules
 
 The server rejects tool definitions when:

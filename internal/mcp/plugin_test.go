@@ -12,8 +12,9 @@ const (
 	pluginTestModeKey  = "mode"
 	pluginTestMode     = "safe"
 	pluginTestResultID = "order-1"
+	pluginTestToolName = "list-orders"
 	pluginTimeoutError = "timeout"
-	pluginVersionError = "version"
+	pluginVersionError = "metadata.version"
 )
 
 func validPluginForTest(endpoint string) Plugin {
@@ -42,7 +43,7 @@ func validPluginBindingForTest() PluginBinding {
 		},
 		Spec: PluginBindingSpec{
 			PluginRef:     PluginRef{Name: "response-transformer", Version: pluginTestVersion},
-			ToolRef:       ToolRef{Name: "list-orders", Version: pluginTestVersion},
+			ToolRef:       ToolRef{Name: pluginTestToolName, Version: pluginTestVersion},
 			Phase:         PluginPhaseAfterResponse,
 			Priority:      10,
 			FailurePolicy: PluginFailurePolicyContinue,

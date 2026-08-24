@@ -1,6 +1,6 @@
 # External Plugin Resource Schema
 
-ERPBridge can call a plugin that runs in a separate process or container. ERPBridge stores the plugin endpoint and does not start, install, or update plugin code.
+This page defines the control-plane and wire contract for a plugin that runs in a separate process or container. ERPBridge stores the plugin endpoint and does not start, install, or update plugin code.
 
 ## Plugin
 
@@ -47,9 +47,10 @@ spec:
     mode: safe
 ```
 
-The only supported phase is `after_response`. Bindings run in ascending
-priority order after a successful tool result has passed its output schema.
-The default failure policy is `continue`; `fail` returns a generic tool error.
+The only phase accepted by the control plane is `after_response`. The future
+response pipeline will use active bindings in ascending priority order after a
+successful tool result has passed its output schema. The default failure policy
+is `continue`; `fail` returns a generic tool error.
 Plugin and binding resources are versioned declarative records. A soft delete
 sets `isActive: false` and retains the record. A plugin cannot be hard-deleted
 while an active binding references that exact plugin version. Inactive
@@ -57,9 +58,10 @@ bindings remain retained until they are explicitly hard-deleted.
 
 ## Plugin HTTP contract
 
-ERPBridge sends a synchronous JSON `POST /v1/process` request. The request
-contains only the protocol version, an invocation ID, the exact tool identity,
-the normalized result, and binding configuration:
+The v1 plugin protocol defines a synchronous JSON `POST /v1/process` exchange.
+When the response pipeline processes an active binding, the request contains
+only the protocol version, an invocation ID, the exact tool identity, the
+normalized result, and binding configuration:
 
 ```json
 {
@@ -77,7 +79,7 @@ The plugin must return a JSON object with a `result` member:
 {"result":{"id":"order-1","processed":true}}
 ```
 
-ERPBridge does not send original tool arguments, inbound headers, caller
+The protocol does not include original tool arguments, inbound headers, caller
 identity, caller tokens, or ERP credentials. Request and response JSON are
-limited to 1 MiB. Plugin calls use the invocation context and resource timeout,
+limited to 1 MiB. Calls use the invocation context and resource timeout,
 disable redirects, and do not retry.

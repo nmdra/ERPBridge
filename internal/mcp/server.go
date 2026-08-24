@@ -26,21 +26,23 @@ import (
 
 // Server is the primary MCP server implementation for ERPBridge.
 type Server struct {
-	mcpServer       *server.MCPServer
-	connector       ERPConnector
-	cache           *cache.Manager
-	log             *slog.Logger
-	mu              sync.RWMutex
-	store           *Store
-	registry        *ToolRegistry
-	lastDesiredHash string
-	resources       map[string]*Resource
-	prompts         map[string]*Prompt
-	Notifier        *CustomNotifier
-	TelemetryHooks  *TelemetryHooks
-	BusinessHooks   *BusinessHooks
-	toolMiddlewares []server.ToolHandlerMiddleware
-	authWarnOnce    sync.Once
+	mcpServer         *server.MCPServer
+	connector         ERPConnector
+	cache             *cache.Manager
+	log               *slog.Logger
+	mu                sync.RWMutex
+	pluginLifecycleMu sync.RWMutex
+	store             *Store
+	registry          *ToolRegistry
+	pluginRegistry    *PluginRegistry
+	lastDesiredHash   string
+	resources         map[string]*Resource
+	prompts           map[string]*Prompt
+	Notifier          *CustomNotifier
+	TelemetryHooks    *TelemetryHooks
+	BusinessHooks     *BusinessHooks
+	toolMiddlewares   []server.ToolHandlerMiddleware
+	authWarnOnce      sync.Once
 }
 
 const (
@@ -84,15 +86,16 @@ func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Lo
 	}
 
 	srv := &Server{
-		mcpServer: s,
-		connector: connector,
-		cache:     cacheMgr,
-		log:       mcpLog,
-		store:     store,
-		registry:  NewToolRegistry(),
-		resources: make(map[string]*Resource),
-		prompts:   make(map[string]*Prompt),
-		Notifier:  NewCustomNotifier(s),
+		mcpServer:      s,
+		connector:      connector,
+		cache:          cacheMgr,
+		log:            mcpLog,
+		store:          store,
+		registry:       NewToolRegistry(),
+		pluginRegistry: NewPluginRegistry(),
+		resources:      make(map[string]*Resource),
+		prompts:        make(map[string]*Prompt),
+		Notifier:       NewCustomNotifier(s),
 	}
 	bridgeServer = srv
 
@@ -338,6 +341,7 @@ func (s *Server) handleMCPPromptGet(_ context.Context, request mcp.GetPromptRequ
 // StartController runs the background reconciliation loop.
 func (s *Server) StartController(ctx context.Context) {
 	s.log.Info("starting reconciliation controller")
+	s.Reconcile(ctx)
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -352,7 +356,13 @@ func (s *Server) StartController(ctx context.Context) {
 }
 
 // Reconcile ensures the MCP runtime matches the desired state in the SQLite store.
-func (s *Server) Reconcile(_ context.Context) {
+func (s *Server) Reconcile(ctx context.Context) {
+	s.pluginLifecycleMu.Lock()
+	defer s.pluginLifecycleMu.Unlock()
+	s.reconcileLocked(ctx)
+}
+
+func (s *Server) reconcileLocked(ctx context.Context) {
 	if s.store == nil {
 		return
 	}
@@ -379,6 +389,34 @@ func (s *Server) Reconcile(_ context.Context) {
 		s.log.Error("failed to list desired tools", slog.String("error", err.Error()))
 		return
 	}
+	desiredPlugins, err := s.store.ListPlugins()
+	if err != nil {
+		s.log.Error("failed to list desired plugins", slog.String("error", err.Error()))
+		return
+	}
+	desiredBindings, err := s.store.ListPluginBindings()
+	if err != nil {
+		s.log.Error("failed to list desired plugin bindings", slog.String("error", err.Error()))
+		return
+	}
+	if s.pluginRegistry == nil {
+		s.pluginRegistry = NewPluginRegistry()
+	}
+	oldBindings := s.pluginRegistry.SnapshotBindings()
+	nextSnapshot := buildPluginBindingSnapshot(desiredPlugins, desiredBindings, desiredTools)
+	var nextBindings []*PluginBinding
+	for _, values := range nextSnapshot {
+		for _, value := range values {
+			if value != nil {
+				nextBindings = append(nextBindings, value.Binding)
+			}
+		}
+	}
+	if err := s.flushPluginBindingTargets(ctx, oldBindings, nextBindings); err != nil {
+		s.log.Error("failed to invalidate plugin binding caches", slog.String("error", err.Error()))
+		return
+	}
+	s.pluginRegistry.Replace(nextSnapshot)
 	s.warnUnresolvedCredentials()
 
 	desiredMap := make(map[string]bool)
@@ -644,6 +682,8 @@ func (s *Server) ServeHTTP(mux *http.ServeMux, _ string) {
 
 	// 4. Kubernetes-Style Tool API
 	mux.Handle("/apis/erpbridge.io/v1/tools", s.AuthHandler(http.HandlerFunc(s.handleToolAPI), "", true))
+	mux.Handle("/apis/erpbridge.io/v1/plugins", s.AuthHandler(http.HandlerFunc(s.handlePluginAPI), "", true))
+	mux.Handle("/apis/erpbridge.io/v1/pluginbindings", s.AuthHandler(http.HandlerFunc(s.handlePluginBindingAPI), "", true))
 }
 
 func (s *Server) handleToolAPI(w http.ResponseWriter, r *http.Request) {
@@ -676,6 +716,18 @@ func (s *Server) handleToolApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "store not available", http.StatusInternalServerError)
 		return
 	}
+	s.pluginLifecycleMu.Lock()
+	defer s.pluginLifecycleMu.Unlock()
+
+	affected, err := s.store.ListPluginBindingsForTool(t.Metadata.Name, t.Metadata.Version)
+	if err != nil {
+		http.Error(w, "failed to inspect plugin bindings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := s.flushPluginBindingTargets(r.Context(), affected); err != nil {
+		http.Error(w, "plugin cache invalidation failed", http.StatusInternalServerError)
+		return
+	}
 
 	t.Metadata.IsActive = true // Mark as active before saving
 
@@ -686,6 +738,7 @@ func (s *Server) handleToolApply(w http.ResponseWriter, r *http.Request) {
 
 	// Immediate reconciliation for responsiveness
 	s.RegisterTool(&t)
+	s.reconcileLocked(r.Context())
 	s.warnUnresolvedCredentials()
 
 	w.WriteHeader(http.StatusCreated)
@@ -723,12 +776,24 @@ func (s *Server) handleToolList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleToolDelete(w http.ResponseWriter, r *http.Request) {
+	s.pluginLifecycleMu.Lock()
+	defer s.pluginLifecycleMu.Unlock()
+
 	name := r.URL.Query().Get(toolNameQueryParam)
 	version := r.URL.Query().Get("version")
-	hard := r.URL.Query().Get("hard") == "true"
+	hard := r.URL.Query().Get("hard") == queryTrueValue
 
 	if name == "" || version == "" {
 		http.Error(w, "missing name or version parameter", http.StatusBadRequest)
+		return
+	}
+	affected, err := s.store.ListPluginBindingsForTool(name, version)
+	if err != nil {
+		http.Error(w, "failed to inspect plugin bindings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := s.flushPluginBindingTargets(r.Context(), affected); err != nil {
+		http.Error(w, "plugin cache invalidation failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -747,6 +812,7 @@ func (s *Server) handleToolDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	s.reconcileLocked(r.Context())
 	w.WriteHeader(http.StatusNoContent)
 }
 

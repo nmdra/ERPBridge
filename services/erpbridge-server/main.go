@@ -139,6 +139,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Reconcile persisted resources before accepting transport requests.
+	server.Reconcile(ctx)
+
 	// Start Reconciliation Loop
 	go server.StartController(ctx)
 

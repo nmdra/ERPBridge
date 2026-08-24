@@ -59,7 +59,7 @@ The controller runs every 10 seconds. It compares the database state against the
 - If a tool is inactive (soft-deleted) or missing from SQLite, the controller deregisters it from the MCP runtime.
 - If a tool changes, the controller re-registers the new version.
 
-Each check uses a state hash (`count-activeSum-max(updated_at)`) from the store. If the hash is unchanged, the controller skips the pass. This keeps the check cheap.
+Each check uses a SHA-256 state hash from the store. The hash covers ordered tool, plugin, and binding identity, activity, update timestamp, and stored resource data. If the hash is unchanged, the controller skips the pass. This keeps the check cheap.
 
 When the registry changes, the controller sends the `notifications/tools/list_changed` notification to all active MCP sessions.
 

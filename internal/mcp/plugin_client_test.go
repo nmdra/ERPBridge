@@ -24,7 +24,7 @@ func validPluginInvocationForTest() PluginInvocation {
 		ProtocolVersion: PluginProtocolVersion,
 		InvocationID:    "invocation-123",
 		Tool: ToolIdentity{
-			Name:    "list-orders",
+			Name:    pluginTestToolName,
 			Version: pluginTestVersion,
 		},
 		Result: map[string]any{"id": pluginTestResultID},
@@ -41,7 +41,7 @@ func TestPluginClient_Process_Success(t *testing.T) {
 		var request PluginInvocation
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
 		require.Equal(t, "invocation-123", request.InvocationID)
-		require.Equal(t, "list-orders", request.Tool.Name)
+		require.Equal(t, pluginTestToolName, request.Tool.Name)
 		require.Equal(t, map[string]any{"id": pluginTestResultID}, request.Result)
 		require.Equal(t, map[string]any{pluginTestModeKey: pluginTestMode}, request.Config)
 

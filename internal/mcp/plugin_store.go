@@ -11,6 +11,8 @@ var (
 	// ErrPluginHasActiveBindings prevents deleting a plugin that is still
 	// referenced by an active binding.
 	ErrPluginHasActiveBindings = errors.New("plugin has active bindings")
+	// ErrPluginBindingNotFound indicates that a named binding does not exist.
+	ErrPluginBindingNotFound = errors.New("plugin binding not found")
 )
 
 // SavePlugin stores or updates one exact plugin version.
@@ -208,7 +210,7 @@ func (s *Store) GetPluginBinding(name string) (*PluginBinding, error) {
 	var data string
 	err := s.db.QueryRow(`SELECT data FROM plugin_bindings WHERE name = ?`, name).Scan(&data)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("plugin binding %s not found", name)
+		return nil, fmt.Errorf("%w: %s", ErrPluginBindingNotFound, name)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get plugin binding: %w", err)
