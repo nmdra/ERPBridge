@@ -5,11 +5,11 @@ starting implementation work.
 
 ## Active
 
+- [`Plan-Generic-External-Plugins.md`](./active/Plan-Generic-External-Plugins.md)
+  — generic external-plugin control-plane implementation.
+
 ## Upcoming
 
-- [`Plan-Generic-External-Plugins.md`](./upcoming/Plan-Generic-External-Plugins.md)
-  — proposed generic external-plugin control-plane plan. It is not execution
-  authorization.
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
   specification evaluation and migration. It is not authorization to begin
   implementation.

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add the initial generic external-plugin and exact-version binding contract with bounded HTTP JSON requests.
 - Add agent-integration guidance for Codex CLI, OpenCode, OpenClaw, and Hermes
   Agent, including scoped HTTP bearer authentication and stdio credential
   boundaries.

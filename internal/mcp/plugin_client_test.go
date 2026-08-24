@@ -1,0 +1,258 @@
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+)
+
+type pluginRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f pluginRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
+}
+
+func validPluginInvocationForTest() PluginInvocation {
+	return PluginInvocation{
+		ProtocolVersion: PluginProtocolVersion,
+		InvocationID:    "invocation-123",
+		Tool: ToolIdentity{
+			Name:    "list-orders",
+			Version: pluginTestVersion,
+		},
+		Result: map[string]any{"id": pluginTestResultID},
+		Config: map[string]any{pluginTestModeKey: pluginTestMode},
+	}
+}
+
+func TestPluginClient_Process_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/process", r.URL.Path)
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		var request PluginInvocation
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		require.Equal(t, "invocation-123", request.InvocationID)
+		require.Equal(t, "list-orders", request.Tool.Name)
+		require.Equal(t, map[string]any{"id": pluginTestResultID}, request.Result)
+		require.Equal(t, map[string]any{pluginTestModeKey: pluginTestMode}, request.Config)
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":{"id":"` + pluginTestResultID + `","processed":true}}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	response, err := NewPluginClient().Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"id": pluginTestResultID, "processed": true}, response.Result)
+}
+
+func TestPluginClient_Process_RejectsUnsupportedProtocol(t *testing.T) {
+	plugin := validPluginForTest("http://plugins.example.test")
+	invocation := validPluginInvocationForTest()
+	invocation.ProtocolVersion = "v0"
+	_, err := NewPluginClient().Process(context.Background(), &plugin, invocation)
+	require.Error(t, err)
+}
+
+func TestPluginClient_Process_RequiresExactToolIdentity(t *testing.T) {
+	plugin := validPluginForTest("http://plugins.example.test")
+	for name, mutate := range map[string]func(*PluginInvocation){
+		"missing name":    func(invocation *PluginInvocation) { invocation.Tool.Name = "" },
+		"missing version": func(invocation *PluginInvocation) { invocation.Tool.Version = "" },
+		"invalid version": func(invocation *PluginInvocation) { invocation.Tool.Version = "not-semver" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			invocation := validPluginInvocationForTest()
+			mutate(&invocation)
+			_, err := NewPluginClient().Process(context.Background(), &plugin, invocation)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestPluginClient_Process_RejectsPayloadDataOutsideContract(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		require.NotContains(t, payload, "arguments")
+		require.NotContains(t, payload, "headers")
+		require.NotContains(t, payload, "credentials")
+		require.NotContains(t, payload, "role")
+		_, _ = w.Write([]byte(`{"result":42}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	invocation := validPluginInvocationForTest()
+	response, err := NewPluginClient().Process(context.Background(), &plugin, invocation)
+	require.NoError(t, err)
+	require.Equal(t, float64(42), response.Result)
+}
+
+func TestPluginClient_Process_GeneratesInvocationID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload PluginInvocation
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		require.NotEmpty(t, payload.InvocationID)
+		_, _ = w.Write([]byte(`{"result":true}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	invocation := validPluginInvocationForTest()
+	invocation.InvocationID = ""
+	_, err := NewPluginClient().Process(context.Background(), &plugin, invocation)
+	require.NoError(t, err)
+}
+
+func TestPluginClient_Process_Timeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"result":true}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	plugin.Spec.TimeoutMilliseconds = 10
+	_, err := NewPluginClient().Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), server.URL)
+}
+
+func TestPluginClient_Process_DisablesRedirects(t *testing.T) {
+	var finalCalls int
+	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		finalCalls++
+		_, _ = w.Write([]byte(`{"result":true}`))
+	}))
+	defer final.Close()
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, final.URL+"/v1/process", http.StatusTemporaryRedirect)
+	}))
+	defer redirect.Close()
+
+	plugin := validPluginForTest(redirect.URL)
+	_, err := NewPluginClient().Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.Error(t, err)
+	require.Zero(t, finalCalls)
+	require.NotContains(t, err.Error(), final.URL)
+}
+
+func TestPluginClient_Process_NonSuccessDoesNotExposeBody(t *testing.T) {
+	privateBody := "private-plugin-response"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(privateBody))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	_, err := NewPluginClient().Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), privateBody)
+	require.NotContains(t, err.Error(), server.URL)
+}
+
+func TestPluginClient_Process_RejectsMalformedResponse(t *testing.T) {
+	body := `{"result":`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	_, err := NewPluginClient().Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), body)
+}
+
+func TestPluginClient_Process_RejectsMissingResult(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	_, err := NewPluginClient().Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.Error(t, err)
+}
+
+func TestPluginClient_Process_RejectsOversizedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"result":"` + strings.Repeat("x", maxPluginJSONBytes) + `"}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	_, err := NewPluginClient().Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), server.URL)
+}
+
+func TestPluginClient_Process_RejectsOversizedRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Fatal("oversized request must be rejected before sending")
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	invocation := validPluginInvocationForTest()
+	invocation.Config = map[string]any{"data": strings.Repeat("x", maxPluginJSONBytes)}
+	_, err := NewPluginClient().Process(context.Background(), &plugin, invocation)
+	require.Error(t, err)
+}
+
+func TestPluginClient_Process_DoesNotRetry(t *testing.T) {
+	calls := 0
+	transport := pluginRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("transport failure")
+	})
+	plugin := validPluginForTest("http://plugins.example.test")
+	client := NewPluginClient(&http.Client{Transport: transport})
+	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.Error(t, err)
+	require.Equal(t, 1, calls)
+}
+
+func TestPluginClient_Process_UsesContextCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(time.Second)
+		_, _ = w.Write([]byte(`{"result":true}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := NewPluginClient().Process(ctx, &plugin, validPluginInvocationForTest())
+	require.Error(t, err)
+}
+
+func TestPluginClient_Process_RejectsNilPlugin(t *testing.T) {
+	_, err := NewPluginClient().Process(context.Background(), nil, validPluginInvocationForTest())
+	require.Error(t, err)
+}
+
+func TestPluginClient_Process_UsesOnlyResultEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"result":{"ok":true},"error":"ignored"}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	response, err := NewPluginClient().Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"ok": true}, response.Result)
+}
