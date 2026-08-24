@@ -99,7 +99,7 @@ Evidence: `.agents/plans/upcoming/rca-sdk-integration-testing.md`.
   output.
 
   Consume the shared authenticated Mock ERP fixture owned by
-  `../upcoming/Plan-Mock-ERP-Fixtures.md`: use `/api/integration/echo` for rendered tools
+  `../active/Plan-Mock-ERP.md`: use `/api/integration/echo` for rendered tools
   and its readback endpoint for downstream assertions. Complete that fixture
   plan before applying this task's manifest.
 
@@ -127,7 +127,7 @@ Evidence: `.agents/plans/upcoming/rca-sdk-integration-testing.md`.
   through the existing admission rules.
 
   Add one guarded operation to the shared OpenAPI document owned by
-  `../upcoming/Plan-Mock-ERP-Fixtures.md` so the generator path has a real
+  `../active/Plan-Mock-ERP.md` so the generator path has a real
   example. Keep the hand-rendered 17-tool integration fixture as the source
   for the governed catalog.
 

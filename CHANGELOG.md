@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Agent, including scoped HTTP bearer authentication and stdio credential
   boundaries.
 
+### Changed
+
+- Pin the standalone MockERP image and versioned OpenAPI contract to `0.1.1`,
+  which includes the authenticated integration fixtures.
+
 ### Fixed
 
 - Keep ERPBridge stdio stdout reserved for MCP JSON-RPC by routing the startup

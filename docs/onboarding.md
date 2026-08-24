@@ -224,7 +224,7 @@ release does not exist.
 **Fix:** Check the configured release and fetch the contract explicitly:
 
 ```bash
-MOCK_ERP_VERSION=0.1.0 make generate-tools
+MOCK_ERP_VERSION=0.1.1 make generate-tools
 ```
 
 If you use a private fork, set `MOCK_ERP_OPENAPI_URL` to its versioned raw URL.

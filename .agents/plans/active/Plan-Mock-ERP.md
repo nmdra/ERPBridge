@@ -8,7 +8,7 @@ Products (Pvt) Ltd (SCP)**: a fictional Sri Lankan FMCG manufacturer, importer,
 and wholesale distributor. The service moves to the new public repository
 `nmdra/mockerp`, preserving the Mock ERP subtree's Git history. ERPBridge
 consumes the published, version-pinned image
-`ghcr.io/nmdra/mockerp:0.1.0` and fetches its matching versioned OpenAPI contract;
+`ghcr.io/nmdra/mockerp:0.1.1` and fetches its matching versioned OpenAPI contract;
 it no longer builds or vendors the Mock ERP source tree.
 
 The completed system will model SCP's Peliyagoda head office and warehouse,
@@ -145,8 +145,8 @@ industrial cleaning products.
    ERPNext DocType. A future ERPNext adapter maps this documented subset; it is
    not part of this plan.
 10. **Pin the downstream runtime contract.** ERPBridge uses
-    `ghcr.io/nmdra/mockerp:0.1.0` and the matching
-    `https://raw.githubusercontent.com/nmdra/mockerp/v0.1.0/openapi.yaml` rather
+    `ghcr.io/nmdra/mockerp:0.1.1` and the matching
+    `https://raw.githubusercontent.com/nmdra/mockerp/v0.1.1/openapi.yaml` rather
     than `latest` or a mutable branch. Upgrades change both values in one
     reviewed task, run the compatibility suite, and publish a new image tag.
 
@@ -283,7 +283,7 @@ numbered descriptions mean the corresponding path under the standalone
   if rg -n 'mock-erp/(README.md|openapi.yaml|Dockerfile|pyproject.toml)' README.md docs Makefile docker-compose.yml; then exit 1; fi
   ```
 
-- [ ] **Task 1: Establish the red integration-fixture and contract test suite.**
+- [x] **Task 1: Establish the red integration-fixture and contract test suite.**
   Add a `test` dependency group with `pytest`, `httpx`, and `pyyaml`, update the
   lockfile, and add an in-process FastAPI test fixture that injects a temporary
   credential and database path. Before routes exist, assert the exact Plugin
@@ -300,13 +300,13 @@ numbered descriptions mean the corresponding path under the standalone
   **Verify:**
 
   ```bash
-  cd mock-erp
+  cd ../mockerp
   uv run --group test pytest tests/test_integration_fixtures.py -q
   ```
 
   The first run must be red because the integration router does not exist.
 
-- [ ] **Task 2: Implement the authenticated deterministic integration fixtures.**
+- [x] **Task 2: Implement the authenticated deterministic integration fixtures.**
   Add a dedicated integration router and register it without changing the
   current finance, HR, or inventory endpoints. Implement the exact static
   `Plugin Fixture`, object-only echo, and process-local echo readback contract;
@@ -324,37 +324,45 @@ numbered descriptions mean the corresponding path under the standalone
   **Verify:**
 
   ```bash
-  cd mock-erp
+  cd ../mockerp
   uv run --group test pytest tests/test_integration_fixtures.py -q
   uv run python -m compileall -q main.py routers tests
   ```
 
-- [ ] **Task 3: Publish the fixture contract and transfer consumer ownership.**
+- [x] **Task 3: Publish the fixture contract and transfer consumer ownership.**
   Add exact integration schemas, paths, success examples, `401`, and `422`
   responses to OpenAPI. Update the fixture guide without exposing a credential.
   Keep the SDK and plugin plans as consumers of the routes only; remove their
-  Mock ERP file ownership and record this plan as the prerequisite. Update both
-  plan indexes to describe the broader staged plan while retaining this file's
-  name and path for those dependencies.
+  Mock ERP file ownership and record this plan as the prerequisite. Publish
+  patch release `v0.1.1` so the fixture contract is available in the image, then
+  update ERPBridge's image and matching OpenAPI pin from `0.1.0` to `0.1.1`.
+  Update both plan indexes to describe the broader staged plan while retaining
+  this file's active path `../active/Plan-Mock-ERP.md` for those dependencies.
 
-  **Seam:** checked-in OpenAPI contract → ERPBridge tool generator and
-  plan-to-plan fixture dependency.
+  **Seam:** checked-in OpenAPI contract → versioned MockERP image → ERPBridge
+  tool generator and plan-to-plan fixture dependency.
 
-  **Files:** `mock-erp/openapi.yaml`, `mock-erp/README.md`,
-  `mock-erp/tests/test_integration_fixtures.py`,
+  **Files:** `../mockerp/openapi.yaml`, `../mockerp/README.md`,
+  `../mockerp/tests/test_integration_fixtures.py`,
+  `../mockerp/CHANGELOG.md`, `../mockerp/pyproject.toml`, `../mockerp/uv.lock`,
   `.agents/plans/active/Plan-SDK-Integration-Testing.md`,
   `.agents/plans/upcoming/Plan-Generic-External-Plugins.md`,
   `.agents/plans/README.md`, `.agents/plans/upcoming/README.md`,
-  `CHANGELOG.md`.
+  `docker-compose.yml`, `Makefile`, `README.md`, `docs/docker.md`,
+  `docs/environment-variables.md`, `docs/onboarding.md`, `docs/faq.md`,
+  `docs/README.md`, `CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
+  cd ../mockerp
   uv run --group test pytest tests/test_integration_fixtures.py -q
   uv run python -c 'import yaml; yaml.safe_load(open("openapi.yaml", encoding="utf-8")); print("valid OpenAPI YAML")'
-  cd ..
-  rg -n 'Plan-Mock-ERP-Fixtures|/api/integration/echo|Plugin Fixture' \
+  cd ../ERPBridge
+  docker compose config --quiet
+  curl --fail --location --silent --show-error https://raw.githubusercontent.com/nmdra/mockerp/v0.1.1/openapi.yaml -o /tmp/mockerp-openapi-v0.1.1.yaml
+  rg -n 'ghcr.io/nmdra/mockerp:0.1.1|raw.githubusercontent.com/nmdra/mockerp/v0.1.1|Plan-Mock-ERP|/api/integration/echo|Plugin Fixture' \
+    docker-compose.yml Makefile README.md docs \
     .agents/plans/active/Plan-SDK-Integration-Testing.md \
     .agents/plans/upcoming/Plan-Generic-External-Plugins.md
   ```

@@ -29,9 +29,9 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | :--- | :--- | :--- |
 | `BASE_URL` | Public URL of the MCP server. | `http://localhost:8080` |
 | `ERP_BASE_URL` | Base URL of the underlying ERP system. | `http://mock-erp:8081` |
-| `MOCK_ERP_IMAGE` | MockERP image used by Compose. | `ghcr.io/nmdra/mockerp:0.1.0` |
-| `MOCK_ERP_VERSION` | MockERP release used for OpenAPI generation. | `0.1.0` |
-| `MOCK_ERP_OPENAPI_URL` | Versioned MockERP OpenAPI URL. | `https://raw.githubusercontent.com/nmdra/mockerp/v0.1.0/openapi.yaml` |
+| `MOCK_ERP_IMAGE` | MockERP image used by Compose. | `ghcr.io/nmdra/mockerp:0.1.1` |
+| `MOCK_ERP_VERSION` | MockERP release used for OpenAPI generation. | `0.1.1` |
+| `MOCK_ERP_OPENAPI_URL` | Versioned MockERP OpenAPI URL. | `https://raw.githubusercontent.com/nmdra/mockerp/v0.1.1/openapi.yaml` |
 | `REDIS_URL` | URL for the Redis cache. | `redis://redis:6379` |
 | `DATABASE_PATH` | Path of the SQLite tool registry inside the container. | `/app/data/erpbridge.db` |
 | `RATE_LIMIT_RPS` | Per-session requests per second. | `10` |
@@ -78,7 +78,7 @@ You can use the local `bridgectl` binary to interact with the server running in 
 3. **Generate a new tool:**
 
     ```bash
-    MOCK_ERP_VERSION=0.1.0 make generate-tools
+    MOCK_ERP_VERSION=0.1.1 make generate-tools
     ```
 
     The target fetches the matching tagged OpenAPI contract and applies the generated YAML.
@@ -159,7 +159,7 @@ Cursor connects to remote MCP servers via HTTP. Use this method when the ERPBrid
 
 ## 7. Troubleshooting
 
-- **Connection Refused:** Make sure that `ERP_BASE_URL` in `docker-compose.yml` uses the service name `http://mock-erp:8081` instead of `localhost`. Compose pulls `ghcr.io/nmdra/mockerp:0.1.0`; override `MOCK_ERP_IMAGE` only with a compatible image.
+- **Connection Refused:** Make sure that `ERP_BASE_URL` in `docker-compose.yml` uses the service name `http://mock-erp:8081` instead of `localhost`. Compose pulls `ghcr.io/nmdra/mockerp:0.1.1`; override `MOCK_ERP_IMAGE` only with a compatible image.
 - **Claude Stdio Timeout:** If Claude fails to connect, build the server binary first and run it directly. This shows any startup errors.
 - **Schema Errors:** Validate the tool definition locally before you apply it:
 
