@@ -5,11 +5,6 @@ starting implementation work.
 
 ## Active
 
-- [`Plan-Agentic-Tools-MCP-Integration.md`](./active/Plan-Agentic-Tools-MCP-Integration.md)
-  — approved execution plan for backward-compatible Stdio hardening, agent
-  interoperability verification, and Codex/OpenCode/OpenClaw/Hermes
-  documentation.
-
 ## Upcoming
 
 - [`Plan-Generic-External-Plugins.md`](./upcoming/Plan-Generic-External-Plugins.md)
@@ -29,6 +24,9 @@ promotion to `active/`.
 
 ## Completed
 
+- [`[COMPLETED]Plan-Agentic-Tools-MCP-Integration.md`](./completed/%5BCOMPLETED%5DPlan-Agentic-Tools-MCP-Integration.md)
+  — backward-compatible Stdio hardening, agent interoperability verification,
+  and Codex/OpenCode/OpenClaw/Hermes documentation.
 - [`[COMPLETED]Plan-Issue-8.md`](./completed/[COMPLETED]Plan-Issue-8.md) — fix
   cold-start MCP invocation metric families.
 - [`[COMPLETED]AuthN-AuthZ-Plan.md`](./completed/[COMPLETED]AuthN-AuthZ-Plan.md)

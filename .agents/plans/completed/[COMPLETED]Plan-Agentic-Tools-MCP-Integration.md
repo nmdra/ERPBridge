@@ -102,7 +102,7 @@ to ERPBridge's role, token, tool-name, CORS, or result-envelope semantics.
   `internal/mcp/auth_test.go`; **Verify:** write failing cases first, then
   `go test ./internal/mcp`.)
 
-- [ ] **Task 3: Verify the server against the unchanged SDK contract.** Start
+- [x] **Task 3: Verify the server against the unchanged SDK contract.** Start
   ERPBridge from the built server with an isolated database path, then run the
   SDK's existing real-server protocol probe and integration suite against that
   instance. The expected result is no SDK source change: `mcp.connect()`,
@@ -153,7 +153,7 @@ record in the isolated memory-mode run.
   **Verify:** in `../erpbridge-docs`, `npm run build` and review generated
   navigation/links.)
 
-- [ ] **Task 6: Complete cross-repository release checks.** Run focused tests
+- [x] **Task 6: Complete cross-repository release checks.** Run focused tests
   after each code task, then the ERPBridge full suite after all server changes.
   Confirm both repositories have clean worktrees and make one Conventional
   Commit per completed task: server fix, server contract tests, ERPBridge docs,
