@@ -398,7 +398,7 @@ numbered descriptions mean the corresponding path under the standalone
   docker compose config --quiet
   ```
 
-- [ ] **Task 5: Build SCP organization, authorization, approvals, and audit history.**
+- [x] **Task 5: Build SCP organization, authorization, approvals, and audit history.**
   Write service and HTTP tests before implementation. Add relational masters
   for company, branch, department hierarchy, designation, employment type,
   users, roles, user-role assignments, approval rules/requests/actions, and
@@ -410,21 +410,22 @@ numbered descriptions mean the corresponding path under the standalone
   **Seam:** authenticated actor → authorization/workflow service → organization
   repository → audit event transaction.
 
-  **Files:** `mock-erp/migrations/002_organization.py` (new),
-  `mock-erp/repositories/organization.py` (new),
-  `mock-erp/services/authorization.py` (new),
-  `mock-erp/services/workflow.py` (new), `mock-erp/services/audit.py` (new),
-  `mock-erp/routers/organization.py` (new), `mock-erp/seed.py`,
-  `mock-erp/main.py`, `mock-erp/openapi.yaml`,
-  `mock-erp/tests/test_organization.py` (new),
-  `mock-erp/tests/test_workflow.py` (new), `mock-erp/README.md`,
-  `CHANGELOG.md`.
+  **Files:** `../mockerp/migrations/002_organization.py` (new),
+  `../mockerp/repositories/organization.py` (new),
+  `../mockerp/services/authorization.py` (new),
+  `../mockerp/services/workflow.py` (new), `../mockerp/services/audit.py` (new),
+  `../mockerp/routers/organization.py` (new), `../mockerp/seed.py`,
+  `../mockerp/main.py`, `../mockerp/openapi.yaml`,
+  `../mockerp/tests/test_organization.py` (new),
+  `../mockerp/tests/test_workflow.py` (new), `../mockerp/README.md`,
+  `../mockerp/CHANGELOG.md`.
 
   **Verify:**
 
   ```bash
-  cd mock-erp
-  uv run --group test pytest tests/test_organization.py tests/test_workflow.py -q
+  cd ../mockerp
+  uv run --locked --group test pytest tests/test_organization.py tests/test_workflow.py -q
+  uv run --locked --group test python -m compileall -q .
   ```
 
 - [ ] **Task 6: Implement the finance foundation and immutable double-entry ledger.**
