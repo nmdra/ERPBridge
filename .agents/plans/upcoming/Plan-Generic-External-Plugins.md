@@ -12,6 +12,11 @@ The first implementation proves the generic contract with one deterministic
 mock response plugin. It does **not** implement OCR, PII masking, binary image
 handling, plugin deployment, or a plugin scheduler.
 
+Plugin source code is stored in the separate `ERPBridge-Plugins` polyrepo
+(`../ERPBridge-Plugins`), not in this repository. The polyrepo can contain
+multiple independently buildable plugins under `plugins/<plugin-name>/`; this
+plan's mock plugin is the first entry in that collection.
+
 ## Current State
 
 - The repository is currently on `main`; the worktree already has unrelated
@@ -56,6 +61,9 @@ handling, plugin deployment, or a plugin scheduler.
   behavior change (`AGENTS.md:37-48`). The matching public pages currently
   live in `../erpbridge-docs/docs/erpbridge/architecture.mdx`, `api.mdx`, and
   `docker.mdx`.
+- The separate `../ERPBridge-Plugins` repository is the source repository for
+  plugin implementations. ERPBridge must consume a pinned plugin image or
+  endpoint and must not store plugin source under this repository.
 
 ## Decisions
 
@@ -119,6 +127,15 @@ handling, plugin deployment, or a plugin scheduler.
    `processedBy: "mock-plugin"` property to a test-only mock ERP response. It
    does not call an OCR, PII, or other external business service.
 
+10. **Plugin implementations use a dedicated polyrepo.** Create or use the
+    separate `ERPBridge-Plugins` repository as a polyrepo. Store each plugin in
+    `plugins/<plugin-name>/` with its own source, tests, dependency manifest,
+    and Dockerfile. The repository root may contain shared SDK code, CI, and
+    release tooling, but plugins must remain independently buildable and
+    releasable. Publish each plugin independently as
+    `ghcr.io/nmdra/erpbridge-plugins/<plugin-name>:<version>`. ERPBridge must
+    not vendor or build these plugin sources.
+
 ## Scope
 
 ### In scope
@@ -130,8 +147,9 @@ handling, plugin deployment, or a plugin scheduler.
   envelopes.
 - Final-result cache correctness, safe errors/logging, and focused metrics-free
   observability through structured logs.
-- A separate mock plugin that consumes the shared Mock ERP fixture contract,
-  and an opt-in Docker Compose integration test.
+- A separate `ERPBridge-Plugins` polyrepo with a proper multi-plugin layout,
+  including the mock plugin that consumes the shared Mock ERP fixture contract,
+  and an opt-in Docker Compose integration test using that plugin.
 - In-repository and public-documentation updates, CLI reference generation,
   changelogs, focused lint, full tests, and atomic commits.
 
@@ -146,6 +164,8 @@ handling, plugin deployment, or a plugin scheduler.
 - Changes to existing MCP tool names, tool schemas, OpenAPI generation, MCP
   transport/session/auth behavior, direct-invoke envelope, role authorization,
   ERP retries, or behavior of any tool without an active binding.
+- Storing plugin source code in ERPBridge; all plugin implementations belong in
+  `../ERPBridge-Plugins/plugins/<plugin-name>/`.
 
 ## Tasks
 
@@ -161,13 +181,13 @@ handling, plugin deployment, or a plugin scheduler.
 
 - [ ] **Task 5: Add bridgectl support for both declarative resources.** Write CLI tests first. Add `bridgectl plugin apply|get|delete|validate` and `bridgectl plugin binding apply|get|delete|validate`. Plugin commands use exact `name@version`; binding commands use binding name. Match tool command behavior for JSON/YAML file input, YAML multi-document/sequence handling, recursive directory apply, output formats, authenticated management requests, server-error propagation, `--hard`, and `--yes`. Keep the existing tool decoder untouched; introduce typed plugin/binding decoders and reuse pure local shape validation while retaining server admission as authoritative. Test endpoint/method/query/body/auth header, document parsing, table/JSON/YAML output, required identity, invalid local definitions, hard-delete confirmation bypass, and server error behavior. (**Seam:** Cobra resource-command family and `doBridgeRequest` helpers; **Files:** `internal/cli/plugin.go` (new), `internal/cli/plugin_binding.go` (new), `internal/cli/plugin_test.go` (new), `internal/cli/plugin_binding_test.go` (new), `internal/cli/root.go`; **Verify:** first demonstrate CLI tests fail, then `go test ./internal/cli -run 'Test(Plugin|PluginBinding)'`; **Commit:** `feat: manage plugins with bridgectl`.)
 
-- [ ] **Task 6: Add a separate mock plugin and run repeatable black-box coverage.** Keep all tests red before implementation. Consume the shared `GET /api/resource/Plugin Fixture` contract from
+- [ ] **Task 6: Add the polyrepo mock plugin and run repeatable black-box coverage.** Keep all tests red before implementation. Create or use the separate `../ERPBridge-Plugins` polyrepo and store the mock plugin under `plugins/mock-plugin/`; future plugins must use the same `plugins/<plugin-name>/` structure and remain independently buildable and releasable. Consume the shared `GET /api/resource/Plugin Fixture` contract from
   `../active/Plan-Mock-ERP.md`, which must be completed before this task. Add a
-  simple standalone `mock-plugin` HTTP service with `/health` and `/v1/process`. The mock plugin must return the supplied result plus `processedBy: "mock-plugin"`; it must not implement OCR/PII behavior. Add a Compose test overlay, isolated project name/ports/volumes, a cleanup-trapped `scripts/test-plugin-integration.sh`, an opt-in Go black-box integration test, and `make test-plugin-integration`. The test starts the isolated stack, applies Plugin/Binding and two hand-authored test tools, then proves both MCP `initialize → tools/list → tools/call` and direct invoke return the same transformed fixture for the bound tool and the unchanged source fixture for the ordinary control tool. The script must tear down only the isolated project, including volumes, even after test failure. (**Seam:** real Docker network from ERPBridge to separately running mock plugin and mock ERP; **Files:** `mock-plugin/main.go` (new), `mock-plugin/Dockerfile` (new), `mock-plugin/main_test.go` (new), `docker-compose.plugin-test.yml` (new), `scripts/test-plugin-integration.sh` (new), `internal/integration/plugin_system_test.go` (new), `Makefile`; **Verify:** first demonstrate the opt-in integration test fails against the unimplemented fixture, then `make test-plugin-integration`, followed by `docker compose -p erpbridge-plugin-test -f docker-compose.yml -f docker-compose.plugin-test.yml ps` returning no running test project after cleanup; **Commit:** `test: add external plugin integration fixture`.)
+  simple standalone `mock-plugin` HTTP service with `/health` and `/v1/process`. The mock plugin must return the supplied result plus `processedBy: "mock-plugin"`; it must not implement OCR/PII behavior. Add a Compose test overlay, isolated project name/ports/volumes, a cleanup-trapped `scripts/test-plugin-integration.sh`, an opt-in Go black-box integration test, and `make test-plugin-integration`. The test starts the isolated stack, applies Plugin/Binding and two hand-authored test tools, then proves both MCP `initialize → tools/list → tools/call` and direct invoke return the same transformed fixture for the bound tool and the unchanged source fixture for the ordinary control tool. The script must tear down only the isolated project, including volumes, even after test failure. (**Seam:** `../ERPBridge-Plugins/plugins/mock-plugin/` image to the real Docker network from ERPBridge to separately running mock plugin and mock ERP; **Files:** `../ERPBridge-Plugins/plugins/mock-plugin/` (new), `docker-compose.plugin-test.yml` (new), `scripts/test-plugin-integration.sh` (new), `internal/integration/plugin_system_test.go` (new), `Makefile`; **Verify:** first demonstrate the opt-in integration test fails against the unimplemented fixture, test the plugin from its own directory with `go test ./...`, build and publish a pinned plugin image, then `make test-plugin-integration`, followed by `docker compose -p erpbridge-plugin-test -f docker-compose.yml -f docker-compose.plugin-test.yml ps` returning no running test project after cleanup; **Commit:** plugin source is committed in `ERPBridge-Plugins`, and ERPBridge integration changes use `test: add external plugin integration fixture`.)
 
 - [ ] **Task 7: Document the control-plane contract and publish the matching public documentation.** In ERPBridge, document the two manifest schemas, plugin deployment boundary, HTTP request/response example, only-supported `after_response` phase, exact version binding, synchronous timeout/failure policy, cache behavior, admin-only APIs, CLI commands, and Docker test/deployment example. Generate the Cobra CLI Markdown reference after commands are stable; add an Unreleased changelog entry. Correct the architecture guide's stale statement that describes the state hash as `count-activeSum-max(updated_at)`: implementation uses a SHA-256 over ordered row identity, activity, and update timestamp (`internal/mcp/store.go:188-209`). In `../erpbridge-docs`, first create the repository-required plugin documentation plan, then add a `plugins.mdx` guide and navigation entry, update architecture/API/Docker pages, update that repository's changelog, and commit it separately. Do not include literal credentials in either repository. (**Seam:** in-repo docs as developer source of truth and Docusaurus site as user-facing mirror; **Files:** `docs/plugin-schema.md` (new), `docs/api.md`, `docs/architecture.md`, `docs/docker.md`, `docs/README.md`, `docs/cli/bridgectl_plugin.md` (generated), `docs/cli/bridgectl_plugin_binding.md` (generated), `CHANGELOG.md`; `../erpbridge-docs/.agents/plans/Plan-plugins.md` (new), `../erpbridge-docs/docs/erpbridge/plugins.mdx` (new), `../erpbridge-docs/docs/erpbridge/architecture.mdx`, `../erpbridge-docs/docs/erpbridge/api.mdx`, `../erpbridge-docs/docs/erpbridge/docker.mdx`, `../erpbridge-docs/sidebars.ts`, `../erpbridge-docs/CHANGELOG.md`; **Verify:** build `bridgectl`, run its document generator into a temporary directory and compare the two generated command files before replacing them, run `npm run build` in `../erpbridge-docs`, and confirm no raw credential appears with `rg -n -i '(api[_-]?key|token|password):\s*[^<$ {]' docs ../erpbridge-docs/docs`; **Commit:** `docs: document external plugin control plane` in ERPBridge and `docs: add ERPBridge plugin guide` in `erpbridge-docs`.)
 
-- [ ] **Task 8: Run required quality gates and make atomic task commits.** For every preceding task, run its focused tests before its single Conventional Commit; include user-facing documentation/changelog changes with the behavior they describe and never commit generated binaries, generated schemas, Docker volumes, or the pre-existing untracked worktree files. After Task 7, run the full ERPBridge suite, targeted lint only across directories changed by this plan, the isolated plugin integration test, and both documentation checks. Review the MCP and direct responses for every legacy tool fixture to confirm existing result envelopes and unbound behavior did not change. (**Seam:** repository quality gates and documented backward-compatible contracts; **Files:** all files changed by Tasks 1-7; **Verify:** `go test ./internal/mcp ./internal/cli ./mock-plugin`, `golangci-lint run ./internal/mcp ./internal/cli ./mock-plugin`, `make test-plugin-integration`, `make test`, `git diff --check`, `git status --short`, and `npm run build` in `../erpbridge-docs`; **Commit:** no additional feature commit—resolve failures in the owning task commit before closing the plan.)
+- [ ] **Task 8: Run required quality gates and make atomic task commits.** For every preceding task, run its focused tests before its single Conventional Commit; include user-facing documentation/changelog changes with the behavior they describe and never commit generated binaries, generated schemas, Docker volumes, plugin source, or the pre-existing untracked worktree files in ERPBridge. After Task 7, run the full ERPBridge suite, targeted lint only across directories changed by this plan, the isolated plugin integration test, and both documentation checks. Review the MCP and direct responses for every legacy tool fixture to confirm existing result envelopes and unbound behavior did not change. (**Seam:** repository quality gates across ERPBridge and `../ERPBridge-Plugins`; **Files:** all files changed by Tasks 1-7 plus `../ERPBridge-Plugins/plugins/mock-plugin/`; **Verify:** `go test ./internal/mcp ./internal/cli`, plugin tests from `../ERPBridge-Plugins/plugins/mock-plugin/`, targeted lint in both repositories, `make test-plugin-integration`, `make test`, `git diff --check`, `git status --short`, and `npm run build` in `../erpbridge-docs`; **Commit:** no additional feature commit—resolve failures in the owning task commit before closing the plan.)
 
 ## Verification
 
@@ -179,8 +199,9 @@ handling, plugin deployment, or a plugin scheduler.
 6. A successful unbound tool does not make an external call and returns its prior normalized JSON unchanged.
 7. Plugin timeout, redirect, malformed/non-2xx/oversized result, and invalid transformed schema follow the binding policy without exposing plugin URLs, payloads, credentials, or plugin response bodies.
 8. Cache hits do not call plugins; any binding/plugin lifecycle change invalidates the affected tool cache before the next request.
-9. The isolated Docker integration stack demonstrates a separately running simple mock plugin and the shared Mock ERP fixture; it leaves no running containers or volumes after cleanup.
-10. Focused tests, targeted lint, `make test-plugin-integration`, `make test`, `git diff --check`, and the public docs `npm run build` are green.
+9. Plugin source is stored in the separate `ERPBridge-Plugins` polyrepo under `plugins/<plugin-name>/`, with `plugins/mock-plugin/` as the first plugin and no plugin source duplicated in ERPBridge.
+10. The isolated Docker integration stack demonstrates a separately running pinned mock plugin from `ERPBridge-Plugins` and the shared Mock ERP fixture; it leaves no running containers or volumes after cleanup.
+11. Focused tests, targeted lint in both repositories, `make test-plugin-integration`, `make test`, `git diff --check`, and the public docs `npm run build` are green.
 
 ## Open Questions
 
