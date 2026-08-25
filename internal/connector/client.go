@@ -70,6 +70,14 @@ func NewClient(rootLog *slog.Logger) *Client {
 	}
 }
 
+func endpointIdentity(target string) string {
+	u, err := url.Parse(target)
+	if err != nil || u.Host == "" {
+		return "unknown"
+	}
+	return u.Host
+}
+
 func (c *Client) applyAuth(req *http.Request, ep EndpointConfig) {
 	if ep.Auth.Key == "" {
 		return
@@ -98,10 +106,11 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 		target += "?" + queryParams.Encode()
 	}
 
+	endpoint := endpointIdentity(target)
+
 	var bodyBytes []byte
 	if body != nil {
 		bodyBytes, _ = io.ReadAll(body)
-		log.Debug("erp request body", slog.String("body", logger.Body(string(bodyBytes))))
 	}
 
 	res, err := c.cb.Execute(func() (any, error) {
@@ -123,7 +132,7 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 
 				log.Debug("erp request attempt",
 					slog.String("method", ep.Method),
-					slog.String("path", ep.Path),
+					slog.String("endpoint", endpoint),
 				)
 
 				resp, err := c.http.Do(req)
@@ -151,8 +160,8 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 
 	if err != nil {
 		log.Error("erp request failed",
-			slog.String("path", ep.Path),
-			slog.String("error", err.Error()),
+			slog.String("endpoint", endpoint),
+			slog.String("error_type", fmt.Sprintf("%T", err)),
 		)
 		return nil, err
 	}
@@ -162,16 +171,11 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 	latency := int(duration.Milliseconds())
 
 	// Record metrics
-	metrics.ERPRequestsTotal.WithLabelValues(ep.Method, ep.Path, fmt.Sprintf("%d", resp.StatusCode)).Inc()
-	metrics.ERPLatency.WithLabelValues(ep.Method, ep.Path).Observe(duration.Seconds())
-
-	// DEBUG: Log response body
-	respBytes, _ := io.ReadAll(resp.Body)
-	resp.Body = io.NopCloser(bytes.NewReader(respBytes))
-	log.Debug("erp response body", slog.String("body", logger.Body(string(respBytes))))
+	metrics.ERPRequestsTotal.WithLabelValues(ep.Method, endpoint, fmt.Sprintf("%d", resp.StatusCode)).Inc()
+	metrics.ERPLatency.WithLabelValues(ep.Method, endpoint).Observe(duration.Seconds())
 
 	log.Info("erp response",
-		slog.String("path", ep.Path),
+		slog.String("endpoint", endpoint),
 		slog.Int("status_code", resp.StatusCode),
 		slog.Int("latency_ms", latency),
 	)

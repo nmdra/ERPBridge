@@ -132,4 +132,4 @@ This decoupling allows you to use the same OpenAPI spec to generate tools for di
 
 - **Secret Decoupling**: Schemas never contain raw tokens or keys. They only contain a reference (`credentialRef`). The middleware resolves these references at the moment of execution using secure environment variables.
 - **Admission Controllers**: The API server rejects any tool definition that contains suspicious strings (like `token` or `key=`) in its endpoint path. Plugin endpoints must be absolute `http` or `https` URLs without userinfo, query parameters, or fragments.
-- **Redaction**: All logs produced by tool executions are automatically filtered to redact sensitive keys defined in `internal/types/sensitive.go`.
+- **Redaction**: Root, buffered, and MCP log sinks filter sensitive attributes using `internal/types/sensitive.go`. ERP request and response bodies are never logged.

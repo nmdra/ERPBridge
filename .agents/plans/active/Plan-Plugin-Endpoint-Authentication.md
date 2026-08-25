@@ -165,7 +165,7 @@ Every code task follows red → green → refactor. Run its focused `Verify:`
 command and `make test` before its stated Conventional Commit; update the
 listed in-repository docs and `CHANGELOG.md` in that same commit.
 
-- [ ] **Task 1: Close existing credential log exposure.** Write failing logger
+- [x] **Task 1: Close existing credential log exposure.** Write failing logger
   and connector tests first. Install `RedactAttr` in the root text/JSON handler
   and replace connector body logging with safe size/metadata logging. Prove
   request bodies, ERP response bodies, authorization values, and sensitive

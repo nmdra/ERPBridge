@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Redact sensitive attributes in root log sinks and stop logging ERP request and response bodies.
 - Keep ERPBridge stdio stdout reserved for MCP JSON-RPC by routing the startup
   banner to stderr.
 

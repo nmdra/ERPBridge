@@ -3,6 +3,7 @@ package logger
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"testing"
@@ -45,6 +46,7 @@ func TestMCPHandler_Redaction(t *testing.T) {
 	}
 	record.AddAttrs(slog.Any("data", data))
 	record.AddAttrs(slog.String(redactedPasswordKey, "p123")) // Exact field name redaction
+	record.AddAttrs(slog.String("authorization", "Bearer mcp-log-secret"))
 
 	if err := h.Handle(ctx, record); err != nil {
 		t.Fatalf("Handle failed: %v", err)
@@ -65,6 +67,9 @@ func TestMCPHandler_Redaction(t *testing.T) {
 	if strings.Contains(output, "p123") {
 		t.Errorf("Output contains unredacted password: %s", output)
 	}
+	if strings.Contains(output, "mcp-log-secret") {
+		t.Errorf("Output contains unredacted authorization value: %s", output)
+	}
 
 	// Verify [REDACTED] is present (masq default)
 	if !strings.Contains(output, "[REDACTED]") {
@@ -74,6 +79,19 @@ func TestMCPHandler_Redaction(t *testing.T) {
 	// Verify plain data is preserved
 	if !strings.Contains(output, "normal-data") {
 		t.Errorf("Output missing plain data: %s", output)
+	}
+
+	select {
+	case notification := <-notifCh:
+		encoded, err := json.Marshal(notification)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encoded), "mcp-log-secret") {
+			t.Fatalf("MCP notification contains unredacted authorization value: %s", encoded)
+		}
+	default:
+		t.Fatal("expected an MCP log notification")
 	}
 
 	// Verify map redaction
