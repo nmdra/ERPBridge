@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/nmdra/ERPBridge/internal/bridgeclient"
+	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/idp"
 	"github.com/nmdra/ERPBridge/internal/mcp"
 )
@@ -26,14 +27,16 @@ type TopologyResponse struct {
 	Edges []TopologyEdge `json:"edges"`
 }
 
-// TopologyNode represents a transport, tool, API, or unresolved endpoint.
+// TopologyNode represents a transport, tool, API, plugin, binding, or unresolved endpoint.
 type TopologyNode struct {
-	ID           string              `json:"id"`
-	Kind         string              `json:"kind"`
-	Label        string              `json:"label"`
-	ContextState string              `json:"contextState,omitempty"`
-	Tool         *ToolProjection     `json:"tool,omitempty"`
-	API          *TopologyAPIDetails `json:"api,omitempty"`
+	ID           string                   `json:"id"`
+	Kind         string                   `json:"kind"`
+	Label        string                   `json:"label"`
+	ContextState string                   `json:"contextState,omitempty"`
+	Tool         *ToolProjection          `json:"tool,omitempty"`
+	API          *TopologyAPIDetails      `json:"api,omitempty"`
+	Plugin       *PluginProjection        `json:"plugin,omitempty"`
+	Binding      *PluginBindingProjection `json:"binding,omitempty"`
 }
 
 // TopologyAPIDetails contains an API registry projection without credentials.
@@ -87,6 +90,8 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	plugins, bindings, pluginsAvailable := h.fetchPluginResources(r, ctx)
+
 	registry := h.registry
 	if registry == nil {
 		registry, err = idp.NewRegistry("", slog.Default())
@@ -119,11 +124,13 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 	}
+	toolIDs := make(map[string]string, len(tools))
 	for _, tool := range tools {
 		if len(graph.Nodes) >= maxTopologyNodes {
 			break
 		}
 		toolID := "tool:" + stableID(tool.Metadata.Name, tool.Metadata.Version)
+		toolIDs[resourceIdentity(tool.Metadata.Name, tool.Metadata.Version)] = toolID
 		projection := projectTool(tool)
 		graph.Nodes = append(graph.Nodes, TopologyNode{ID: toolID, Kind: "mcp-tool", Label: tool.Metadata.Name, Tool: &projection})
 		if len(graph.Edges) < maxTopologyEdges {
@@ -145,10 +152,101 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	if pluginsAvailable {
+		pluginIDs := make(map[string]string, len(plugins))
+		for _, plugin := range plugins {
+			if len(graph.Nodes) >= maxTopologyNodes {
+				break
+			}
+			projection := projectPlugin(plugin)
+			pluginID := "plugin:" + stableID(plugin.Metadata.Name, plugin.Metadata.Version)
+			pluginIDs[resourceIdentity(plugin.Metadata.Name, plugin.Metadata.Version)] = pluginID
+			graph.Nodes = append(graph.Nodes, TopologyNode{
+				ID:     pluginID,
+				Kind:   "external-plugin",
+				Label:  plugin.Metadata.Name,
+				Plugin: &projection,
+			})
+		}
+
+		bindingIDs := make(map[string]string, len(bindings))
+		for _, binding := range bindings {
+			if len(graph.Nodes) >= maxTopologyNodes {
+				break
+			}
+			projection := projectPluginBinding(binding)
+			bindingID := "binding:" + stableID(binding.Metadata.Name, binding.Metadata.Name)
+			bindingIDs[binding.Metadata.Name] = bindingID
+			graph.Nodes = append(graph.Nodes, TopologyNode{
+				ID:      bindingID,
+				Kind:    "plugin-binding",
+				Label:   binding.Metadata.Name,
+				Binding: &projection,
+			})
+		}
+
+		for _, binding := range bindings {
+			bindingID, bindingOK := bindingIDs[binding.Metadata.Name]
+			toolID, toolOK := toolIDs[resourceIdentity(binding.Spec.ToolRef.Name, binding.Spec.ToolRef.Version)]
+			pluginID, pluginOK := pluginIDs[resourceIdentity(binding.Spec.PluginRef.Name, binding.Spec.PluginRef.Version)]
+			if bindingOK && toolOK && len(graph.Edges) < maxTopologyEdges {
+				graph.Edges = append(graph.Edges, TopologyEdge{
+					ID:            "edge:" + toolID + ":" + bindingID,
+					Source:        toolID,
+					Target:        bindingID,
+					MatchKind:     matchExact,
+					Authoritative: true,
+				})
+			}
+			if bindingOK && pluginOK && len(graph.Edges) < maxTopologyEdges {
+				graph.Edges = append(graph.Edges, TopologyEdge{
+					ID:            "edge:" + bindingID + ":" + pluginID,
+					Source:        bindingID,
+					Target:        pluginID,
+					MatchKind:     matchExact,
+					Authoritative: true,
+				})
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, graph)
 }
 
 func targetMCPServer() bridgeclient.Target { return bridgeclient.TargetMCPServer }
+
+func resourceIdentity(name, version string) string {
+	return name + "@" + version
+}
+
+func (h *consoleHandler) fetchPluginResources(r *http.Request, ctx config.Context) ([]mcp.Plugin, []mcp.PluginBinding, bool) {
+	pluginResponse, err := h.upstreamRequest(r, ctx, bridgeclient.TargetMCPServer, "/apis/erpbridge.io/v1/plugins")
+	if err != nil {
+		return nil, nil, false
+	}
+	defer func() { _ = pluginResponse.Body.Close() }()
+	if pluginResponse.StatusCode < http.StatusOK || pluginResponse.StatusCode >= http.StatusMultipleChoices {
+		return nil, nil, false
+	}
+	var plugins []mcp.Plugin
+	if err := jsonDecoder(pluginResponse.Body, &plugins); err != nil {
+		return nil, nil, false
+	}
+
+	bindingResponse, err := h.upstreamRequest(r, ctx, bridgeclient.TargetMCPServer, "/apis/erpbridge.io/v1/pluginbindings")
+	if err != nil {
+		return nil, nil, false
+	}
+	defer func() { _ = bindingResponse.Body.Close() }()
+	if bindingResponse.StatusCode < http.StatusOK || bindingResponse.StatusCode >= http.StatusMultipleChoices {
+		return nil, nil, false
+	}
+	var bindings []mcp.PluginBinding
+	if err := jsonDecoder(bindingResponse.Body, &bindings); err != nil {
+		return nil, nil, false
+	}
+	return plugins, bindings, true
+}
 
 func jsonDecoder(body io.Reader, value any) error {
 	return json.NewDecoder(body).Decode(value)

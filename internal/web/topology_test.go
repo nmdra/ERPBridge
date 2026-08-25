@@ -22,6 +22,59 @@ func TestRootAPIInfersBasePrefixAcrossHTTPMethods(t *testing.T) {
 	}
 }
 
+func TestTopologyIncludesPluginBindingsWhenFeatureIsAvailable(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/apis/erpbridge.io/v1/tools":
+			_, _ = w.Write([]byte(`[{"metadata":{"name":"list_orders","version":"1.0.0"},"spec":{"execution":{"method":"GET","endpoint":"http://erp.local/api/orders"}}}]`))
+		case "/apis/erpbridge.io/v1/plugins":
+			_, _ = w.Write([]byte(`[{"apiVersion":"erpbridge.io/v1","kind":"Plugin","metadata":{"name":"transformer","version":"1.2.0","isActive":true},"spec":{"endpoint":"https://plugin.internal.example/v1/process","timeoutMilliseconds":1500}}]`))
+		case "/apis/erpbridge.io/v1/pluginbindings":
+			_, _ = w.Write([]byte(`[{"apiVersion":"erpbridge.io/v1","kind":"PluginBinding","metadata":{"name":"transform-orders","isActive":true},"spec":{"pluginRef":{"name":"transformer","version":"1.2.0"},"toolRef":{"name":"list_orders","version":"1.0.0"},"phase":"after_response","priority":10,"failurePolicy":"continue"}}]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	cfg := &config.Config{CurrentContext: "local", Contexts: map[string]config.Context{"local": {MCPServer: upstream.URL, ERPBase: "http://erp.local"}}}
+	console, err := NewServer(Options{ListenAddress: "127.0.0.1:0", Handler: NewConsoleHandler(HandlerOptions{Config: cfg})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = console.Close() }()
+
+	request := httptest.NewRequest(http.MethodGet, console.URL()+"/api/console/v1/topology?context=local", nil)
+	request.Host = console.Host()
+	request.Header.Set(CapabilityHeader, console.Capability())
+	recorder := httptest.NewRecorder()
+	console.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", recorder.Code, recorder.Body.String())
+	}
+	var topology TopologyResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &topology); err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]int{}
+	for _, node := range topology.Nodes {
+		kinds[node.Kind]++
+	}
+	if kinds["external-plugin"] != 1 || kinds["plugin-binding"] != 1 {
+		t.Fatalf("plugin nodes = %+v", kinds)
+	}
+	pluginEdges := 0
+	for _, edge := range topology.Edges {
+		if strings.HasPrefix(edge.Source, "binding:") || strings.HasPrefix(edge.Target, "binding:") {
+			pluginEdges++
+		}
+	}
+	if pluginEdges != 2 {
+		t.Fatalf("plugin edges = %d, edges = %+v", pluginEdges, topology.Edges)
+	}
+}
+
 func TestTopologyResolvesExactAmbiguousAndUnresolvedTools(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`[{"metadata":{"name":"exact","version":"1.0.0","module":"finance"},"spec":{"execution":{"method":"GET","endpoint":"http://erp.local/api/invoices","responsePath":"data"},"security":{"credentialRef":"SECRET"}}},{"metadata":{"name":"missing","version":"1.0.0"},"spec":{"execution":{"method":"POST","endpoint":"/not-registered"}}},{"metadata":{"name":"ambiguous","version":"1.0.0"},"spec":{"execution":{"method":"GET","endpoint":"http://erp.local/api/shared"}}}]`))

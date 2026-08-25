@@ -21,6 +21,25 @@ export type TopologyNode = {
     endpointPath: string;
     status?: string;
   };
+  plugin?: {
+    name: string;
+    version: string;
+    type?: string;
+    active: boolean;
+    endpointConfigured: boolean;
+    timeoutMilliseconds: number;
+    configurationPresent: boolean;
+  };
+  binding?: {
+    name: string;
+    active: boolean;
+    pluginRef: { name: string; version: string };
+    toolRef: { name: string; version: string };
+    phase: string;
+    priority: number;
+    failurePolicy: string;
+    configurationPresent: boolean;
+  };
 };
 
 export type TopologyEdge = {

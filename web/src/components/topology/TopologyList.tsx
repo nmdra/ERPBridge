@@ -61,6 +61,8 @@ export function TopologyList({
                     <td className="px-5 py-3">
                       {target?.tool?.endpointPath ??
                         target?.api?.endpointPath ??
+                        target?.binding?.pluginRef.name ??
+                        target?.plugin?.version ??
                         "—"}
                     </td>
                   </tr>

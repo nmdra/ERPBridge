@@ -7,6 +7,7 @@ import {
   Network,
   PanelLeftClose,
   PanelLeftOpen,
+  Plug,
   Settings,
   Wrench,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const navigation = [
   { label: "Logs", href: "/logs", icon: FileText },
   { label: "Metrics", href: "/metrics", icon: BarChart3 },
   { label: "Tools", href: "/tools", icon: Wrench },
+  { label: "Plugins", href: "/plugins", icon: Plug },
   { label: "Topology", href: "/topology", icon: Network },
 ];
 

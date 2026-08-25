@@ -42,6 +42,12 @@ export function Topology({ contextName }: { contextName: string }) {
   const transportNodes = visibleNodes.filter(
     (node) => node.kind === "mcp-transport",
   );
+  const bindingNodes = visibleNodes.filter(
+    (node) => node.kind === "plugin-binding",
+  );
+  const pluginNodes = visibleNodes.filter(
+    (node) => node.kind === "external-plugin",
+  );
   return (
     <div className="space-y-4">
       <Card>
@@ -78,6 +84,12 @@ export function Topology({ contextName }: { contextName: string }) {
         <span className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-2 py-1 font-medium">
           ERP APIs ({apiNodes.length})
         </span>
+        <span className="rounded-md border border-amber-500/60 bg-amber-500/10 px-2 py-1">
+          Bindings ({bindingNodes.length})
+        </span>
+        <span className="rounded-md border border-violet-500/60 bg-violet-500/10 px-2 py-1">
+          Plugins ({pluginNodes.length})
+        </span>
         {apiNodes.map((node) => (
           <button
             className="rounded-md border border-emerald-500/40 px-2 py-1 text-left text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
@@ -105,11 +117,55 @@ export function Topology({ contextName }: { contextName: string }) {
                 {selected.kind}{" "}
                 {selected.contextState ? `· ${selected.contextState}` : ""}
               </p>
-              <p className="mt-2 text-sm">
-                {selected.tool?.endpointPath ??
-                  selected.api?.endpointPath ??
-                  "No endpoint path"}
-              </p>
+              {selected.tool ? (
+                <p className="mt-2 text-sm">
+                  {selected.tool.endpointPath ?? "No endpoint path"}
+                </p>
+              ) : selected.plugin ? (
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground">Version</dt>
+                    <dd>{selected.plugin.version}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Endpoint</dt>
+                    <dd>
+                      {selected.plugin.endpointConfigured
+                        ? "Configured"
+                        : "Not configured"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Health</dt>
+                    <dd>Unknown</dd>
+                  </div>
+                </dl>
+              ) : selected.binding ? (
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground">Plugin</dt>
+                    <dd>
+                      {selected.binding.pluginRef.name}@
+                      {selected.binding.pluginRef.version}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Phase</dt>
+                    <dd>
+                      {selected.binding.phase} · priority{" "}
+                      {selected.binding.priority}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Failure policy</dt>
+                    <dd>{selected.binding.failurePolicy}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="mt-2 text-sm">
+                  {selected.api?.endpointPath ?? "No endpoint path"}
+                </p>
+              )}
             </CardContent>
           </Card>
         ) : (

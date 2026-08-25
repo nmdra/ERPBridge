@@ -8,7 +8,15 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
-import { AlertTriangle, Database, Network, Server, Wrench } from "lucide-react";
+import {
+  AlertTriangle,
+  Database,
+  Link2,
+  Network,
+  Plug,
+  Server,
+  Wrench,
+} from "lucide-react";
 import "@xyflow/react/dist/style.css";
 
 import type { TopologyNode } from "../../hooks/useTopology";
@@ -23,6 +31,8 @@ function NodeIcon({ kind }: { kind: string }) {
   if (kind === "erp-api") return <Database aria-hidden="true" size={15} />;
   if (kind === "mcp-tool") return <Wrench aria-hidden="true" size={15} />;
   if (kind === "mcp-transport") return <Network aria-hidden="true" size={15} />;
+  if (kind === "external-plugin") return <Plug aria-hidden="true" size={15} />;
+  if (kind === "plugin-binding") return <Link2 aria-hidden="true" size={15} />;
   if (kind === "unresolved-endpoint") {
     return <AlertTriangle aria-hidden="true" size={15} />;
   }
@@ -33,6 +43,9 @@ function nodeClass(kind: string) {
   if (kind === "erp-api") return "border-emerald-500/60 bg-emerald-500/10";
   if (kind === "mcp-tool") return "border-primary/60 bg-primary/10";
   if (kind === "mcp-transport") return "border-sky-500/60 bg-sky-500/10";
+  if (kind === "external-plugin")
+    return "border-violet-500/60 bg-violet-500/10";
+  if (kind === "plugin-binding") return "border-amber-500/60 bg-amber-500/10";
   if (kind === "unresolved-endpoint") {
     return "border-destructive/60 bg-destructive/10";
   }
@@ -83,12 +96,17 @@ function groupNodes(nodes: TopologyNode[], kind: string) {
 function layoutTopologyNodes(nodes: TopologyNode[]): TopologyFlowNode[] {
   const transports = groupNodes(nodes, "mcp-transport");
   const tools = groupNodes(nodes, "mcp-tool");
+  const bindings = groupNodes(nodes, "plugin-binding");
+  const plugins = groupNodes(nodes, "external-plugin");
   const apis = nodes.filter(
     (node) => node.kind === "erp-api" || node.kind === "unresolved-endpoint",
   );
   const toolRows = Math.max(1, Math.ceil(tools.length / toolColumns));
-  const centerY = ((toolRows - 1) * rowGap) / 2;
-  const apiX = 280 + toolColumns * columnGap;
+  const rightRows = Math.max(1, bindings.length, plugins.length, apis.length);
+  const centerY = ((Math.max(toolRows, rightRows) - 1) * rowGap) / 2;
+  const rightX = 280 + toolColumns * columnGap;
+  const pluginX = rightX + 220;
+  const apiX = pluginX + 220;
 
   const place = (
     node: TopologyNode,
@@ -115,6 +133,18 @@ function layoutTopologyNodes(nodes: TopologyNode[]): TopologyFlowNode[] {
       place(node, {
         x: 280 + (index % toolColumns) * columnGap,
         y: Math.floor(index / toolColumns) * rowGap,
+      }),
+    ),
+    ...bindings.map((node, index) =>
+      place(node, {
+        x: rightX,
+        y: centerY + (index - (bindings.length - 1) / 2) * rowGap,
+      }),
+    ),
+    ...plugins.map((node, index) =>
+      place(node, {
+        x: pluginX,
+        y: centerY + (index - (plugins.length - 1) / 2) * rowGap,
       }),
     ),
     ...apis.map((node, index) =>
@@ -158,6 +188,12 @@ export function TopologyCanvas({
   ).length;
   const toolCount = nodes.filter((node) => node.kind === "mcp-tool").length;
   const apiCount = nodes.filter((node) => node.kind === "erp-api").length;
+  const pluginCount = nodes.filter(
+    (node) => node.kind === "external-plugin",
+  ).length;
+  const bindingCount = nodes.filter(
+    (node) => node.kind === "plugin-binding",
+  ).length;
   const flowEdges: Edge[] = edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
@@ -209,6 +245,14 @@ export function TopologyCanvas({
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm border border-emerald-500/60 bg-emerald-500/20" />
           ERP APIs ({apiCount})
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm border border-amber-500/60 bg-amber-500/20" />
+          Bindings ({bindingCount})
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm border border-violet-500/60 bg-violet-500/20" />
+          Plugins ({pluginCount})
         </span>
         <span>Animated edges indicate inferred base-prefix matches.</span>
       </div>

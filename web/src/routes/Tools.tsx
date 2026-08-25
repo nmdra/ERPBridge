@@ -6,6 +6,7 @@ import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton } from "../components/ui/skeleton";
 import { StatusBadge } from "../components/status/StatusBadge";
 import {
+  usePluginBindings,
   useTools,
   type ToolManifest,
   type ToolProjection,
@@ -363,6 +364,74 @@ export function Tools({ contextName }: { contextName: string }) {
   );
 }
 
+function PluginBindingDetails({
+  contextName,
+  tool,
+}: {
+  contextName: string;
+  tool: ToolProjection;
+}) {
+  const bindings = usePluginBindings(contextName);
+  if (bindings.loading || bindings.data?.state !== "available") return null;
+  const matches = bindings.data.items.filter(
+    (binding) =>
+      binding.toolRef?.name === tool.name &&
+      binding.toolRef?.version === tool.version,
+  );
+
+  return (
+    <Card>
+      <CardContent>
+        <h2 className="font-medium">Plugin bindings</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Read-only bindings for this exact tool version. Plugin endpoints,
+          credentials, and static configuration are not shown.
+        </p>
+        {!matches.length ? (
+          <p className="mt-3 text-sm">No plugin bindings are registered.</p>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">
+                Plugin bindings for this tool
+              </caption>
+              <thead className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Binding</th>
+                  <th className="px-3 py-2">Plugin</th>
+                  <th className="px-3 py-2">Phase</th>
+                  <th className="px-3 py-2">Policy</th>
+                  <th className="px-3 py-2">Configuration</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matches.map((binding) => (
+                  <tr
+                    className="border-b border-border last:border-0"
+                    key={binding.name}
+                  >
+                    <th className="px-3 py-2 font-medium">{binding.name}</th>
+                    <td className="px-3 py-2">
+                      {binding.pluginRef.name}@{binding.pluginRef.version}
+                    </td>
+                    <td className="px-3 py-2">
+                      {binding.phase} · priority {binding.priority}
+                    </td>
+                    <td className="px-3 py-2">{binding.failurePolicy}</td>
+                    <td className="px-3 py-2">
+                      {binding.configurationPresent ? "Present" : "None"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ToolDetails({
   contextName,
   toolName,
@@ -429,6 +498,7 @@ export function ToolDetails({
         <>
           <ManifestDetails manifest={tool.manifest} />
           <OperationalDetails tool={tool} />
+          <PluginBindingDetails contextName={contextName} tool={tool} />
         </>
       ) : (
         <EmptyState

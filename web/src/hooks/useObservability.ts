@@ -63,6 +63,27 @@ export type ToolManifest = {
   };
 };
 
+export type PluginProjection = {
+  name: string;
+  version: string;
+  type?: string;
+  active: boolean;
+  endpointConfigured: boolean;
+  timeoutMilliseconds: number;
+  configurationPresent: boolean;
+};
+
+export type PluginBindingProjection = {
+  name: string;
+  active: boolean;
+  pluginRef: { name: string; version: string };
+  toolRef: { name: string; version: string };
+  phase: string;
+  priority: number;
+  failurePolicy: string;
+  configurationPresent: boolean;
+};
+
 export type ToolProjection = {
   name: string;
   version: string;
@@ -85,6 +106,11 @@ export type ToolProjection = {
 };
 
 type ToolResponse = { state: string; items: ToolProjection[] };
+type PluginResponse = { state: string; items: PluginProjection[] };
+type PluginBindingResponse = {
+  state: string;
+  items: PluginBindingProjection[];
+};
 
 type AsyncState<T> = { data: T | null; error: string | null; loading: boolean };
 
@@ -109,6 +135,76 @@ export function useTools(contextName: string): AsyncState<ToolResponse> {
             data: null,
             error:
               error instanceof Error ? error.message : "Tools are unavailable",
+            loading: false,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [contextName]);
+  return state;
+}
+
+export function usePlugins(contextName: string): AsyncState<PluginResponse> {
+  const [state, setState] = useState<AsyncState<PluginResponse>>({
+    data: null,
+    error: null,
+    loading: true,
+  });
+  useEffect(() => {
+    let active = true;
+    setState({ data: null, error: null, loading: true });
+    apiFetch<PluginResponse>(
+      `/api/console/v1/plugins?context=${encodeURIComponent(contextName)}`,
+    )
+      .then((data) => {
+        if (active) setState({ data, error: null, loading: false });
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setState({
+            data: null,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Plugins are unavailable",
+            loading: false,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [contextName]);
+  return state;
+}
+
+export function usePluginBindings(
+  contextName: string,
+): AsyncState<PluginBindingResponse> {
+  const [state, setState] = useState<AsyncState<PluginBindingResponse>>({
+    data: null,
+    error: null,
+    loading: true,
+  });
+  useEffect(() => {
+    let active = true;
+    setState({ data: null, error: null, loading: true });
+    apiFetch<PluginBindingResponse>(
+      `/api/console/v1/plugin-bindings?context=${encodeURIComponent(contextName)}`,
+    )
+      .then((data) => {
+        if (active) setState({ data, error: null, loading: false });
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setState({
+            data: null,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Plugin bindings are unavailable",
             loading: false,
           });
         }
