@@ -2,7 +2,9 @@ import {
   Background,
   Controls,
   Handle,
+  MarkerType,
   MiniMap,
+  Panel,
   Position,
   ReactFlow,
   type Edge,
@@ -19,11 +21,17 @@ import {
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 
-import type { TopologyNode } from "../../hooks/useTopology";
+import type {
+  TopologyEdge,
+  TopologyNode,
+  TopologySelection,
+} from "../../hooks/useTopology";
 
 type FlowNodeData = {
   label: string;
   kind: string;
+  selected: boolean;
+  dimmed: boolean;
   onSelect: () => void;
 };
 
@@ -39,24 +47,35 @@ function NodeIcon({ kind }: { kind: string }) {
   return <Server aria-hidden="true" size={15} />;
 }
 
-function nodeClass(kind: string) {
-  if (kind === "erp-api") return "border-emerald-500/60 bg-emerald-500/10";
-  if (kind === "mcp-tool") return "border-primary/60 bg-primary/10";
-  if (kind === "mcp-transport") return "border-sky-500/60 bg-sky-500/10";
-  if (kind === "external-plugin")
-    return "border-violet-500/60 bg-violet-500/10";
-  if (kind === "plugin-binding") return "border-amber-500/60 bg-amber-500/10";
-  if (kind === "unresolved-endpoint") {
-    return "border-destructive/60 bg-destructive/10";
-  }
-  return "border-border bg-card";
+function nodeClass(kind: string, selected: boolean, dimmed: boolean) {
+  const colorClass =
+    kind === "erp-api"
+      ? "border-emerald-500/60 bg-emerald-500/10"
+      : kind === "mcp-tool"
+        ? "border-primary/60 bg-primary/10"
+        : kind === "mcp-transport"
+          ? "border-sky-500/60 bg-sky-500/10"
+          : kind === "external-plugin"
+            ? "border-violet-500/60 bg-violet-500/10"
+            : kind === "plugin-binding"
+              ? "border-amber-500/60 bg-amber-500/10"
+              : kind === "unresolved-endpoint"
+                ? "border-destructive/60 bg-destructive/10"
+                : "border-border bg-card";
+  return [
+    "relative w-40 min-w-40 max-w-40 rounded-md border px-3 py-2 text-card-foreground shadow-sm outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-ring",
+    colorClass,
+    selected ? "z-20 ring-2 ring-primary shadow-lg" : "",
+    dimmed ? "opacity-25" : "opacity-100",
+  ].join(" ");
 }
 
 function TopologyFlowNode({ data }: { data: FlowNodeData }) {
   return (
     <div
       aria-label={`${data.label}, ${data.kind}`}
-      className={`relative w-40 min-w-40 max-w-40 rounded-md border px-3 py-2 text-card-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${nodeClass(data.kind)}`}
+      aria-pressed={data.selected}
+      className={nodeClass(data.kind, data.selected, data.dimmed)}
       onClick={data.onSelect}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -83,7 +102,7 @@ function TopologyFlowNode({ data }: { data: FlowNodeData }) {
 }
 
 const nodeTypes = { topology: TopologyFlowNode };
-const toolColumns = 8;
+const toolColumns = 6;
 const columnGap = 190;
 const rowGap = 100;
 
@@ -93,7 +112,31 @@ function groupNodes(nodes: TopologyNode[], kind: string) {
   return nodes.filter((node) => node.kind === kind);
 }
 
-function layoutTopologyNodes(nodes: TopologyNode[]): TopologyFlowNode[] {
+function selectedConnectedIDs(
+  nodes: TopologyNode[],
+  edges: TopologyEdge[],
+  selection: TopologySelection,
+) {
+  if (!selection) return new Set<string>();
+  if (selection.kind === "node") {
+    const connected = new Set([selection.id]);
+    for (const edge of edges) {
+      if (edge.source === selection.id) connected.add(edge.target);
+      if (edge.target === selection.id) connected.add(edge.source);
+    }
+    return connected;
+  }
+  const edge = edges.find((candidate) => candidate.id === selection.id);
+  return edge
+    ? new Set([edge.source, edge.target])
+    : new Set(nodes.map((node) => node.id));
+}
+
+function layoutTopologyNodes(
+  nodes: TopologyNode[],
+  edges: TopologyEdge[],
+  selection: TopologySelection,
+): TopologyFlowNode[] {
   const transports = groupNodes(nodes, "mcp-transport");
   const tools = groupNodes(nodes, "mcp-tool");
   const bindings = groupNodes(nodes, "plugin-binding");
@@ -101,6 +144,7 @@ function layoutTopologyNodes(nodes: TopologyNode[]): TopologyFlowNode[] {
   const apis = nodes.filter(
     (node) => node.kind === "erp-api" || node.kind === "unresolved-endpoint",
   );
+  const connectedIDs = selectedConnectedIDs(nodes, edges, selection);
   const toolRows = Math.max(1, Math.ceil(tools.length / toolColumns));
   const rightRows = Math.max(1, bindings.length, plugins.length, apis.length);
   const centerY = ((Math.max(toolRows, rightRows) - 1) * rowGap) / 2;
@@ -117,6 +161,8 @@ function layoutTopologyNodes(nodes: TopologyNode[]): TopologyFlowNode[] {
     data: {
       label: node.label,
       kind: node.kind,
+      selected: selection?.kind === "node" && selection.id === node.id,
+      dimmed: Boolean(selection) && !connectedIDs.has(node.id),
       onSelect: () => undefined,
     },
     type: "topology",
@@ -156,56 +202,68 @@ function layoutTopologyNodes(nodes: TopologyNode[]): TopologyFlowNode[] {
   ];
 }
 
+function edgeColor(matchKind: string) {
+  if (matchKind === "unresolved") return "hsl(var(--destructive))";
+  if (matchKind === "ambiguous") return "hsl(38 92% 50%)";
+  if (matchKind === "base-prefix") return "hsl(221 83% 53%)";
+  return "hsl(var(--primary))";
+}
+
 export function TopologyCanvas({
   nodes,
   edges,
-  onSelect,
+  selection,
+  onSelectNode,
+  onSelectEdge,
+  onClearSelection,
 }: {
   nodes: TopologyNode[];
-  edges: Array<{
-    id: string;
-    source: string;
-    target: string;
-    matchKind: string;
-  }>;
-  onSelect: (node: TopologyNode) => void;
+  edges: TopologyEdge[];
+  selection: TopologySelection;
+  onSelectNode: (id: string) => void;
+  onSelectEdge: (id: string) => void;
+  onClearSelection: () => void;
 }) {
-  const flowNodes: Node<FlowNodeData>[] = layoutTopologyNodes(nodes).map(
-    (node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        onSelect: () => {
-          const selected = nodes.find((candidate) => candidate.id === node.id);
-          if (selected) onSelect(selected);
-        },
-      },
-    }),
-  );
-  const nodeKey = nodes.map((node) => node.id).join("|");
-  const transportCount = nodes.filter(
-    (node) => node.kind === "mcp-transport",
-  ).length;
-  const toolCount = nodes.filter((node) => node.kind === "mcp-tool").length;
-  const apiCount = nodes.filter((node) => node.kind === "erp-api").length;
-  const pluginCount = nodes.filter(
-    (node) => node.kind === "external-plugin",
-  ).length;
-  const bindingCount = nodes.filter(
-    (node) => node.kind === "plugin-binding",
-  ).length;
-  const flowEdges: Edge[] = edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    animated: edge.matchKind === "base-prefix",
-    style: {
-      stroke:
-        edge.matchKind === "unresolved"
-          ? "hsl(var(--destructive))"
-          : "hsl(var(--primary))",
+  const flowNodes: Node<FlowNodeData>[] = layoutTopologyNodes(
+    nodes,
+    edges,
+    selection,
+  ).map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      onSelect: () => onSelectNode(node.id),
     },
   }));
+  const flowEdges: Edge[] = edges.map((edge) => {
+    const selected = selection?.kind === "edge" && selection.id === edge.id;
+    const connected =
+      !selection ||
+      selected ||
+      (selection.kind === "node" &&
+        (edge.source === selection.id || edge.target === selection.id));
+    const color = edgeColor(edge.matchKind);
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      animated: edge.matchKind === "base-prefix",
+      selected,
+      label: edge.matchKind,
+      labelStyle: { fontSize: 10, fontWeight: selected ? 700 : 500 },
+      labelBgStyle: { fill: "hsl(var(--card))", fillOpacity: 0.9 },
+      labelBgPadding: [4, 2],
+      labelBgBorderRadius: 4,
+      markerEnd: { type: MarkerType.ArrowClosed, color },
+      style: {
+        stroke: color,
+        strokeWidth: selected ? 3 : 1.5,
+        opacity: connected ? 1 : 0.2,
+      },
+      zIndex: selected ? 10 : 0,
+    };
+  });
+
   return (
     <div className="space-y-2">
       <div
@@ -214,20 +272,38 @@ export function TopologyCanvas({
       >
         <ReactFlow
           edges={flowEdges}
-          fitView={false}
-          key={nodeKey}
+          edgesFocusable
+          elevateEdgesOnSelect
+          fitView
+          fitViewOptions={{ duration: 200, maxZoom: 1.2, padding: 0.2 }}
+          maxZoom={1.5}
           minZoom={0.1}
           nodeTypes={nodeTypes}
           nodes={flowNodes}
-          onInit={(instance) => {
-            window.setTimeout(() => {
-              instance.fitView({ padding: 0.2, duration: 0 });
-            }, 500);
-          }}
+          nodesFocusable
+          onEdgeClick={(_, edge) => onSelectEdge(edge.id)}
+          onNodeClick={(_, node) => onSelectNode(node.id)}
+          onPaneClick={onClearSelection}
         >
           <Background />
           <Controls />
-          <MiniMap />
+          <MiniMap
+            nodeColor={(node) => {
+              if (node.data?.kind === "external-plugin") return "#8b5cf6";
+              if (node.data?.kind === "mcp-tool") return "#2563eb";
+              if (node.data?.kind === "plugin-binding") return "#d97706";
+              if (node.data?.kind === "erp-api") return "#059669";
+              return "#64748b";
+            }}
+            pannable
+            zoomable
+          />
+          <Panel
+            className="rounded-md border border-border bg-card/90 px-2 py-1 text-xs text-muted-foreground shadow-sm"
+            position="top-left"
+          >
+            Click a node or relationship to inspect it. Press Escape to clear.
+          </Panel>
         </ReactFlow>
       </div>
       <div
@@ -236,25 +312,25 @@ export function TopologyCanvas({
       >
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm border border-sky-500/60 bg-sky-500/20" />
-          MCP transport ({transportCount})
+          Transport
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm border border-primary/60 bg-primary/20" />
-          MCP tools ({toolCount})
+          MCP tool
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm border border-emerald-500/60 bg-emerald-500/20" />
-          ERP APIs ({apiCount})
+          ERP API
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm border border-amber-500/60 bg-amber-500/20" />
-          Bindings ({bindingCount})
+          Binding
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm border border-violet-500/60 bg-violet-500/20" />
-          Plugins ({pluginCount})
+          Plugin
         </span>
-        <span>Animated edges indicate inferred base-prefix matches.</span>
+        <span>Edge labels show match confidence.</span>
       </div>
     </div>
   );

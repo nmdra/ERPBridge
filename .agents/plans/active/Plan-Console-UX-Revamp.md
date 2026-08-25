@@ -122,7 +122,7 @@ mutation interface.
   **Verify:** `go test ./internal/web -run TestTopology`, focused topology
   frontend tests.)
 
-- [ ] **Task 2: Add production-grade topology facets and clear state.** Add a
+- [x] **Task 2: Add production-grade topology facets and clear state.** Add a
   search input with a result count, category multi-select, match-confidence
   filter, context-state filter, active-filter chips, and clear-all control.
   Show disabled/empty facet states and a truncation warning. Ensure one
@@ -133,7 +133,7 @@ mutation interface.
   **Verify:** `npm test --prefix web -- --run src/routes/Topology.test.tsx`,
   `npm run typecheck --prefix web`, `npm run lint --prefix web`.)
 
-- [ ] **Task 3: Implement node and edge selection/highlighting.** Make canvas
+- [x] **Task 3: Implement node and edge selection/highlighting.** Make canvas
   selection controlled by the shared ID model. Add node/edge click handling,
   pane/Escape clear behavior, selected and connected styles, dimmed unrelated
   nodes/edges, `elevateEdgesOnSelect`, accessible focus/selection announcements,
@@ -147,7 +147,7 @@ mutation interface.
   **Verify:** focused topology tests covering node selection, edge selection,
   keyboard clear, dimming, and safe inspector text.)
 
-- [ ] **Task 4: Make the accessible topology list fully interactive.** Replace
+- [x] **Task 4: Make the accessible topology list fully interactive.** Replace
   plain relationship text with selectable node/edge rows or buttons, expose
   selected state and match labels, keep source/target names readable, and make
   list selection synchronize with the canvas and inspector. Add empty, filtered,

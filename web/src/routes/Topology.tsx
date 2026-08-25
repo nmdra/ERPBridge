@@ -1,10 +1,26 @@
-import { lazy, Suspense, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { AlertTriangle, Filter, X } from "lucide-react";
 
 import { Card, CardContent } from "../components/ui/card";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton } from "../components/ui/skeleton";
 import { TopologyList } from "../components/topology/TopologyList";
-import { useTopology, type TopologyNode } from "../hooks/useTopology";
+import {
+  topologyNodeKinds,
+  useTopology,
+  type TopologyEdge,
+  type TopologyMatchKind,
+  type TopologyNode,
+  type TopologyNodeKind,
+  type TopologySelection,
+} from "../hooks/useTopology";
 
 const TopologyCanvas = lazy(() =>
   import("../components/topology/TopologyCanvas").then((module) => ({
@@ -12,12 +28,357 @@ const TopologyCanvas = lazy(() =>
   })),
 );
 
+const nodeKindLabels: Record<TopologyNodeKind, string> = {
+  "mcp-transport": "MCP transport",
+  "mcp-tool": "MCP tools",
+  "erp-api": "ERP APIs",
+  "plugin-binding": "Bindings",
+  "external-plugin": "Plugins",
+  "unresolved-endpoint": "Unresolved endpoints",
+};
+
+const matchKindLabels: Record<TopologyMatchKind, string> = {
+  exact: "Exact",
+  "base-prefix": "Base prefix",
+  ambiguous: "Ambiguous",
+  unresolved: "Unresolved",
+};
+
+const matchKinds: TopologyMatchKind[] = [
+  "exact",
+  "base-prefix",
+  "ambiguous",
+  "unresolved",
+];
+const contextStates = ["context matched", "unassigned"] as const;
+
+type FilterCheckboxProps = {
+  label: string;
+  count?: number;
+  checked: boolean;
+  onChange: () => void;
+};
+
+function FilterCheckbox({
+  label,
+  count,
+  checked,
+  onChange,
+}: FilterCheckboxProps) {
+  return (
+    <label className="flex min-h-9 items-center gap-2 rounded-md px-2 text-sm hover:bg-muted">
+      <input
+        checked={checked}
+        className="h-4 w-4 rounded border-border text-primary focus:ring-ring"
+        onChange={onChange}
+        type="checkbox"
+      />
+      <span className="min-w-0 flex-1">{label}</span>
+      {count !== undefined ? (
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {count}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+function toggleValue<T extends string>(values: T[], value: T) {
+  return values.includes(value)
+    ? values.filter((item) => item !== value)
+    : [...values, value];
+}
+
+function nodeSearchText(node: TopologyNode) {
+  return [
+    node.label,
+    node.kind,
+    node.contextState,
+    node.tool?.name,
+    node.tool?.version,
+    node.tool?.endpointPath,
+    node.api?.name,
+    node.api?.module,
+    node.api?.endpointPath,
+    node.plugin?.name,
+    node.plugin?.version,
+    node.binding?.name,
+    node.binding?.pluginRef.name,
+    node.binding?.pluginRef.version,
+    node.binding?.toolRef.name,
+    node.binding?.toolRef.version,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function edgeSearchText(edge: TopologyEdge) {
+  return `${edge.matchKind} ${edge.contextState ?? "unassigned"}`.toLowerCase();
+}
+
+function nodeContextState(node: TopologyNode) {
+  return node.contextState || "unassigned";
+}
+
+function TopologyInspector({
+  selectedNode,
+  selectedEdge,
+  nodes,
+}: {
+  selectedNode: TopologyNode | null;
+  selectedEdge: TopologyEdge | null;
+  nodes: TopologyNode[];
+}) {
+  if (selectedEdge) {
+    const source = nodes.find((node) => node.id === selectedEdge.source);
+    const target = nodes.find((node) => node.id === selectedEdge.target);
+    return (
+      <Card aria-label="Selected topology relationship">
+        <CardContent>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+            Selected relationship
+          </p>
+          <h2 className="mt-1 font-medium">Selected relationship</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {source?.label ?? "Unknown"} → {target?.label ?? "Unknown"}
+          </p>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div>
+              <dt className="text-muted-foreground">Match confidence</dt>
+              <dd>
+                {matchKindLabels[selectedEdge.matchKind as TopologyMatchKind] ??
+                  selectedEdge.matchKind}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Authority</dt>
+              <dd>
+                {selectedEdge.authoritative
+                  ? "Authoritative"
+                  : "Inferred or unresolved"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Context state</dt>
+              <dd>{selectedEdge.contextState || "Unassigned"}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Source path</dt>
+              <dd>
+                {source?.tool?.endpointPath ??
+                  source?.api?.endpointPath ??
+                  source?.label ??
+                  "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Target path</dt>
+              <dd>
+                {target?.tool?.endpointPath ??
+                  target?.api?.endpointPath ??
+                  target?.label ??
+                  "—"}
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (selectedNode) {
+    return (
+      <Card aria-label="Selected topology node">
+        <CardContent>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+            Selected node
+          </p>
+          <h2 className="mt-1 font-medium">{selectedNode.label}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {nodeKindLabels[selectedNode.kind as TopologyNodeKind] ??
+              selectedNode.kind}
+          </p>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div>
+              <dt className="text-muted-foreground">Context state</dt>
+              <dd>{nodeContextState(selectedNode)}</dd>
+            </div>
+            {selectedNode.tool ? (
+              <div>
+                <dt className="text-muted-foreground">Endpoint path</dt>
+                <dd>{selectedNode.tool.endpointPath ?? "—"}</dd>
+              </div>
+            ) : null}
+            {selectedNode.api ? (
+              <div>
+                <dt className="text-muted-foreground">Endpoint path</dt>
+                <dd>{selectedNode.api.endpointPath}</dd>
+              </div>
+            ) : null}
+            {selectedNode.plugin ? (
+              <>
+                <div>
+                  <dt className="text-muted-foreground">Version</dt>
+                  <dd>{selectedNode.plugin.version}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Endpoint</dt>
+                  <dd>
+                    {selectedNode.plugin.endpointConfigured
+                      ? "Configured"
+                      : "Not configured"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Health</dt>
+                  <dd>Unknown</dd>
+                </div>
+              </>
+            ) : null}
+            {selectedNode.binding ? (
+              <>
+                <div>
+                  <dt className="text-muted-foreground">Plugin</dt>
+                  <dd>
+                    {selectedNode.binding.pluginRef.name}@
+                    {selectedNode.binding.pluginRef.version}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Phase and priority</dt>
+                  <dd>
+                    {selectedNode.binding.phase} ·{" "}
+                    {selectedNode.binding.priority}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Failure policy</dt>
+                  <dd>{selectedNode.binding.failurePolicy}</dd>
+                </div>
+              </>
+            ) : null}
+          </dl>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card aria-label="Topology path inspector">
+      <CardContent>
+        <h2 className="font-medium">Path inspector</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Select a node or relationship to inspect its safe identity, match
+          confidence, and endpoint path.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function Topology({ contextName }: { contextName: string }) {
   const topology = useTopology(contextName);
-  const [filter, setFilter] = useState("");
-  const [selected, setSelected] = useState<TopologyNode | null>(null);
+  const [search, setSearch] = useState("");
+  const [selectedKinds, setSelectedKinds] = useState<TopologyNodeKind[]>([]);
+  const [selectedMatches, setSelectedMatches] = useState<TopologyMatchKind[]>(
+    [],
+  );
+  const [selectedContexts, setSelectedContexts] = useState<string[]>([]);
+  const [selection, setSelection] = useState<TopologySelection>(null);
+
+  const data = topology.data;
+  const allNodes = useMemo(() => data?.nodes ?? [], [data?.nodes]);
+  const allEdges = useMemo(() => data?.edges ?? [], [data?.edges]);
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const visibleNodes = useMemo(() => {
+    const edgeMatchedNodeIDs = new Set(
+      normalizedSearch
+        ? allEdges
+            .filter((edge) => edgeSearchText(edge).includes(normalizedSearch))
+            .flatMap((edge) => [edge.source, edge.target])
+        : [],
+    );
+    return allNodes.filter((node) => {
+      const kindMatches =
+        selectedKinds.length === 0 ||
+        selectedKinds.includes(node.kind as TopologyNodeKind);
+      const queryMatches =
+        !normalizedSearch ||
+        nodeSearchText(node).includes(normalizedSearch) ||
+        edgeMatchedNodeIDs.has(node.id);
+      const contextMatches =
+        selectedContexts.length === 0 ||
+        selectedContexts.includes(nodeContextState(node));
+      return kindMatches && queryMatches && contextMatches;
+    });
+  }, [allEdges, allNodes, normalizedSearch, selectedContexts, selectedKinds]);
+
+  const visibleEdges = useMemo(() => {
+    const visibleNodeIDs = new Set(visibleNodes.map((node) => node.id));
+    return allEdges.filter((edge) => {
+      const matchMatches =
+        selectedMatches.length === 0 ||
+        selectedMatches.includes(edge.matchKind as TopologyMatchKind);
+      const contextMatches =
+        selectedContexts.length === 0 ||
+        selectedContexts.includes(edge.contextState || "unassigned");
+      return (
+        visibleNodeIDs.has(edge.source) &&
+        visibleNodeIDs.has(edge.target) &&
+        matchMatches &&
+        contextMatches
+      );
+    });
+  }, [allEdges, selectedContexts, selectedMatches, visibleNodes]);
+
+  const selectedNode =
+    selection?.kind === "node"
+      ? (allNodes.find((node) => node.id === selection.id) ?? null)
+      : null;
+  const selectedEdge =
+    selection?.kind === "edge"
+      ? (allEdges.find((edge) => edge.id === selection.id) ?? null)
+      : null;
+
+  useEffect(() => {
+    if (!selection) return;
+    const visible =
+      selection.kind === "node"
+        ? visibleNodes.some((node) => node.id === selection.id)
+        : visibleEdges.some((edge) => edge.id === selection.id);
+    if (!visible) setSelection(null);
+  }, [selection, visibleEdges, visibleNodes]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelection(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const selectNode = useCallback((id: string) => {
+    setSelection({ kind: "node", id });
+  }, []);
+  const selectEdge = useCallback((id: string) => {
+    setSelection({ kind: "edge", id });
+  }, []);
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setSelectedKinds([]);
+    setSelectedMatches([]);
+    setSelectedContexts([]);
+  }, []);
+  const filterCount =
+    selectedKinds.length +
+    selectedMatches.length +
+    selectedContexts.length +
+    (normalizedSearch ? 1 : 0);
+
   if (topology.loading) return <Skeleton className="h-48 w-full" />;
-  if (!topology.data || topology.error || topology.data.state !== "available")
+  if (!data || topology.error || data.state !== "available") {
     return (
       <EmptyState
         title="Topology is unavailable"
@@ -27,160 +388,201 @@ export function Topology({ contextName }: { contextName: string }) {
         }
       />
     );
-  const visibleNodes = topology.data.nodes.filter((node) =>
-    `${node.label} ${node.kind} ${node.contextState ?? ""}`
-      .toLowerCase()
-      .includes(filter.toLowerCase()),
-  );
-  const visibleEdges = topology.data.edges.filter(
-    (edge) =>
-      visibleNodes.some((node) => node.id === edge.source) &&
-      visibleNodes.some((node) => node.id === edge.target),
-  );
-  const apiNodes = visibleNodes.filter((node) => node.kind === "erp-api");
-  const toolNodes = visibleNodes.filter((node) => node.kind === "mcp-tool");
-  const transportNodes = visibleNodes.filter(
-    (node) => node.kind === "mcp-transport",
-  );
-  const bindingNodes = visibleNodes.filter(
-    (node) => node.kind === "plugin-binding",
-  );
-  const pluginNodes = visibleNodes.filter(
-    (node) => node.kind === "external-plugin",
-  );
+  }
+
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-medium">API to MCP topology</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {topology.data.nodes.length} nodes and{" "}
-              {topology.data.edges.length} edges. Match states remain visible.
-            </p>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-medium">API to MCP topology</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Investigate safe relationships across tools, APIs, bindings,
+                plugins, and unresolved endpoints.
+              </p>
+            </div>
+            <div
+              className="flex items-center gap-2 text-sm tabular-nums text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              <span>
+                {visibleNodes.length} of {allNodes.length} nodes
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>
+                {visibleEdges.length} of {allEdges.length} edges
+              </span>
+            </div>
           </div>
-          <label className="text-sm" htmlFor="topology-filter">
-            Filter
-            <input
-              className="ml-2 h-9 rounded-md border border-border bg-card px-2"
-              id="topology-filter"
-              placeholder="module, tool, or status"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-            />
-          </label>
+          {data.truncated ? (
+            <div
+              className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm"
+              role="alert"
+            >
+              <AlertTriangle
+                aria-hidden="true"
+                className="mt-0.5 shrink-0"
+                size={16}
+              />
+              <span>
+                This topology is incomplete. {data.omitted?.nodes ?? 0} nodes
+                and {data.omitted?.edges ?? 0} edges were omitted by safety
+                limits.
+              </span>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <label
+              className="flex min-w-[15rem] flex-1 items-center gap-2 text-sm"
+              htmlFor="topology-filter"
+            >
+              <span className="sr-only">Search topology</span>
+              <Filter aria-hidden="true" size={16} />
+              <input
+                className="h-9 w-full rounded-md border border-border bg-card px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                id="topology-filter"
+                placeholder="Search names, paths, versions, or match states"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
+            {filterCount ? (
+              <button
+                className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={clearFilters}
+                type="button"
+              >
+                <X aria-hidden="true" size={15} />
+                Clear filters ({filterCount})
+              </button>
+            ) : null}
+          </div>
+          <div className="grid gap-4 border-t border-border pt-4 md:grid-cols-3">
+            <fieldset>
+              <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Node types
+              </legend>
+              <div className="mt-1 grid gap-1">
+                {topologyNodeKinds.map((kind) => (
+                  <FilterCheckbox
+                    checked={selectedKinds.includes(kind)}
+                    count={allNodes.filter((node) => node.kind === kind).length}
+                    key={kind}
+                    label={nodeKindLabels[kind]}
+                    onChange={() =>
+                      setSelectedKinds((current) => toggleValue(current, kind))
+                    }
+                  />
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Match confidence
+              </legend>
+              <div className="mt-1 grid gap-1">
+                {matchKinds.map((kind) => (
+                  <FilterCheckbox
+                    checked={selectedMatches.includes(kind)}
+                    count={
+                      allEdges.filter((edge) => edge.matchKind === kind).length
+                    }
+                    key={kind}
+                    label={matchKindLabels[kind]}
+                    onChange={() =>
+                      setSelectedMatches((current) =>
+                        toggleValue(current, kind),
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Context state
+              </legend>
+              <div className="mt-1 grid gap-1">
+                {contextStates.map((state) => (
+                  <FilterCheckbox
+                    checked={selectedContexts.includes(state)}
+                    count={
+                      allNodes.filter(
+                        (node) => nodeContextState(node) === state,
+                      ).length
+                    }
+                    key={state}
+                    label={
+                      state === "context matched"
+                        ? "Context matched"
+                        : "Unassigned"
+                    }
+                    onChange={() =>
+                      setSelectedContexts((current) =>
+                        toggleValue(current, state),
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            </fieldset>
+          </div>
         </CardContent>
       </Card>
-      <div
-        aria-label="Topology node summary"
-        className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-sm"
-      >
-        <span className="rounded-md border border-sky-500/60 bg-sky-500/10 px-2 py-1">
-          MCP transport ({transportNodes.length})
-        </span>
-        <span className="rounded-md border border-primary/60 bg-primary/10 px-2 py-1">
-          MCP tools ({toolNodes.length})
-        </span>
-        <span className="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-2 py-1 font-medium">
-          ERP APIs ({apiNodes.length})
-        </span>
-        <span className="rounded-md border border-amber-500/60 bg-amber-500/10 px-2 py-1">
-          Bindings ({bindingNodes.length})
-        </span>
-        <span className="rounded-md border border-violet-500/60 bg-violet-500/10 px-2 py-1">
-          Plugins ({pluginNodes.length})
-        </span>
-        {apiNodes.map((node) => (
+
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-sm">
+        {topologyNodeKinds.map((kind) => {
+          const count = visibleNodes.filter(
+            (node) => node.kind === kind,
+          ).length;
+          if (!count) return null;
+          return (
+            <span
+              className="rounded-md border border-border px-2 py-1"
+              key={kind}
+            >
+              {nodeKindLabels[kind]} ({count})
+            </span>
+          );
+        })}
+        {selectedNode || selectedEdge ? (
           <button
-            className="rounded-md border border-emerald-500/40 px-2 py-1 text-left text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
-            key={node.id}
-            onClick={() => setSelected(node)}
+            className="ml-auto inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            onClick={() => setSelection(null)}
             type="button"
           >
-            {node.label}
+            <X aria-hidden="true" size={14} />
+            Clear selection
           </button>
-        ))}
+        ) : null}
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <Suspense fallback={<Skeleton className="h-[30rem] w-full" />}>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <Suspense fallback={<Skeleton className="h-[36rem] w-full" />}>
           <TopologyCanvas
-            nodes={visibleNodes}
             edges={visibleEdges}
-            onSelect={setSelected}
+            onClearSelection={() => setSelection(null)}
+            onSelectEdge={selectEdge}
+            onSelectNode={selectNode}
+            nodes={visibleNodes}
+            selection={selection}
           />
         </Suspense>
-        {selected ? (
-          <Card>
-            <CardContent>
-              <h2 className="font-medium">{selected.label}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {selected.kind}{" "}
-                {selected.contextState ? `· ${selected.contextState}` : ""}
-              </p>
-              {selected.tool ? (
-                <p className="mt-2 text-sm">
-                  {selected.tool.endpointPath ?? "No endpoint path"}
-                </p>
-              ) : selected.plugin ? (
-                <dl className="mt-3 space-y-2 text-sm">
-                  <div>
-                    <dt className="text-muted-foreground">Version</dt>
-                    <dd>{selected.plugin.version}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">Endpoint</dt>
-                    <dd>
-                      {selected.plugin.endpointConfigured
-                        ? "Configured"
-                        : "Not configured"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">Health</dt>
-                    <dd>Unknown</dd>
-                  </div>
-                </dl>
-              ) : selected.binding ? (
-                <dl className="mt-3 space-y-2 text-sm">
-                  <div>
-                    <dt className="text-muted-foreground">Plugin</dt>
-                    <dd>
-                      {selected.binding.pluginRef.name}@
-                      {selected.binding.pluginRef.version}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">Phase</dt>
-                    <dd>
-                      {selected.binding.phase} · priority{" "}
-                      {selected.binding.priority}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">Failure policy</dt>
-                    <dd>{selected.binding.failurePolicy}</dd>
-                  </div>
-                </dl>
-              ) : (
-                <p className="mt-2 text-sm">
-                  {selected.api?.endpointPath ?? "No endpoint path"}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent>
-              <h2 className="font-medium">Path inspector</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Select a node to inspect its safe endpoint path and resolution
-                state.
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        <TopologyInspector
+          nodes={allNodes}
+          selectedEdge={selectedEdge}
+          selectedNode={selectedNode}
+        />
       </div>
-      <TopologyList nodes={visibleNodes} edges={visibleEdges} filter={filter} />
+      <TopologyList
+        edges={visibleEdges}
+        nodes={visibleNodes}
+        onSelectEdge={selectEdge}
+        onSelectNode={selectNode}
+        selection={selection}
+      />
     </div>
   );
 }
