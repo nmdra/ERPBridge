@@ -125,4 +125,7 @@ test("renders a user-friendly tool manifest", async () => {
   expect(screen.getAllByText("/api/resource/Employee").length).toBeGreaterThan(
     0,
   );
+  expect(
+    screen.queryByRole("heading", { name: "Plugin bindings" }),
+  ).not.toBeInTheDocument();
 });
