@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -89,8 +90,16 @@ func TestPluginSystemBlackBox(t *testing.T) {
 		jsonRPCField: jsonRPCVersion, "id": 4, jsonMethodField: "tools/call",
 		jsonParamsField: map[string]any{jsonNameField: ordinaryTool.Metadata.Name, "arguments": map[string]any{}},
 	})
-	assertFixture(t, mcpTextResult(t, boundCall), true)
-	assertFixture(t, mcpTextResult(t, ordinaryCall), false)
+	mcpBound := mcpTextResult(t, boundCall)
+	mcpOrdinary := mcpTextResult(t, ordinaryCall)
+	assertFixture(t, mcpBound, true)
+	assertFixture(t, mcpOrdinary, false)
+	if !reflect.DeepEqual(directBound, mcpBound) {
+		t.Fatalf("direct and MCP bound results differ: direct=%#v mcp=%#v", directBound, mcpBound)
+	}
+	if !reflect.DeepEqual(directOrdinary, mcpOrdinary) {
+		t.Fatalf("direct and MCP ordinary results differ: direct=%#v mcp=%#v", directOrdinary, mcpOrdinary)
+	}
 }
 
 func integrationTool(name string) mcp.Tool {
@@ -231,15 +240,14 @@ func mcpTextResult(t *testing.T, response map[string]any) map[string]any {
 
 func assertFixture(t *testing.T, value map[string]any, processed bool) {
 	t.Helper()
-	if value["id"] != "plugin-fixture" || value["state"] != "source" {
-		t.Fatalf("unexpected fixture: %#v", value)
+	expected := map[string]any{
+		"id": "plugin-fixture", "state": "source",
 	}
-	_, hasMarker := value["processedBy"]
-	if hasMarker != processed {
-		t.Fatalf("processedBy=%v, want %v: %#v", hasMarker, processed, value)
+	if processed {
+		expected["processedBy"] = "mock-plugin"
 	}
-	if processed && value["processedBy"] != "mock-plugin" {
-		t.Fatalf("unexpected marker: %#v", value)
+	if !reflect.DeepEqual(value, expected) {
+		t.Fatalf("unexpected fixture: got=%#v want=%#v", value, expected)
 	}
 }
 

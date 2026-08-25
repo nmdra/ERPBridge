@@ -2,6 +2,28 @@
 set -Eeuo pipefail
 
 PROJECT="erpbridge-plugin-test"
+DEFAULT_PLUGIN_IMAGE="ghcr.io/nmdra/erpbridge-plugins/mock-plugin:0.1.0"
+
+random_hex() {
+  od -An -N16 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+plugin_api_key="plugin-test-$(random_hex)"
+plugin_api_secret="plugin-secret-$(random_hex)"
+export MOCK_ERP_CREDENTIALS_JSON
+MOCK_ERP_CREDENTIALS_JSON=$(printf '{"credentials":[{"api_key":"%s","api_secret":"%s","role":"admin","identity":"plugin-test"}]}' "$plugin_api_key" "$plugin_api_secret")
+export ERP_PRIMARY_KEY="token ${plugin_api_key}:${plugin_api_secret}"
+plugin_image_override="${MOCK_PLUGIN_IMAGE:-}"
+export MOCK_PLUGIN_IMAGE="${plugin_image_override:-$DEFAULT_PLUGIN_IMAGE}"
+export ERPBRIDGE_HOST_PORT=18080
+export MOCK_ERP_HOST_PORT=18081
+export REDIS_HOST_PORT=16379
+export REDIS_INSIGHT_HOST_PORT=18001
+
+if [[ -z "$plugin_image_override" ]]; then
+  docker build --file ../ERPBridge-Plugins/plugins/mock-plugin/Dockerfile --tag "$MOCK_PLUGIN_IMAGE" ../ERPBridge-Plugins/plugins/mock-plugin
+fi
+
 COMPOSE=(docker compose -p "$PROJECT" -f docker-compose.yml -f docker-compose.plugin-test.yml)
 
 cleanup() {
