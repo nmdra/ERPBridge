@@ -20,10 +20,6 @@ export MOCK_ERP_HOST_PORT=18081
 export REDIS_HOST_PORT=16379
 export REDIS_INSIGHT_HOST_PORT=18001
 
-if [[ -z "$plugin_image_override" ]]; then
-  docker build --file ../ERPBridge-Plugins/plugins/mock-plugin/Dockerfile --tag "$MOCK_PLUGIN_IMAGE" ../ERPBridge-Plugins/plugins/mock-plugin
-fi
-
 COMPOSE=(docker compose -p "$PROJECT" -f docker-compose.yml -f docker-compose.plugin-test.yml)
 
 cleanup() {
@@ -32,6 +28,10 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cleanup
+if [[ -z "$plugin_image_override" ]]; then
+  docker build --file ../ERPBridge-Plugins/plugins/mock-plugin/Dockerfile --tag "$MOCK_PLUGIN_IMAGE" ../ERPBridge-Plugins/plugins/mock-plugin
+fi
+
 "${COMPOSE[@]}" up -d --build
 
 for attempt in $(seq 1 60); do
