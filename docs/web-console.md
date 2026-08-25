@@ -198,10 +198,12 @@ snapshot. Charts include a text or table view.
 ## Plugins
 
 The Plugins page and tool detail panels read the final plugin and
-`PluginBinding` list routes. They show exact versions, active state, binding
-phase, priority, failure policy, timeout, configuration-present state, and
-target-tool references. A deployment that returns `404` for either route shows
-an unavailable feature state instead of a failed console.
+`PluginBinding` list routes. Each plugin entry links to an exact
+`/plugins/<name>/<version>` detail page. The page shows exact version, active
+state, deployment type, timeout, endpoint/configuration booleans, unknown
+health, and matching bindings. Tool binding entries link back to the plugin
+detail page. A deployment that returns `404` for either route shows an
+unavailable feature state instead of a failed console.
 
 The plugin view exposes only `endpointConfigured` and
 `configurationPresent` booleans. It does not expose plugin endpoints, static

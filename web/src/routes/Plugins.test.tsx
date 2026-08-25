@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
-import { Plugins } from "./Plugins";
+import { PluginDetails, Plugins } from "./Plugins";
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -56,11 +56,42 @@ test("renders safe plugin and binding metadata", async () => {
   render(<Plugins contextName="local" />);
 
   expect(await screen.findByText("transformer")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "transformer" })).toHaveAttribute(
+    "href",
+    "/plugins/transformer/1.2.0",
+  );
   expect(screen.getByText("transform-orders")).toBeInTheDocument();
   expect(
     screen.queryByText("https://plugin.internal.example"),
   ).not.toBeInTheDocument();
   expect(screen.getAllByText("Present")).toHaveLength(2);
+});
+
+test("renders safe details for an exact plugin version", async () => {
+  render(
+    <PluginDetails
+      contextName="local"
+      pluginName="transformer"
+      pluginVersion="1.2.0"
+    />,
+  );
+
+  expect(
+    await screen.findByRole("heading", { name: "transformer" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Plugin details" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("transform-orders")).toBeInTheDocument();
+  expect(screen.getByText("Unknown")).toBeInTheDocument();
+  expect(
+    screen.queryByText("https://plugin.internal.example"),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText("PLUGIN_SECRET")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Back to plugins/ })).toHaveAttribute(
+    "href",
+    "/plugins",
+  );
 });
 
 test("renders an unavailable state for older deployments", async () => {

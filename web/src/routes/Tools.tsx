@@ -412,7 +412,12 @@ function PluginBindingDetails({
                   >
                     <th className="px-3 py-2 font-medium">{binding.name}</th>
                     <td className="px-3 py-2">
-                      {binding.pluginRef.name}@{binding.pluginRef.version}
+                      <Link
+                        className="text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        href={`/plugins/${encodeURIComponent(binding.pluginRef.name)}/${encodeURIComponent(binding.pluginRef.version)}`}
+                      >
+                        {binding.pluginRef.name}@{binding.pluginRef.version}
+                      </Link>
                     </td>
                     <td className="px-3 py-2">
                       {binding.phase} · priority {binding.priority}

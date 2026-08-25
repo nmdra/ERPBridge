@@ -10,7 +10,7 @@ import { Logs } from "./routes/Logs";
 import { Metrics } from "./routes/Metrics";
 import { Overview } from "./routes/Overview";
 import { Placeholder } from "./routes/Placeholder";
-import { Plugins } from "./routes/Plugins";
+import { PluginDetails, Plugins } from "./routes/Plugins";
 import { Settings } from "./routes/Settings";
 import { Topology } from "./routes/Topology";
 import { ThemeProvider } from "./theme/ThemeProvider";
@@ -91,6 +91,15 @@ function ConsoleApp() {
           </Route>
           <Route path="/topology">
             <Topology contextName={selectedContext} />
+          </Route>
+          <Route path="/plugins/:pluginName/:pluginVersion">
+            {(params) => (
+              <PluginDetails
+                contextName={selectedContext}
+                pluginName={params.pluginName ?? ""}
+                pluginVersion={params.pluginVersion ?? ""}
+              />
+            )}
           </Route>
           <Route path="/plugins">
             <Plugins contextName={selectedContext} />

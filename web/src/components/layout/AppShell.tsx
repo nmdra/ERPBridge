@@ -41,8 +41,12 @@ export function AppShell({
 }) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
-  const title =
-    navigation.find((item) => item.href === location)?.label ?? "Settings";
+  const activeNavigation = navigation.find(
+    (item) =>
+      location === item.href ||
+      (item.href !== "/" && location.startsWith(`${item.href}/`)),
+  );
+  const title = activeNavigation?.label ?? "Settings";
   const contextOptions = contexts?.length
     ? contexts
     : [{ name: selectedContext } as ContextProjection];
@@ -101,7 +105,8 @@ export function AppShell({
               className={cn(
                 "flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 collapsed && "lg:justify-center lg:px-2",
-                location === href &&
+                (location === href ||
+                  (href !== "/" && location.startsWith(`${href}/`))) &&
                   "bg-sidebar-accent text-sidebar-accent-foreground",
               )}
               href={href}
