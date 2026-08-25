@@ -28,7 +28,9 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | Variable | Description | Default (compose) |
 | :--- | :--- | :--- |
 | `BASE_URL` | Public URL of the MCP server. | `http://localhost:8080` |
+| `ERPBRIDGE_HOST_PORT` | Host port for the ERPBridge container. | `8080` |
 | `ERP_BASE_URL` | Base URL of the underlying ERP system. | `http://mock-erp:8081` |
+| `MOCK_ERP_HOST_PORT` | Host port for the MockERP container. | `8081` |
 | `MOCK_ERP_IMAGE` | MockERP image used by Compose. | `ghcr.io/nmdra/mockerp:0.2.1` |
 | `MOCK_ERP_VERSION` | MockERP release used for OpenAPI generation. | `0.2.1` |
 | `MOCK_ERP_OPENAPI_URL` | Versioned MockERP OpenAPI URL. | `https://raw.githubusercontent.com/nmdra/mockerp/v0.2.1/openapi.yaml` |
@@ -36,6 +38,8 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | `MOCK_ERP_CREDENTIALS_JSON` | JSON credential configuration for local/container use. | (required) |
 | `MOCK_ERP_CREDENTIALS_FILE` | Mounted JSON credential file path. | (required alternative) |
 | `REDIS_URL` | URL for the Redis cache. | `redis://redis:6379` |
+| `REDIS_HOST_PORT` | Host port for Redis. | `6379` |
+| `REDIS_INSIGHT_HOST_PORT` | Host port for RedisInsight. | `8001` |
 | `DATABASE_PATH` | Path of the SQLite tool registry inside the container. | `/app/data/erpbridge.db` |
 | `RATE_LIMIT_RPS` | Per-session requests per second. | `10` |
 | `RATE_LIMIT_BURST` | Token bucket burst size. | `20` |
