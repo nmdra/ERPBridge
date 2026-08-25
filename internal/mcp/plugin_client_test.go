@@ -1,9 +1,11 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +13,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	pluginClientTestCredentialRef = "PLUGIN_CLIENT_TEST_CREDENTIAL" // #nosec G101 -- environment-variable reference used by tests.
+	pluginClientTestValue         = "test-value"
 )
 
 type pluginRoundTripFunc func(*http.Request) (*http.Response, error)
@@ -243,6 +250,127 @@ func TestPluginClient_Process_UsesContextCancellation(t *testing.T) {
 func TestPluginClient_Process_RejectsNilPlugin(t *testing.T) {
 	_, err := NewPluginClient().Process(context.Background(), nil, validPluginInvocationForTest())
 	require.Error(t, err)
+}
+
+func TestPluginClient_Process_SendsAuthenticationHeaders(t *testing.T) {
+	const credential = pluginClientTestValue
+
+	tests := []struct {
+		name              string
+		auth              *PluginAuth
+		expectedHeader    string
+		expectedValue     string
+		unexpectedHeaders []string
+	}{
+		{
+			name:              "absent auth",
+			unexpectedHeaders: []string{pluginAuthorizationHeader, pluginDefaultAPIKeyHeader},
+		},
+		{
+			name: "bearer",
+			auth: &PluginAuth{
+				Type:          PluginAuthTypeBearer,
+				CredentialRef: pluginClientTestCredentialRef,
+			},
+			expectedHeader:    pluginAuthorizationHeader,
+			expectedValue:     "Bearer " + credential,
+			unexpectedHeaders: []string{pluginDefaultAPIKeyHeader},
+		},
+		{
+			name: "default api key",
+			auth: &PluginAuth{
+				Type:          PluginAuthTypeAPIKey,
+				CredentialRef: pluginClientTestCredentialRef,
+			},
+			expectedHeader:    pluginDefaultAPIKeyHeader,
+			expectedValue:     credential,
+			unexpectedHeaders: []string{pluginAuthorizationHeader},
+		},
+		{
+			name: "custom api key",
+			auth: &PluginAuth{
+				Type:          PluginAuthTypeAPIKey,
+				CredentialRef: pluginClientTestCredentialRef,
+				Header:        "X-Plugin-Key",
+			},
+			expectedHeader:    "X-Plugin-Key",
+			expectedValue:     credential,
+			unexpectedHeaders: []string{pluginAuthorizationHeader, pluginDefaultAPIKeyHeader},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(pluginClientTestCredentialRef, credential)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+				require.Equal(t, "application/json", r.Header.Get("Accept"))
+				if test.expectedHeader != "" {
+					require.Equal(t, []string{test.expectedValue}, r.Header.Values(test.expectedHeader))
+				}
+				for _, header := range test.unexpectedHeaders {
+					require.Empty(t, r.Header.Values(header))
+				}
+				_, _ = w.Write([]byte(`{"result":true}`))
+			}))
+			defer server.Close()
+
+			plugin := validPluginForTest(server.URL)
+			plugin.Spec.Auth = test.auth
+			_, err := NewPluginClient().Process(context.Background(), &plugin, validPluginInvocationForTest())
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestPluginClient_Process_MissingCredentialMakesZeroOutboundCalls(t *testing.T) {
+	const credentialRef = "PLUGIN_CLIENT_MISSING_CREDENTIAL" // #nosec G101 -- environment-variable reference used by this test.
+	t.Setenv(credentialRef, "")
+
+	calls := 0
+	client := NewPluginClient(&http.Client{Transport: pluginRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("outbound call must not occur")
+	})})
+	plugin := validPluginForTest("https://plugins.example.test")
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: credentialRef}
+
+	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.EqualError(t, err, `plugin credential is not configured`)
+	require.Zero(t, calls)
+}
+
+func TestPluginClient_Process_DoesNotExposeCredentialInErrorsOrLogs(t *testing.T) {
+	const credential = pluginClientTestValue
+	t.Setenv(pluginClientTestCredentialRef, credential)
+
+	var logs bytes.Buffer
+	client := NewPluginClientWithLogger(slog.New(slog.NewTextHandler(&logs, nil)), &http.Client{
+		Transport: pluginRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+			return nil, errors.New("transport failure")
+		}),
+	})
+	plugin := validPluginForTest("https://plugins.example.test")
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginClientTestCredentialRef}
+
+	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.EqualError(t, err, "plugin request failed")
+	require.NotContains(t, err.Error(), credential)
+	require.NotContains(t, logs.String(), credential)
+}
+
+func TestPluginClient_Process_RejectsInvalidAuthenticationBeforeOutboundCall(t *testing.T) {
+	calls := 0
+	client := NewPluginClient(&http.Client{Transport: pluginRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("outbound call must not occur")
+	})})
+	plugin := validPluginForTest("https://plugins.example.test")
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginClientTestCredentialRef, Header: "X-Invalid"}
+
+	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.Error(t, err)
+	require.Zero(t, calls)
 }
 
 func TestPluginClient_Process_UsesOnlyResultEnvelope(t *testing.T) {

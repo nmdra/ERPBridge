@@ -197,7 +197,7 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   **Verify:** `go test ./internal/mcp ./internal/cli -run 'Test(Plugin|PluginAPI|DecodePlugin)'`;
   **Commit:** `feat: define protected plugin authentication resources`.)
 
-- [ ] **Task 3: Send bounded authenticated plugin requests.** Add tests before
+- [x] **Task 3: Send bounded authenticated plugin requests.** Add tests before
   implementation using an HTTPS `httptest` server or capture transport. Resolve
   `spec.auth.credentialRef` after endpoint validation but before request
   creation; a missing value must make zero network calls. Add exactly one

@@ -48,6 +48,8 @@ const (
 	pluginProcessPath            = "/v1/process"
 	pluginSchemeHTTPS            = "https"
 	pluginSchemeHTTP             = "http"
+	pluginAuthorizationHeader    = "Authorization"
+	pluginDefaultAPIKeyHeader    = "X-API-Key" // #nosec G101 -- this is an HTTP header name, not a credential.
 )
 
 // MaxPluginJSONBytes is the maximum size of an external-plugin JSON document.

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add typed plugin metadata and protected bearer or API-key credential references for external plugin endpoints.
+- Add typed plugin metadata and protected bearer or API-key credential references, with bounded authenticated requests, for external plugin endpoints.
 - Add the initial generic external-plugin and exact-version binding contract with bounded HTTP JSON requests.
 - Persist versioned plugin and binding resources with soft-delete and active-reference protection.
 - Add admin-only plugin and binding APIs with exact-reference admission, reconciliation, and cache invalidation.

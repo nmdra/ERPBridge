@@ -135,13 +135,13 @@ func TestPlugin_Validate(t *testing.T) {
 		},
 		"rejects bearer custom header": {
 			mutate: func(plugin *Plugin) {
-				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginTestCredentialRef, Header: "X-API-Key"}
+				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginTestCredentialRef, Header: pluginDefaultAPIKeyHeader}
 			},
 			wantErr: pluginAuthHeaderError,
 		},
 		"rejects reserved API key header": {
 			mutate: func(plugin *Plugin) {
-				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeAPIKey, CredentialRef: pluginTestCredentialRef, Header: "Authorization"}
+				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeAPIKey, CredentialRef: pluginTestCredentialRef, Header: pluginAuthorizationHeader}
 			},
 			wantErr: pluginAuthHeaderError,
 		},

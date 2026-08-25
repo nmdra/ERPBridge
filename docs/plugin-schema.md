@@ -36,7 +36,11 @@ and 5 minutes.
 `api-key` can use `header`, or the default `X-API-Key` header. `credentialRef`
 must name a `PLUGIN_` environment variable. Manifests never contain the
 credential value. Bearer authentication cannot set `header`. API-key
-authentication cannot use reserved HTTP headers.
+authentication cannot use reserved HTTP headers. At invocation, ERPBridge
+resolves the reference and sends exactly one header: `Authorization: Bearer
+<value>` for bearer auth, or the raw value in the API-key header. If the
+reference is missing or empty, ERPBridge makes no plugin request and reports a
+safe configuration error without exposing the credential.
 
 Plugin JSON and YAML manifests reject unknown fields. This prevents a misspelled
 or raw credential field from changing the authentication behavior.
@@ -103,9 +107,10 @@ The plugin must return a JSON object with a `result` member:
 ```
 
 The protocol does not include original tool arguments, inbound headers, caller
-identity, caller tokens, or ERP credentials. Request and response JSON are
-limited to 1 MiB. Calls use the invocation context and resource timeout,
-disable redirects, and do not retry.
+identity, caller tokens, or ERP credentials. Authentication headers are
+transport metadata and are not included in the JSON payload. Request and
+response JSON are limited to 1 MiB. Calls use the invocation context and
+resource timeout, disable redirects, and do not retry.
 
 Bindings run only after a successful tool result and only on a cache miss. The
 cache stores the final transformed MCP result. Applying, updating, or deleting

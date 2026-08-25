@@ -66,6 +66,10 @@ func (c *PluginClient) Process(ctx context.Context, plugin *Plugin, invocation P
 	if err != nil {
 		return nil, errors.New("invalid plugin configuration")
 	}
+	authHeader, authValue, err := pluginAuthenticationHeader(plugin.Spec.Auth)
+	if err != nil {
+		return nil, err
+	}
 
 	if invocation.ProtocolVersion == "" {
 		invocation.ProtocolVersion = PluginProtocolVersion
@@ -99,6 +103,9 @@ func (c *PluginClient) Process(ctx context.Context, plugin *Plugin, invocation P
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	if authHeader != "" {
+		req.Header.Set(authHeader, authValue)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -137,6 +144,30 @@ func (c *PluginClient) Process(ctx context.Context, plugin *Plugin, invocation P
 		return nil, errors.New("decode plugin result")
 	}
 	return &PluginResponse{Result: result}, nil
+}
+
+func pluginAuthenticationHeader(auth *PluginAuth) (string, string, error) {
+	if auth == nil {
+		return "", "", nil
+	}
+
+	credential, err := resolveCredential(auth.CredentialRef)
+	if err != nil {
+		return "", "", errors.New("plugin credential is not configured")
+	}
+
+	switch auth.Type {
+	case PluginAuthTypeBearer:
+		return pluginAuthorizationHeader, "Bearer " + credential, nil
+	case PluginAuthTypeAPIKey:
+		header := auth.Header
+		if header == "" {
+			header = pluginDefaultAPIKeyHeader
+		}
+		return header, credential, nil
+	default:
+		return "", "", errors.New("invalid plugin configuration")
+	}
 }
 
 func newInvocationID() (string, error) {
