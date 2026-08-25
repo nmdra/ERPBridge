@@ -37,8 +37,13 @@ then expose it to the agent host:
     export ERPBRIDGE_MCP_TOKEN='<token-from-secure-provisioning>'
 
 API_AUTH_TOKEN controls inbound HTTP authentication. ERP_PRIMARY_KEY and
-credentialRef values are server-side settings for outbound ERP calls. Never
-copy an upstream ERP credential into an agent config.
+other `credentialRef` values are server-side settings for outbound ERP calls.
+The local `bridgectl` API registry stores only these environment-variable names,
+not their values. Register APIs with `--credential-ref`, or assign one with
+`bridgectl api set-credential-ref`. Never copy an upstream ERP credential into
+an agent config. If a legacy registry contains raw `authKey` or `authToken`
+fields, run `bridgectl api scrub-credentials --yes`, then assign references
+again. The scrub has no plaintext backup.
 
 ## Codex CLI
 

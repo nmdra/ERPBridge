@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/connector"
+	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -237,8 +237,8 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 		}
 	}
 
-	if t.Spec.OutputSchema != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		if err := validateResponse(resultData, t.Spec.OutputSchema); err != nil {
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if err := t.ValidateResult(resultData); err != nil {
 			return &ToolResult{
 				Result:  resultData,
 				Error:   fmt.Sprintf("response validation failed: %v", err),
@@ -337,15 +337,16 @@ func parseResponsePath(responsePath string) ([]responsePathToken, error) {
 }
 
 func resolveCredential(ref string) (string, error) {
-	if ref == "" {
-		return "", nil
-	}
+	return credentials.Resolve(ref)
+}
 
-	value, ok := os.LookupEnv(ref)
-	if !ok || value == "" {
-		return "", fmt.Errorf("credential reference %q is not configured", ref)
+// ValidateResult checks a normalized successful result against the tool's
+// declared output schema. A tool without an output schema accepts any JSON value.
+func (t *Tool) ValidateResult(data any) error {
+	if t == nil || t.Spec.OutputSchema == nil {
+		return nil
 	}
-	return value, nil
+	return validateResponse(data, t.Spec.OutputSchema)
 }
 
 func validateResponse(data any, schema any) error {
@@ -354,8 +355,13 @@ func validateResponse(data any, schema any) error {
 		return err
 	}
 
+	var schemaDocument any
+	if err := json.Unmarshal(schemaBytes, &schemaDocument); err != nil {
+		return fmt.Errorf("decode schema: %w", err)
+	}
+
 	c := jsonschema.NewCompiler()
-	if err := c.AddResource("schema.json", bytes.NewReader(schemaBytes)); err != nil {
+	if err := c.AddResource("schema.json", schemaDocument); err != nil {
 		return fmt.Errorf("add resource: %w", err)
 	}
 	js, err := c.Compile("schema.json")

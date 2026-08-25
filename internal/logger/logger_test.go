@@ -1,7 +1,10 @@
 package logger
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -105,6 +108,30 @@ func TestComponent(t *testing.T) {
 	}
 }
 
+func TestNewHandlerRedactsSensitiveAttributes(t *testing.T) {
+	for _, production := range []bool{false, true} {
+		t.Run(fmt.Sprintf("production=%t", production), func(t *testing.T) {
+			var output bytes.Buffer
+			log := slog.New(newHandler(&output, slog.LevelDebug, production))
+			log.InfoContext(context.Background(), "credential event",
+				slog.String("authorization", "Bearer root-log-secret"),
+				slog.String(testSafeString, "visible"),
+			)
+
+			encoded := output.String()
+			if strings.Contains(encoded, "root-log-secret") {
+				t.Fatalf("root handler contains unredacted secret: %s", encoded)
+			}
+			if !strings.Contains(encoded, redactionMarker) {
+				t.Fatalf("root handler did not emit redaction marker: %s", encoded)
+			}
+			if !strings.Contains(encoded, "visible") {
+				t.Fatalf("root handler redacted safe attribute: %s", encoded)
+			}
+		})
+	}
+}
+
 func TestRedactArgs(t *testing.T) {
 	input := map[string]any{
 		"username":          "alice",
@@ -163,10 +190,13 @@ func TestBroadcastHandlerRedactsSensitiveValues(t *testing.T) {
 	listenersMu.Unlock()
 
 	log := Init()
-	log.Info("sensitive event", slog.Any("arguments", map[string]any{
-		redactedPasswordKey: "p123",
-		testSafeString:      "ok",
-	}))
+	log.Info("sensitive event",
+		slog.Any("arguments", map[string]any{
+			redactedPasswordKey: "p123",
+			testSafeString:      "ok",
+		}),
+		slog.String("authorization", "Bearer buffered-log-secret"),
+	)
 
 	recent := GetRecentLogs()
 	if len(recent) == 0 {
@@ -177,8 +207,8 @@ func TestBroadcastHandlerRedactsSensitiveValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	encoded := string(recent[len(recent)-1])
-	if strings.Contains(encoded, "p123") {
-		t.Fatalf("broadcast log contains unredacted secret: %s", encoded)
+	if strings.Contains(encoded, "p123") || strings.Contains(encoded, "buffered-log-secret") {
+		t.Fatalf("broadcast log contains an unredacted secret: %s", encoded)
 	}
 	if payload["msg"] != "sensitive event" {
 		t.Fatalf("unexpected log payload: %v", payload)

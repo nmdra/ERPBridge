@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/mcp"
 )
@@ -36,6 +37,10 @@ func NewGenerator(schemasDir string, rootLog *slog.Logger) *Generator {
 
 // Generate creates a basic MCP Tool from a registered API definition.
 func (g *Generator) Generate(api API) (*mcp.Tool, error) {
+	credentialRef, err := credentialRefForAPI(api)
+	if err != nil {
+		return nil, err
+	}
 	name := api.Name
 	// Simple intent-based naming heuristic if not already provided
 	if after, ok := strings.CutPrefix(strings.ToLower(name), "get-"); ok {
@@ -64,9 +69,8 @@ func (g *Generator) Generate(api API) (*mcp.Tool, error) {
 				Endpoint: api.URL,
 			},
 			Security: mcp.Security{
-				AuthType: api.AuthType,
-				// #nosec G101 -- CredentialRef specifies an env var name, not hardcoded credentials
-				CredentialRef: "ERP_PRIMARY_KEY",
+				AuthType:      api.AuthType,
+				CredentialRef: credentialRef,
 			},
 		},
 	}
@@ -85,9 +89,12 @@ func (g *Generator) Generate(api API) (*mcp.Tool, error) {
 
 // GenerateFromOpenAPI parses an OpenAPI 3.0 specification from a URL or file path and generates MCP tools.
 func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL string) ([]*mcp.Tool, error) {
+	credentialRef, err := credentialRefForAPI(api)
+	if err != nil {
+		return nil, err
+	}
 	loader := openapi3.NewLoader()
 	var doc *openapi3.T
-	var err error
 
 	if strings.HasPrefix(openapiURL, "http") {
 		u, err := url.Parse(openapiURL)
@@ -211,9 +218,8 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 						ResponsePath: "data",
 					},
 					Security: mcp.Security{
-						AuthType: api.AuthType,
-						// #nosec G101 -- CredentialRef specifies an env var name, not hardcoded credentials
-						CredentialRef: "ERP_PRIMARY_KEY",
+						AuthType:      api.AuthType,
+						CredentialRef: credentialRef,
 					},
 				},
 			}
@@ -286,6 +292,19 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 	}
 
 	return tools, nil
+}
+
+func credentialRefForAPI(api API) (string, error) {
+	if api.AuthType == "" {
+		return "", nil
+	}
+	if api.CredentialRef == "" {
+		return "", fmt.Errorf("API %q requires a credential reference before generation", api.Name)
+	}
+	if err := credentials.ValidateReference(api.CredentialRef); err != nil {
+		return "", err
+	}
+	return api.CredentialRef, nil
 }
 
 func dereferenceSchema(doc *openapi3.T, schema *openapi3.Schema) (any, error) {

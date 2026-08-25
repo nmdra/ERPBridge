@@ -3,6 +3,7 @@ package idp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,32 +11,37 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/logger"
 )
 
 // API represents a registered downstream ERP API endpoint and authentication metadata.
 type API struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	URL          string    `json:"url"`
-	Method       string    `json:"method"`
-	AuthType     string    `json:"authType"`
-	AuthHeader   string    `json:"authHeader,omitempty"`
-	AuthKey      string    `json:"authKey,omitempty"`
-	AuthUsername string    `json:"authUsername,omitempty"`
-	AuthToken    string    `json:"authToken,omitempty"`
-	Module       string    `json:"module"`
-	Description  string    `json:"description"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	URL           string    `json:"url"`
+	Method        string    `json:"method"`
+	AuthType      string    `json:"authType"`
+	AuthHeader    string    `json:"authHeader,omitempty"`
+	CredentialRef string    `json:"credentialRef,omitempty"`
+	AuthUsername  string    `json:"authUsername,omitempty"`
+	Module        string    `json:"module"`
+	Description   string    `json:"description"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
+
+// ErrLegacyCredentials indicates that the registry still contains raw legacy credentials.
+var ErrLegacyCredentials = errors.New("registry contains legacy plaintext credentials; run bridgectl api scrub-credentials --yes")
 
 // Registry manages storage and retrieval of registered API definitions.
 type Registry struct {
-	path string
-	log  *slog.Logger
-	mu   sync.RWMutex
-	APIs map[string]API `json:"apis"`
+	path              string
+	log               *slog.Logger
+	mu                sync.RWMutex
+	APIs              map[string]API `json:"apis"`
+	legacyCredentials bool
+	rename            func(string, string) error
 }
 
 // NewRegistry initializes an API registry from the specified file path or default user home path.
@@ -70,15 +76,32 @@ func (r *Registry) loadLocked() error {
 		return err
 	}
 	var persisted struct {
-		APIs map[string]API `json:"apis"`
+		APIs map[string]json.RawMessage `json:"apis"`
 	}
 	if err := json.Unmarshal(data, &persisted); err != nil {
 		return err
 	}
-	if persisted.APIs == nil {
-		persisted.APIs = make(map[string]API)
+	apis := make(map[string]API, len(persisted.APIs))
+	legacy := false
+	for name, raw := range persisted.APIs {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return fmt.Errorf("decode API %q: %w", name, err)
+		}
+		if _, ok := fields["authKey"]; ok {
+			legacy = true
+		}
+		if _, ok := fields["authToken"]; ok {
+			legacy = true
+		}
+		var api API
+		if err := json.Unmarshal(raw, &api); err != nil {
+			return fmt.Errorf("decode API %q: %w", name, err)
+		}
+		apis[name] = api
 	}
-	r.APIs = persisted.APIs
+	r.APIs = apis
+	r.legacyCredentials = legacy
 	return nil
 }
 
@@ -123,6 +146,9 @@ func (r *Registry) saveLocked() error {
 	if err := temp.Close(); err != nil {
 		return err
 	}
+	if r.rename != nil {
+		return r.rename(tempPath, r.path)
+	}
 	return os.Rename(tempPath, r.path)
 }
 
@@ -145,6 +171,9 @@ func (r *Registry) withWrite(fn func() error) error {
 	}
 	if r.APIs == nil {
 		r.APIs = make(map[string]API)
+	}
+	if r.legacyCredentials {
+		return ErrLegacyCredentials
 	}
 	if err := fn(); err != nil {
 		return err
@@ -182,6 +211,14 @@ func (l *registryFileLock) release() {
 
 // Register adds or updates an API definition in the registry.
 func (r *Registry) Register(api *API) error {
+	if api == nil {
+		return errors.New("API is required")
+	}
+	if api.CredentialRef != "" {
+		if err := credentials.ValidateReference(api.CredentialRef); err != nil {
+			return err
+		}
+	}
 	return r.withWrite(func() error {
 		if api.ID == "" {
 			api.ID = fmt.Sprintf("api-%d", time.Now().UnixNano())
@@ -197,6 +234,13 @@ func (r *Registry) Register(api *API) error {
 		)
 		return nil
 	})
+}
+
+// HasLegacyCredentials reports whether the loaded registry contains raw legacy fields.
+func (r *Registry) HasLegacyCredentials() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.legacyCredentials
 }
 
 // List returns a slice of all registered APIs.
@@ -216,6 +260,59 @@ func (r *Registry) Delete(name string) error {
 		delete(r.APIs, name)
 		return nil
 	})
+}
+
+// SetCredentialRef assigns an environment-backed credential reference to an API.
+func (r *Registry) SetCredentialRef(name, ref string) error {
+	if err := credentials.ValidateReference(ref); err != nil {
+		return err
+	}
+	return r.withWrite(func() error {
+		api, ok := r.APIs[name]
+		if !ok {
+			return fmt.Errorf("API %q not found", name)
+		}
+		api.CredentialRef = ref
+		r.APIs[name] = api
+		return nil
+	})
+}
+
+// ScrubCredentials removes legacy raw credential fields atomically. A missing
+// registry is a successful no-op. It never creates a plaintext backup.
+func (r *Registry) ScrubCredentials() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, err := os.Stat(r.path); os.IsNotExist(err) {
+		r.APIs = make(map[string]API)
+		r.legacyCredentials = false
+		return nil
+	}
+	lock, err := acquireRegistryLock(r.path + ".lock")
+	if err != nil {
+		return err
+	}
+	defer lock.release()
+
+	if err := r.loadLocked(); err != nil {
+		if os.IsNotExist(err) {
+			r.APIs = make(map[string]API)
+			r.legacyCredentials = false
+			return nil
+		}
+		return fmt.Errorf("load registry: %w", err)
+	}
+	if !r.legacyCredentials {
+		return nil
+	}
+	// saveLocked serializes API, which has no raw credential fields.
+	if err := r.saveLocked(); err != nil {
+		r.legacyCredentials = true
+		return err
+	}
+	r.legacyCredentials = false
+	return nil
 }
 
 // Get returns the API definition by name if found.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -121,17 +122,22 @@ func Init() *slog.Logger {
 }
 
 func buildHandler(level slog.Level) slog.Handler {
-	opts := &slog.HandlerOptions{
-		Level:     level,
-		AddSource: level == slog.LevelDebug,
-	}
-
-	output := os.Stdout
+	output := io.Writer(os.Stdout)
 	if strings.ToLower(os.Getenv("LOG_TO_STDERR")) == "true" {
 		output = os.Stderr
 	}
 
-	if os.Getenv("APP_ENV") == "production" {
+	return newHandler(output, level, os.Getenv("APP_ENV") == "production")
+}
+
+func newHandler(output io.Writer, level slog.Level, production bool) slog.Handler {
+	opts := &slog.HandlerOptions{
+		Level:       level,
+		AddSource:   level == slog.LevelDebug,
+		ReplaceAttr: RedactAttr,
+	}
+
+	if production {
 		return slog.NewJSONHandler(output, opts)
 	}
 	return slog.NewTextHandler(output, opts)
@@ -169,14 +175,6 @@ func NewRequestID() string {
 	b := make([]byte, 4)
 	rand.Read(b)
 	return fmt.Sprintf("req_%x", b)
-}
-
-// Body sanitises an HTTP body string for DEBUG logging by truncating it.
-func Body(s string) string {
-	if len(s) > 500 {
-		return s[:500] + "... [truncated]"
-	}
-	return s
 }
 
 // componentHandler is a simple wrapper to allow per-component levels (optional)

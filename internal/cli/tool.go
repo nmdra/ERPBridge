@@ -75,7 +75,7 @@ func decodeToolDocuments(data []byte, filePath string) ([]mcp.Tool, error) {
 }
 
 var toolApplyCmd = &cobra.Command{
-	Use:   "apply -f [file]",
+	Use:   cliApplyFileUse,
 	Short: "Apply a tool schema to the registry (declarative)",
 	Example: `  bridgectl tool apply -f list_employees.yaml
   bridgectl tool apply -f schemas/hr/`,
@@ -116,7 +116,7 @@ var toolApplyCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("marshal tool (%s): %w", path, err)
 				}
-				resp, err := doBridgeRequestWithHeaders(cmd, http.MethodPost, url, bytes.NewReader(payload), http.Header{"Content-Type": []string{"application/json"}})
+				resp, err := doBridgeRequestWithHeaders(cmd, http.MethodPost, url, bytes.NewReader(payload), http.Header{cliContentTypeHeader: []string{"application/json"}})
 				if err != nil {
 					return fmt.Errorf("apply failed (%s): %w", path, err)
 				}
@@ -337,7 +337,7 @@ var toolDescribeCmd = &cobra.Command{
 }
 
 var toolValidateCmd = &cobra.Command{
-	Use:   "validate -f [file]",
+	Use:   cliValidateFileUse,
 	Short: "Locally validate a tool schema",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		filePath, _ := cmd.Flags().GetString("file")

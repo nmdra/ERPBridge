@@ -66,6 +66,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add environment-backed ERP API credential references, `api set-credential-ref`, and confirmed legacy credential scrubbing without plaintext backups.
+- Add typed plugin metadata and protected bearer or API-key credential references, with bounded authenticated requests, for external plugin endpoints.
+- Add the initial generic external-plugin and exact-version binding contract with bounded HTTP JSON requests.
+- Persist versioned plugin and binding resources with soft-delete and active-reference protection.
+- Add admin-only plugin and binding APIs with exact-reference admission, reconciliation, and cache invalidation.
+- Process successful tool responses through ordered external bindings while preserving MCP and direct-invoke envelopes.
+- Add `bridgectl plugin` and `bridgectl plugin binding` resource-management commands with typed JSON/YAML handling.
+- Add an isolated black-box integration fixture with the external `mock-plugin` polyrepo service, MockERP, and repeatable Compose cleanup.
+- Protect the real external-plugin integration fixture with generated API keys, authenticated control-plane requests, and missing/wrong/correct-key checks.
+- Document the generic external-plugin control plane, HTTP protocol, deployment boundary, and Docker integration workflow.
 - Add agent-integration guidance for Codex CLI, OpenCode, OpenClaw, and Hermes
   Agent, including scoped HTTP bearer authentication and stdio credential
   boundaries
@@ -81,6 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Require HTTPS for credentialed ERP and plugin calls, except configured exact development hosts.
+- Redact sensitive attributes in root log sinks and stop logging ERP request and response bodies.
 - Keep ERPBridge stdio stdout reserved for MCP JSON-RPC by routing the startup
   banner to stderr
 

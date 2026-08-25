@@ -43,7 +43,7 @@ func TestEmbeddedConsoleFlowKeepsThreatBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry.APIs["list"] = idp.API{Name: "list", URL: "http://erp.local/api/list", Method: "GET", AuthKey: "registry-secret"}
+	registry.APIs["list"] = idp.API{Name: "list", URL: "http://erp.local/api/list", Method: "GET", CredentialRef: "ERP_SECRET"}
 	cfg := &config.Config{CurrentContext: "local", Contexts: map[string]config.Context{"local": {Server: upstream.URL, MCPServer: upstream.URL, ERPBase: "http://erp.local", APIToken: token, Auth: config.AuthConfig{Key: "auth-secret"}}}}
 	console, err := NewServer(Options{ListenAddress: "127.0.0.1:0", Handler: NewConsoleHandler(HandlerOptions{Config: cfg, Registry: registry})})
 	if err != nil {
@@ -80,7 +80,7 @@ func TestEmbeddedConsoleFlowKeepsThreatBoundary(t *testing.T) {
 		if recorder.Code < http.StatusOK || recorder.Code >= http.StatusMultipleChoices {
 			t.Fatalf("%s status = %d body = %s", path, recorder.Code, recorder.Body.String())
 		}
-		for _, secret := range []string{token, "ERP_SECRET", "registry-secret", "auth-secret", "raw-secret", "hidden"} {
+		for _, secret := range []string{token, "ERP_SECRET", "auth-secret", "raw-secret", "hidden"} {
 			if strings.Contains(recorder.Body.String(), secret) {
 				t.Fatalf("%s leaked %q: %s", path, secret, recorder.Body.String())
 			}

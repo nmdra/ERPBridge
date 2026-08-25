@@ -2,6 +2,7 @@ package idp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -180,6 +181,70 @@ func TestRegistry_RegisterListDeleteGet(t *testing.T) {
 		_, ok := reg.Get("test-api")
 		assert.False(t, ok)
 	})
+}
+
+func TestRegistry_LegacyCredentialsAreDetectedAndBlocked(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.json")
+	data := []byte(`{"apis":{"legacy":{"name":"legacy","url":"https://erp","authKey":"SECRET_KEY","authToken":"SECRET_TOKEN"}}}`)
+	require.NoError(t, os.WriteFile(path, data, 0600))
+	reg, err := NewRegistry(path, logger.Init())
+	require.NoError(t, err)
+	assert.True(t, reg.HasLegacyCredentials())
+	assert.ErrorIs(t, reg.Register(&API{Name: "new"}), ErrLegacyCredentials)
+	assert.ErrorIs(t, reg.Delete("legacy"), ErrLegacyCredentials)
+	assert.ErrorIs(t, reg.SetCredentialRef("legacy", "ERP_KEY"), ErrLegacyCredentials)
+}
+
+func TestRegistry_ScrubCredentialsNoOpWhenMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "registry.json")
+	reg, err := NewRegistry(path, logger.Init())
+	require.NoError(t, err)
+	require.NoError(t, reg.ScrubCredentials())
+	_, err = os.Stat(path)
+	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestRegistry_ScrubCredentialsAtomicallyRemovesLegacyFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "registry.json")
+	data := []byte(`{"apis":{"legacy":{"name":"legacy","url":"https://erp","authKey":"SECRET_KEY","authToken":"SECRET_TOKEN","module":"sales"}}}`)
+	require.NoError(t, os.WriteFile(path, data, 0600))
+	reg, err := NewRegistry(path, logger.Init())
+	require.NoError(t, err)
+	require.NoError(t, reg.ScrubCredentials())
+	result := string(mustReadRegistry(t, path))
+	assert.NotContains(t, result, "authKey")
+	assert.NotContains(t, result, "authToken")
+	assert.NotContains(t, result, "SECRET_KEY")
+	assert.NotContains(t, result, "SECRET_TOKEN")
+	assert.Contains(t, result, "sales")
+	assert.False(t, reg.HasLegacyCredentials())
+}
+
+func TestRegistry_ScrubCredentialsWriteFailureLeavesOriginal(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "registry.json")
+	data := []byte(`{"apis":{"legacy":{"name":"legacy","authKey":"SECRET_KEY"}}}`)
+	require.NoError(t, os.WriteFile(path, data, 0600))
+	reg, err := NewRegistry(path, logger.Init())
+	require.NoError(t, err)
+	reg.rename = func(_, _ string) error {
+		return errors.New("injected rename failure")
+	}
+	err = reg.ScrubCredentials()
+	require.Error(t, err)
+	result := string(mustReadRegistry(t, path))
+	assert.Contains(t, result, "authKey")
+	assert.Contains(t, result, "SECRET_KEY")
+	assert.True(t, reg.HasLegacyCredentials())
+}
+
+func mustReadRegistry(t *testing.T, path string) []byte {
+	t.Helper()
+	// #nosec G304 -- test path is created under t.TempDir.
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return data
 }
 
 func TestRegistry_ConcurrentWritesReloadUnderLock(t *testing.T) {

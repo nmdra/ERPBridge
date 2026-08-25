@@ -7,6 +7,7 @@ Welcome to the ERPBridge documentation. This wiki-style guide helps you understa
 - **[Architecture Overview](./architecture.md)**: Understanding the Declarative Control Plane, SQLite registry, and reconciliation loop.
 - **[Onboarding New APIs](./onboarding.md)**: Standard workflow for registering APIs and generating MCP tools.
 - **[Tool Schema Reference (V2)](./tool-schema.md)**: Detailed guide to creating versioned, intent-based MCP tool definitions.
+- **[External Plugin Resource Schema](./plugin-schema.md)**: Define exact plugin versions, bindings, and the bounded HTTP contract.
 - **[Docker Deployment Guide](./docker.md)**: Detailed instructions for running the full stack using Docker Compose.
 - **[MockERP Integration Contract](./mock-erp.md)**: Pinned image, SQLite seed, credentials, reset, and supported DocTypes.
 - **[Connectivity & Transport Guide](./connectivity.md)**: Understanding Streamable HTTP, Stdio, and Direct API transports.
@@ -22,6 +23,7 @@ Welcome to the ERPBridge documentation. This wiki-style guide helps you understa
 - **[ERPBridge Console](./web-console.md)**: Local read-only monitoring console launched by `bridgectl web`.
 - **[CLI API Management](./cli/bridgectl_api.md)**: How to register and test ERP endpoints.
 - **[CLI Tool Management](./cli/bridgectl_tool.md)**: Managing the live tool registry using `apply`, `get`, and `validate`.
+- **[CLI Plugin Management](./cli/bridgectl_plugin.md)**: Managing external plugins and exact-version bindings with `bridgectl plugin`.
 - **[CLI Cache Management](./cli/bridgectl_cache.md)**: Monitoring and flushing the exact match cache.
 - **[Public Documentation Site](https://blog.nimendra.xyz/erpbridge-docs/)**: Published Server, Bridgectl, and SDK guides.
 

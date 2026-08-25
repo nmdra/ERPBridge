@@ -28,7 +28,9 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | Variable | Description | Default (compose) |
 | :--- | :--- | :--- |
 | `BASE_URL` | Public URL of the MCP server. | `http://localhost:8080` |
+| `ERPBRIDGE_HOST_PORT` | Host port for the ERPBridge container. | `8080` |
 | `ERP_BASE_URL` | Base URL of the underlying ERP system. | `http://mock-erp:8081` |
+| `MOCK_ERP_HOST_PORT` | Host port for the MockERP container. | `8081` |
 | `MOCK_ERP_IMAGE` | MockERP image used by Compose. | `ghcr.io/nmdra/mockerp:0.2.1` |
 | `MOCK_ERP_VERSION` | MockERP release used for OpenAPI generation. | `0.2.1` |
 | `MOCK_ERP_OPENAPI_URL` | Versioned MockERP OpenAPI URL. | `https://raw.githubusercontent.com/nmdra/mockerp/v0.2.1/openapi.yaml` |
@@ -36,9 +38,16 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | `MOCK_ERP_CREDENTIALS_JSON` | JSON credential configuration for local/container use. | (required) |
 | `MOCK_ERP_CREDENTIALS_FILE` | Mounted JSON credential file path. | (required alternative) |
 | `REDIS_URL` | URL for the Redis cache. | `redis://redis:6379` |
+| `REDIS_HOST_PORT` | Host port for Redis. | `6379` |
+| `REDIS_INSIGHT_HOST_PORT` | Host port for RedisInsight. | `8001` |
 | `DATABASE_PATH` | Path of the SQLite tool registry inside the container. | `/app/data/erpbridge.db` |
 | `RATE_LIMIT_RPS` | Per-session requests per second. | `10` |
 | `RATE_LIMIT_BURST` | Token bucket burst size. | `20` |
+| `INSECURE_AUTH_ALLOWED_HOSTS` | Development-only exact `host:port` exceptions for credentialed HTTP calls. | `mock-erp:8081` |
+| `API_AUTH_TOKEN` | Bearer token for protected admin, MCP, and direct-invoke routes. | unset |
+| `PLUGIN_ENDPOINT_ALLOWLIST` | Exact `host:port` values allowed for credentialed plugin resources. | unset |
+| `PLUGIN_MOCK_API_KEY` | Environment-backed API key reference used by the plugin integration fixture. | unset |
+| `MOCK_PLUGIN_API_KEY` | API key accepted by the separately deployed mock plugin fixture. | unset |
 
 For the full list of server environment variables, see the [Environment Variables Reference](./environment-variables.md).
 
@@ -46,6 +55,13 @@ MockERP fails closed when neither `MOCK_ERP_CREDENTIALS_JSON` nor
 `MOCK_ERP_CREDENTIALS_FILE` is configured. Use the JSON environment variable for
 local development, or mount a Docker secret and set the file path. Do not commit
 credential values to this repository.
+
+Credentialed ERP and plugin endpoints must use HTTPS. The bundled MockERP
+fixture is HTTP-only, so Compose explicitly sets
+`INSECURE_AUTH_ALLOWED_HOSTS=mock-erp:8081`. The opt-in plugin integration
+fixture adds `mock-plugin:8080` to this exact host-and-port list and sets
+`PLUGIN_ENDPOINT_ALLOWLIST=mock-plugin:8080`. These exceptions are for local
+development only. Do not set a broad or production allowlist.
 
 ## 3. Tool Registry
 
@@ -111,7 +127,60 @@ You can use the local `bridgectl` binary to interact with the server running in 
 When the container receives `SIGTERM` or `SIGINT`, ERPBridge stops accepting new
 HTTP connections and gracefully shuts down the listener before the process exits.
 
-## 6. Connecting MCP Clients
+## 6. External plugins
+
+ERPBridge does not install, start, update, or schedule plugin code. Deploy each
+plugin process separately, then apply a `Plugin` resource with its reachable
+endpoint and an exact-version `PluginBinding`. See the [External Plugin
+Resource Schema](./plugin-schema.md) for the manifest and `/v1/process` JSON
+contract.
+
+For a deployment that uses a published plugin image, pin the image tag in the
+operator-owned deployment configuration:
+
+```yaml
+services:
+  response-transformer:
+    image: ghcr.io/nmdra/erpbridge-plugins/mock-plugin:0.1.0
+```
+
+The image is not part of the ERPBridge server image. The plugin receives only a
+normalized result and binding configuration; it does not receive ERP
+credentials, inbound request headers, or caller identity. A credentialed
+plugin resource stores an environment-variable reference, not the key value:
+
+```yaml
+metadata:
+  type: docker
+spec:
+  endpoint: http://mock-plugin:8080
+  auth:
+    type: api-key
+    credentialRef: PLUGIN_MOCK_API_KEY
+    header: X-API-Key
+```
+
+The server resolves the reference at invocation time and sends one API-key
+header. The control plane must have `API_AUTH_TOKEN` enabled, and the endpoint
+must match `PLUGIN_ENDPOINT_ALLOWLIST` exactly.
+
+The repository includes an opt-in black-box test. It builds the deterministic
+fixture from the sibling `../ERPBridge-Plugins` polyrepo, starts it with the
+pinned MockERP image, and removes only its isolated containers and volumes:
+
+```bash
+make test-plugin-integration
+```
+
+The test uses the Compose project name `erpbridge-plugin-test` and ports
+`18080`, `18081`, `18090`, and `16379` so it does not reuse the normal local
+stack. It generates separate admin, ERP, and plugin credentials at runtime,
+passes them only to the services that need them, and checks missing, wrong, and
+correct plugin API keys at `/v1/process`. The plugin `/health` endpoint remains
+unprotected for readiness checks. Do not run it when those ports are already
+in use.
+
+## 7. Connecting MCP Clients
 
 ERPBridge supports the **Stdio** and **Streamable HTTP** transports.
 
@@ -165,7 +234,7 @@ Cursor connects to remote MCP servers via HTTP. Use this method when the ERPBrid
 3. **Verify:**
     You see a green status indicator. You can now use the ERP tools in Cursor Chat or Composer.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 - **Connection Refused:** Make sure that `ERP_BASE_URL` in `docker-compose.yml` uses the service name `http://mock-erp:8081` instead of `localhost`. Compose pulls `ghcr.io/nmdra/mockerp:0.2.1`; override `MOCK_ERP_IMAGE` only with a compatible image.
 - **Claude Stdio Timeout:** If Claude fails to connect, build the server binary first and run it directly. This shows any startup errors.

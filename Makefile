@@ -10,7 +10,7 @@ MOCK_ERP_OPENAPI_URL ?= https://raw.githubusercontent.com/nmdra/mockerp/v$(MOCK_
 MOCK_ERP_OPENAPI_FILE ?= /tmp/mockerp-openapi-v$(MOCK_ERP_VERSION).yaml
 SERVER_PORT=8080
 
-.PHONY: all build clean test lint run-mock run-server generate-tools setup web-install web-build web-test web-lint
+.PHONY: all build clean test lint run-mock run-server generate-tools setup test-plugin-integration web-install web-build web-test web-lint
 
 all: build
 
@@ -54,6 +54,10 @@ lint:
 	@echo "Running linter..."
 	@golangci-lint run ./...
 
+# Run the isolated external-plugin black-box integration test
+test-plugin-integration:
+	@./scripts/test-plugin-integration.sh
+
 # Start the pinned Mock ERP image
 run-mock:
 	@echo "Starting Mock ERP image $(MOCK_ERP_IMAGE) on port $(MOCK_ERP_PORT)..."
@@ -92,6 +96,7 @@ help:
 	@echo "  run-server      Start ERPBridge Server"
 	@echo "  setup           Install Go dependencies"
 	@echo "  generate-tools  Fetch versioned OpenAPI, generate, and apply tools"
+	@echo "  test-plugin-integration  Run the isolated external-plugin integration test"
 	@echo "  web-install     Install frontend dependencies"
 	@echo "  web-build       Build embedded frontend assets"
 	@echo "  web-test        Run frontend typecheck and tests"

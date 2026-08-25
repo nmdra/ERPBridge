@@ -32,7 +32,7 @@ func TestTopologyResolvesExactAmbiguousAndUnresolvedTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, api := range []*idp.API{
-		{ID: "exact-api", Name: "invoices", URL: "http://erp.local/api/invoices", Method: "GET", Module: "finance", AuthKey: "secret"},
+		{ID: "exact-api", Name: "invoices", URL: "http://erp.local/api/invoices", Method: "GET", Module: "finance", CredentialRef: "ERP_SECRET"},
 		{ID: "shared-a", Name: "shared-a", URL: "http://erp.local/api/shared", Method: "GET"},
 		{ID: "shared-b", Name: "shared-b", URL: "http://erp.local/api/shared/", Method: "GET"},
 	} {

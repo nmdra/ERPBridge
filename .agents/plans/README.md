@@ -7,9 +7,6 @@ starting implementation work.
 
 ## Upcoming
 
-- [`Plan-Generic-External-Plugins.md`](./upcoming/Plan-Generic-External-Plugins.md)
-  — proposed generic external-plugin control-plane plan. It is not execution
-  authorization.
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
   specification evaluation and migration. It is not authorization to begin
   implementation.
@@ -42,6 +39,12 @@ promotion to `active/`.
 - [`[COMPLETED]Plan-Mock-ERP.md`](./completed/[COMPLETED]Plan-Mock-ERP.md)
   — standalone MockERP extraction, pinned image consumption, and the
   ERPNext-aligned SQLite service.
+- [`[COMPLETED]Plan-Generic-External-Plugins.md`](./completed/[COMPLETED]Plan-Generic-External-Plugins.md)
+  — generic external-plugin control plane, response processing, CLI, and
+  black-box integration fixture.
+- [`[COMPLETED]Plan-Plugin-Endpoint-Authentication.md`](./completed/[COMPLETED]Plan-Plugin-Endpoint-Authentication.md)
+  — plugin authentication, secure credential transport, redaction, runtime
+  invariants, fixture authentication, and legacy ERP credential migration.
 
 Completed plans are historical records. Do not execute their unchecked task
 lists as new work.

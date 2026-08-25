@@ -15,8 +15,11 @@ import (
 	"github.com/avast/retry-go/v4"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/metrics"
+	"github.com/nmdra/ERPBridge/internal/security"
 	"github.com/sony/gobreaker"
 )
+
+const authTypeBearer = "bearer"
 
 // AuthConfig defines the authentication credentials for an ERP request.
 type AuthConfig struct {
@@ -70,6 +73,26 @@ func NewClient(rootLog *slog.Logger) *Client {
 	}
 }
 
+func endpointIdentity(target string) string {
+	u, err := url.Parse(target)
+	if err != nil || u.Host == "" {
+		return "unknown"
+	}
+	return u.Host
+}
+
+func (c *Client) clientForRequest(credentialPresent bool) *http.Client {
+	if !credentialPresent {
+		return c.http
+	}
+
+	client := *c.http
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &client
+}
+
 func (c *Client) applyAuth(req *http.Request, ep EndpointConfig) {
 	if ep.Auth.Key == "" {
 		return
@@ -83,7 +106,7 @@ func (c *Client) applyAuth(req *http.Request, ep EndpointConfig) {
 	case "basic":
 		// Expects Key to be base64 encoded "user:pass"
 		req.Header.Set("Authorization", "Basic "+ep.Auth.Key)
-	case "bearer":
+	case authTypeBearer:
 		req.Header.Set("Authorization", "Bearer "+ep.Auth.Key)
 	}
 }
@@ -98,10 +121,26 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 		target += "?" + queryParams.Encode()
 	}
 
+	endpoint := endpointIdentity(target)
+	credentialPresent := ep.Auth.Key != ""
+	targetURL, parseErr := url.Parse(target)
+	if parseErr != nil {
+		return nil, fmt.Errorf("ERP endpoint is not allowed")
+	}
+	allowedHost, insecureHTTPAllowed, validateErr := security.ValidateOutboundTransport(targetURL, credentialPresent)
+	if validateErr != nil {
+		return nil, fmt.Errorf("ERP endpoint is not allowed")
+	}
+	if credentialPresent && insecureHTTPAllowed {
+		log.Warn("credentialed outbound HTTP is allowed for development",
+			slog.String("endpoint", allowedHost),
+		)
+	}
+	outboundClient := c.clientForRequest(credentialPresent)
+
 	var bodyBytes []byte
 	if body != nil {
 		bodyBytes, _ = io.ReadAll(body)
-		log.Debug("erp request body", slog.String("body", logger.Body(string(bodyBytes))))
 	}
 
 	res, err := c.cb.Execute(func() (any, error) {
@@ -123,10 +162,10 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 
 				log.Debug("erp request attempt",
 					slog.String("method", ep.Method),
-					slog.String("path", ep.Path),
+					slog.String("endpoint", endpoint),
 				)
 
-				resp, err := c.http.Do(req)
+				resp, err := outboundClient.Do(req)
 				if err != nil {
 					return err // Retry on network error
 				}
@@ -151,8 +190,8 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 
 	if err != nil {
 		log.Error("erp request failed",
-			slog.String("path", ep.Path),
-			slog.String("error", err.Error()),
+			slog.String("endpoint", endpoint),
+			slog.String("error_type", fmt.Sprintf("%T", err)),
 		)
 		return nil, err
 	}
@@ -162,16 +201,11 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 	latency := int(duration.Milliseconds())
 
 	// Record metrics
-	metrics.ERPRequestsTotal.WithLabelValues(ep.Method, ep.Path, fmt.Sprintf("%d", resp.StatusCode)).Inc()
-	metrics.ERPLatency.WithLabelValues(ep.Method, ep.Path).Observe(duration.Seconds())
-
-	// DEBUG: Log response body
-	respBytes, _ := io.ReadAll(resp.Body)
-	resp.Body = io.NopCloser(bytes.NewReader(respBytes))
-	log.Debug("erp response body", slog.String("body", logger.Body(string(respBytes))))
+	metrics.ERPRequestsTotal.WithLabelValues(ep.Method, endpoint, fmt.Sprintf("%d", resp.StatusCode)).Inc()
+	metrics.ERPLatency.WithLabelValues(ep.Method, endpoint).Observe(duration.Seconds())
 
 	log.Info("erp response",
-		slog.String("path", ep.Path),
+		slog.String("endpoint", endpoint),
 		slog.Int("status_code", resp.StatusCode),
 		slog.Int("latency_ms", latency),
 	)

@@ -68,7 +68,7 @@ var tokenCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		resp, err := doBridgeRequestWithHeaders(cmd, http.MethodPost, tokenURL(ctx.Server, ""), bytes.NewReader(body), http.Header{"Content-Type": []string{"application/json"}})
+		resp, err := doBridgeRequestWithHeaders(cmd, http.MethodPost, tokenURL(ctx.Server, ""), bytes.NewReader(body), http.Header{cliContentTypeHeader: []string{cliJSONContentType}})
 		if err != nil {
 			return err
 		}
