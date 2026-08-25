@@ -1,0 +1,29 @@
+services:
+  mock-erp:
+    ports:
+      - "18081:8081"
+    environment:
+      MOCK_ERP_CREDENTIALS_JSON: '{"credentials":[{"api_key":"plugin-test-key","api_secret":"plugin-test-secret","role":"admin","identity":"plugin-test"}]}'
+
+  redis:
+    ports:
+      - "16379:6379"
+      - "18001:8001"
+
+  mock-plugin:
+    build:
+      context: ../ERPBridge-Plugins/plugins/mock-plugin
+      dockerfile: Dockerfile
+    image: erpbridge-plugin-test/mock-plugin:0.1.0
+    ports:
+      - "18090:8080"
+
+  erpbridge-server:
+    ports:
+      - "18080:8080"
+    environment:
+      ERP_PRIMARY_KEY: "token plugin-test-key:plugin-test-secret"
+      API_AUTH_TOKEN: ""
+    depends_on:
+      mock-plugin:
+        condition: service_started
