@@ -64,9 +64,8 @@ function relatedComponentNode(
 ) {
   return Boolean(
     node &&
-      node.id !== endpointID &&
-      (componentNodeKinds.has(node.kind) ||
-        node.kind === "unresolved-endpoint"),
+    node.id !== endpointID &&
+    (componentNodeKinds.has(node.kind) || node.kind === "unresolved-endpoint"),
   );
 }
 
