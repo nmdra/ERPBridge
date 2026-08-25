@@ -1,12 +1,17 @@
 # Plan: ERPBridge Developer Console in `bridgectl`
 
-> **Status: ACTIVE — EXECUTION IN PROGRESS**
+> **Status: COMPLETED — VERIFIED 2026-08-26**
 >
-> This plan covers a local, read-only web console launched by `bridgectl web`.
-> The external-plugin UI phase is deliberately blocked until the separate
-> generic external-plugin implementation and its contract tests are complete.
-> This file is the execution source of truth; keep its task order and update
-> checkboxes only after each task's verification gate passes.
+> This plan covers the completed local, read-only web console launched by
+> `bridgectl web`, including the feature-detected external-plugin UI added after
+> the generic external-plugin implementation and contract tests were completed.
+> The plan remains the execution record; all task checkboxes and verification
+> gates are complete.
+>
+> **Completion verification:** `go test ./...`, `golangci-lint run ./...`,
+> `make test-plugin-integration`, frontend format/typecheck/tests/lint/build,
+> `scripts/verify-console-assets.sh`, and the public documentation build all
+> pass. The plugin UI also has focused projection, topology, and frontend tests.
 
 ## Goal
 
@@ -556,8 +561,8 @@ run the task gate before committing.
   commit. Add only missing usage, security, data-source, live-only metrics,
   topology-resolution, plugin-gate, and troubleshooting details. Update the
   matching pages in `../erpbridge-docs` using that repository's required plan
-  workflow; do not document plugin endpoints as available until Phase 6 is
-  unblocked. (**Seam:** in-repo docs and generated Cobra docs; **Files:**
+  workflow; plugin-aware documentation is added only after the completed plugin
+  contract and implementation are verified. (**Seam:** in-repo docs and generated Cobra docs; **Files:**
   `docs/web-console.md`, `docs/cli/bridgectl_web.md` (generated),
   `docs/README.md`, `CHANGELOG.md`,
   `../erpbridge-docs/.agents/plans/Plan-erpbridge-console.md`, matching public
@@ -565,9 +570,9 @@ run the task gate before committing.
   directory and compare the generated web page, run `make test`, targeted
   `golangci-lint`, and `npm run build` in `../erpbridge-docs`; **Commit:** `docs: audit ERPBridge console documentation`.)
 
-### Phase 6 — Plugin UI integration, blocked until the plugin plan completes
+### Phase 6 — Plugin UI integration, completed after the plugin plan
 
-- [ ] **Task 6.1: Revalidate and map the completed plugin contract.** Only after
+- [x] **Task 6.1: Revalidate and map the completed plugin contract.** Only after
   the dependency gate passes, read the completed plugin plan, final API docs,
   and contract tests. Confirm the exact list/get routes, resource JSON shapes,
   version identity, active state, binding target, `after_response` phase,
@@ -578,7 +583,7 @@ run the task gate before committing.
   fixture files; **Verify:** plugin plan final verification plus a focused
   contract fixture test; **Commit:** `chore: align console with plugin contract`.)
 
-- [ ] **Task 6.2: Add read-only plugin and binding BFF projections.** Add
+- [x] **Task 6.2: Add read-only plugin and binding BFF projections.** Add
   feature-detected local routes that list sanitized `Plugin` and
   `PluginBinding` resources for a selected context. Preserve exact versions,
   binding order, phase, failure policy, timeout, and target-tool references;
@@ -592,7 +597,7 @@ run the task gate before committing.
   `docs/web-console.md`, `CHANGELOG.md`; **Verify:**
   `go test ./internal/web -run 'TestPlugin'`; **Commit:** `feat: expose read-only plugin metadata`.)
 
-- [ ] **Task 6.3: Add plugin nodes, binding edges, and tool detail panels.** Extend
+- [x] **Task 6.3: Add plugin nodes, binding edges, and tool detail panels.** Extend
   topology data with plugin and binding nodes only when the feature is
   available. Show exact tool/plugin versions, `after_response`, priority,
   failure policy, timeout, configuration-present state, and health as
@@ -605,7 +610,7 @@ run the task gate before committing.
   `docs/web-console.md`, `CHANGELOG.md`; **Verify:** plugin fixture integration
   tests plus `go test ./internal/web` and `npm test --prefix web -- --run`; **Commit:** `feat: visualize plugin bindings`.)
 
-- [ ] **Task 6.4: Update plugin-aware docs only after implementation is stable.**
+- [x] **Task 6.4: Update plugin-aware docs only after implementation is stable.**
   Document plugin visualization, version pinning, operator-owned plugin
   deployment, failure-policy meaning, and health limitations in both
   repositories. Add the Unreleased changelog entry and run the plugin plan's
@@ -619,8 +624,8 @@ run the task gate before committing.
 
 ### Phase gates
 
-1. **Phase 0:** Console contract exists; plugin work is explicitly blocked; the
-   approved plan is active and its dependency gate is recorded.
+1. **Phase 0:** The console contract exists and the plugin dependency gate was
+   recorded before plugin UI work started.
 2. **Phase 1:** `bridgectl web --url --no-open` starts on literal loopback,
    reports a one-time capability URL, rejects hostile Host/Origin/capability
    requests, and stops cleanly; existing CLI tests remain green.
@@ -640,9 +645,8 @@ run the task gate before committing.
    `git diff --check`, and documentation builds are green. Every behavior task
    has its local docs/changelog update in its owning commit and public docs are
    synchronized in the corresponding repository phase.
-7. **Phase 6:** No plugin UI is shipped until the separate plugin plan is
-   completed, merged, documented, and verified against its actual API. Once
-   unblocked, plugin resources and exact bindings are read-only,
+7. **Phase 6:** The completed plugin plan was revalidated before shipping the
+   plugin UI. Plugin resources and exact bindings are read-only,
    feature-detected, version-accurate, endpoint/configuration-safe, and do not
    claim unsupported health.
 

@@ -4,6 +4,9 @@ set -euo pipefail
 root_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root_dir"
 
+# Keep the tracked fallback sentinel, but remove prior hashed build output so
+# repeated local verification does not accumulate assets in the size budget.
+rm -rf internal/web/prebuilt/build/assets
 npm run build --prefix web >/dev/null
 
 go_binary=$(mktemp)

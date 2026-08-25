@@ -2,8 +2,10 @@
 
 The ERPBridge Console is a read-only local web interface for `bridgectl`.
 It shows configured contexts, deployment state, MCP tools, logs, live metrics,
-and API-to-MCP paths. The homepage states this boundary clearly: use the
-console to monitor ERPBridge and use `bridgectl` to configure or modify it.
+and API-to-MCP paths. It also shows safe external plugin and binding metadata
+when the selected deployment supports the completed plugin contract. The
+homepage states this boundary clearly: use the console to monitor ERPBridge and
+use `bridgectl` to configure or modify it.
 The CLI remains the automation and mutation interface.
 
 ## Frontend development
@@ -95,6 +97,8 @@ The upstream route map is fixed:
 | Health | `/mcp/health` | `MCPServer` |
 | Metrics | `/metrics` | `MCPServer` |
 | Tool inventory | `/apis/erpbridge.io/v1/tools` | `MCPServer` |
+| Plugins | `/apis/erpbridge.io/v1/plugins` | `MCPServer` |
+| Plugin bindings | `/apis/erpbridge.io/v1/pluginbindings` | `MCPServer` |
 | Cache statistics | `/api/cache/stats` | `Server` |
 | Recent logs | `/api/logs/recent` | `Server` |
 | Live logs | `/api/logs/stream` | `Server` |
@@ -123,6 +127,8 @@ URLs or credentials.
 | `GET /api/console/v1/deployment?context=<name>` | Read deployment identity and local availability. |
 | `GET /api/console/v1/health?context=<name>` | Read safe upstream health. |
 | `GET /api/console/v1/tools?context=<name>` | Read the safe tool inventory. |
+| `GET /api/console/v1/plugins?context=<name>` | Read safe plugin metadata. |
+| `GET /api/console/v1/plugin-bindings?context=<name>` | Read safe binding metadata. |
 | `GET /api/console/v1/cache?context=<name>` | Read safe cache statistics. |
 | `GET /api/console/v1/logs/recent?context=<name>` | Read projected recent log events. |
 | `GET /api/console/v1/logs/stream?context=<name>` | Stream projected log events over SSE. |
@@ -141,11 +147,11 @@ references, default values, raw output schemas, and full upstream URLs.
 
 ## Topology semantics
 
-The topology describes this path:
+The topology describes these paths:
 
 ```text
 MCP client -> MCP tool -> ERP API endpoint
-                          `-> future plugin binding -> external plugin -> result
+                    `-> plugin binding -> external plugin -> result
 ```
 
 The server matches a tool execution method and endpoint against sanitized local
@@ -166,9 +172,10 @@ The registry has no deployment context field, so the console does not claim
 cross-environment ownership. It shows an endpoint path and selected-context
 label, not a full upstream URL.
 
-The topology includes MCP transport, MCP tool, ERP API, and unresolved endpoint
-nodes. It caps node and edge counts and provides an accessible list and path
-view in addition to the interactive canvas. The BFF reads the local registry
+The topology includes MCP transport, MCP tool, ERP API, plugin binding,
+external plugin, and unresolved endpoint nodes. Plugin relationships appear only
+when both plugin list routes are available. It caps node and edge counts and
+provides an accessible list and path view in addition to the interactive canvas. The BFF reads the local registry
 server-side and strips all registry authentication fields. The canvas loads on
 demand so the list view remains available on small or keyboard-only clients.
 
@@ -190,11 +197,11 @@ snapshot. Charts include a text or table view.
 
 ## Plugins
 
-Plugin and `PluginBinding` views remain disabled until the generic external
-plugin plan is complete, merged, documented, and verified against its final API.
-The console then reads the final list and get routes. It shows versions,
-bindings, phases, priorities, failure policies, timeouts, and target-tool
-references.
+The Plugins page and tool detail panels read the final plugin and
+`PluginBinding` list routes. They show exact versions, active state, binding
+phase, priority, failure policy, timeout, configuration-present state, and
+target-tool references. A deployment that returns `404` for either route shows
+an unavailable feature state instead of a failed console.
 
 The plugin view exposes only `endpointConfigured` and
 `configurationPresent` booleans. It does not expose plugin endpoints, static
@@ -211,4 +218,4 @@ Prometheus query integration.
 The console does not change the active persistent `bridgectl` context when a
 user selects a deployment in the browser. The selection applies only to the
 current console session. The application routes include Overview,
-Deployments, Logs, Metrics, Tools, Topology, and Settings.
+Deployments, Logs, Metrics, Tools, Plugins, Topology, and Settings.
