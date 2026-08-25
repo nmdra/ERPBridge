@@ -269,7 +269,7 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   `MOCK_ERP_CREDENTIALS_JSON='{}' MOCK_PLUGIN_IMAGE=example.invalid/mock:latest ERP_PRIMARY_KEY=test MOCK_PLUGIN_API_KEY=test PLUGIN_MOCK_API_KEY=test API_AUTH_TOKEN=test docker compose -p erpbridge-plugin-test -f docker-compose.yml -f docker-compose.plugin-test.yml ps -a`;
   **Commit:** `test: authenticate plugin integration fixture`.)
 
-- [ ] **Task 7: Remove legacy plaintext ERP credential persistence.** First
+- [x] **Task 7: Remove legacy plaintext ERP credential persistence.** First
   write failing IDP/CLI tests. Replace raw `AuthKey` and `AuthToken` registry
   fields with `CredentialRef`; make generated tools use each API's reference
   rather than fixed `ERP_PRIMARY_KEY`. Replace `--auth-key` with

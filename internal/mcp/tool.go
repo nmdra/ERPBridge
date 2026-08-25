@@ -13,6 +13,7 @@ import (
 
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/connector"
+	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -336,15 +337,7 @@ func parseResponsePath(responsePath string) ([]responsePathToken, error) {
 }
 
 func resolveCredential(ref string) (string, error) {
-	if ref == "" {
-		return "", nil
-	}
-
-	value, ok := os.LookupEnv(ref)
-	if !ok || value == "" {
-		return "", fmt.Errorf("credential reference %q is not configured", ref)
-	}
-	return value, nil
+	return credentials.Resolve(ref)
 }
 
 // ValidateResult checks a normalized successful result against the tool's

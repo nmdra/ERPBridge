@@ -48,8 +48,10 @@ paths:
 	assert.NoError(t, err)
 
 	api := API{
-		Name:   "test",
-		Module: "finance",
+		Name:          "test",
+		Module:        "finance",
+		AuthType:      "bearer",
+		CredentialRef: "ERP_OPENAPI_KEY", // #nosec G101 -- environment-variable reference, not a secret.
 	}
 
 	tools, err := gen.GenerateFromOpenAPI(context.Background(), api, specPath)
@@ -57,11 +59,23 @@ paths:
 	assert.Len(t, tools, 1)
 	assert.Equal(t, "gettest", tools[0].Metadata.Name)
 	assert.Equal(t, "Get test data", tools[0].Spec.Description.Short)
+	assert.Equal(t, "ERP_OPENAPI_KEY", tools[0].Spec.Security.CredentialRef)
 
 	// Verify file was saved
 	toolPath := filepath.Join(tempDir, "finance", "gettest.json")
 	_, err = os.Stat(toolPath)
 	assert.NoError(t, err)
+}
+
+func TestGenerator_RequiresAndUsesCredentialReference(t *testing.T) {
+	gen := NewGenerator(t.TempDir(), logger.Init())
+	_, err := gen.Generate(API{Name: "secured", AuthType: "api-key"})
+	assert.Error(t, err)
+	// #nosec G101 -- this is an environment-variable reference used by the test.
+	api := API{Name: "secured", AuthType: "api-key", CredentialRef: "ERP_CUSTOM_KEY"}
+	tool, err := gen.Generate(api)
+	assert.NoError(t, err)
+	assert.Equal(t, "ERP_CUSTOM_KEY", tool.Spec.Security.CredentialRef)
 }
 
 func TestGenerator_Generate(t *testing.T) {

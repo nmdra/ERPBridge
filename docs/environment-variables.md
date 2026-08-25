@@ -21,7 +21,8 @@ The server reads these variables directly from the environment. It does not load
 | `LOG_LEVEL_<COMPONENT>` | (unset) | Per-component log level override, for example `LOG_LEVEL_MCP`, `LOG_LEVEL_CACHE`, `LOG_LEVEL_CONNECTOR`, `LOG_LEVEL_IDP`. |
 | `APP_ENV` | (unset) | `production` uses JSON log output. Any other value uses text output. |
 | `LOG_TO_STDERR` | (unset) | `true` writes logs to stderr. The server sets this automatically in stdio mode. |
-| `ERP_PRIMARY_KEY` | (unset) | Credential referenced by `credentialRef` in tool schemas. Resolved at tool-call time. |
+| `ERP_PRIMARY_KEY` | (unset) | Example environment credential for generated ERP tools. The local API registry stores only a `credentialRef`, never this value. |
+| `<ERP_CREDENTIAL_REF>` | (unset) | Any environment variable named by an API or tool `credentialRef`; resolved at request time and never persisted by `bridgectl`. |
 | `INSECURE_AUTH_ALLOWED_HOSTS` | (unset) | Development-only comma-separated exact `host:port` allowlist for credentialed `http://` ERP or plugin calls. Credentialed calls otherwise require HTTPS. |
 | `API_AUTH_TOKEN` | (unset) | Enables HTTP bearer authentication when non-empty. This is the admin credential and is never returned by the server. |
 | `API_AUTH_ADMIN_ROLES` | (unset) | Comma-separated roles assigned to the admin identity. Roles must match `[a-z][a-z0-9_-]{0,63}` and the list may contain at most 32 unique roles. |
@@ -63,6 +64,8 @@ contexts:
     server: http://localhost:8080
     api-token: <token-from-environment>
 ```
+
+`bridgectl api register` accepts `--credential-ref NAME`, and `bridgectl api set-credential-ref NAME --credential-ref ENV_NAME` assigns an environment-backed ERP credential reference. The registry stores the name only. If an older registry contains `authKey` or `authToken`, state-changing API commands and `api test` stop until you run `bridgectl api scrub-credentials --yes`. Scrubbing atomically removes those fields without creating a plaintext backup; set a new reference after the scrub.
 
 The CLI reads its defaults from `~/.bridgectl/config.yaml`. The default context uses:
 

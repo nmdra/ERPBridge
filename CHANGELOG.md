@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add environment-backed ERP API credential references, `api set-credential-ref`, and confirmed legacy credential scrubbing without plaintext backups.
 - Add typed plugin metadata and protected bearer or API-key credential references, with bounded authenticated requests, for external plugin endpoints.
 - Add the initial generic external-plugin and exact-version binding contract with bounded HTTP JSON requests.
 - Persist versioned plugin and binding resources with soft-delete and active-reference protection.

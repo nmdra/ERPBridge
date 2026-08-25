@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nmdra/ERPBridge/internal/connector"
+	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/idp"
 	"github.com/nmdra/ERPBridge/internal/output"
 	"github.com/spf13/cobra"
@@ -33,7 +34,7 @@ Once registered, you can generate an MCP tool schema from this API definition.`,
     --module finance \
     --description "Fetch all invoices" \
     --auth-type api-key \
-    --auth-key "$ERP_API_KEY"`,
+    --credential-ref ERP_API_KEY`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		reg, err := idp.NewRegistry("", RootLog)
 		if err != nil {
@@ -47,17 +48,17 @@ Once registered, you can generate an MCP tool schema from this API definition.`,
 		desc, _ := cmd.Flags().GetString("description")
 		authType, _ := cmd.Flags().GetString("auth-type")
 		authHeader, _ := cmd.Flags().GetString("auth-header")
-		authKey, _ := cmd.Flags().GetString("auth-key")
+		credentialRef, _ := cmd.Flags().GetString("credential-ref")
 
 		api := &idp.API{
-			Name:        name,
-			URL:         url,
-			Method:      method,
-			Module:      module,
-			Description: desc,
-			AuthType:    authType,
-			AuthHeader:  authHeader,
-			AuthKey:     authKey,
+			Name:          name,
+			URL:           url,
+			Method:        method,
+			Module:        module,
+			Description:   desc,
+			AuthType:      authType,
+			AuthHeader:    authHeader,
+			CredentialRef: credentialRef,
 		}
 
 		if err := reg.Register(api); err != nil {
@@ -120,6 +121,52 @@ func (r *APIListResponse) RenderTable(w io.Writer) error {
 	return tw.Flush()
 }
 
+var apiSetCredentialRefCmd = &cobra.Command{
+	Use:     "set-credential-ref [name]",
+	Short:   "Set the environment credential reference for an API",
+	Example: `  bridgectl api set-credential-ref get-invoices --credential-ref ERP_API_KEY`,
+	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		reg, err := idp.NewRegistry("", RootLog)
+		if err != nil {
+			return err
+		}
+		ref, err := cmd.Flags().GetString("credential-ref")
+		if err != nil {
+			return err
+		}
+		if err := reg.SetCredentialRef(args[0], ref); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Credential reference set for API %s\n", args[0])
+		return nil
+	},
+}
+
+var apiScrubCredentialsCmd = &cobra.Command{
+	Use:   "scrub-credentials",
+	Short: "Remove legacy plaintext credentials from the local registry",
+	Long:  "Atomically remove legacy credential fields. This operation does not create a backup and requires explicit confirmation.",
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		yes, err := cmd.Flags().GetBool("yes")
+		if err != nil {
+			return err
+		}
+		if !yes {
+			return fmt.Errorf("scrub-credentials is destructive; repeat with --yes")
+		}
+		reg, err := idp.NewRegistry("", RootLog)
+		if err != nil {
+			return err
+		}
+		if err := reg.ScrubCredentials(); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Legacy credentials scrubbed.")
+		return nil
+	},
+}
+
 var apiTestCmd = &cobra.Command{
 	Use:   "test [name]",
 	Short: "Send a test request to a registered API",
@@ -134,12 +181,21 @@ URL, and authentication headers, and displays the response status and latency.`,
 			return err
 		}
 
+		if reg.HasLegacyCredentials() {
+			return idp.ErrLegacyCredentials
+		}
+
 		name := args[0]
 		api, ok := reg.Get(name)
 		if !ok {
 			return NewError(CodeNotFound, "API_NOT_FOUND",
 				fmt.Sprintf("API %s not found in local registry", name),
 				"Run 'bridgectl api list' to see available APIs.")
+		}
+
+		credential, err := resolveAPICredential(api)
+		if err != nil {
+			return err
 		}
 
 		client := connector.NewClient(RootLog)
@@ -149,7 +205,7 @@ URL, and authentication headers, and displays the response status and latency.`,
 			BaseURL: "",      // Empty because Path is the full URL
 			Auth: connector.AuthConfig{
 				Type: api.AuthType,
-				Key:  api.AuthKey,
+				Key:  credential,
 			},
 		}
 
@@ -204,10 +260,22 @@ func (r *APITestResponse) RenderTable(w io.Writer) error {
 	return nil
 }
 
+func resolveAPICredential(api idp.API) (string, error) {
+	if api.AuthType == "" {
+		return "", nil
+	}
+	if api.CredentialRef == "" {
+		return "", fmt.Errorf("API %q requires a credential reference before testing", api.Name)
+	}
+	return credentials.Resolve(api.CredentialRef)
+}
+
 func init() {
 	RootCmd.AddCommand(apiCmd)
 	apiCmd.AddCommand(apiRegisterCmd)
 	apiCmd.AddCommand(apiListCmd)
+	apiCmd.AddCommand(apiSetCredentialRefCmd)
+	apiCmd.AddCommand(apiScrubCredentialsCmd)
 	apiCmd.AddCommand(apiTestCmd)
 
 	apiRegisterCmd.Flags().String("name", "", "Unique name for this API")
@@ -217,7 +285,10 @@ func init() {
 	apiRegisterCmd.Flags().String("description", "", "Human-readable description")
 	apiRegisterCmd.Flags().String("auth-type", "api-key", "Auth type")
 	apiRegisterCmd.Flags().String("auth-header", "X-API-Key", "Auth header")
-	apiRegisterCmd.Flags().String("auth-key", "", "Auth key")
+	apiRegisterCmd.Flags().String("credential-ref", "", "Environment variable containing the auth credential")
+	apiSetCredentialRefCmd.Flags().String("credential-ref", "", "Environment variable containing the auth credential")
+	apiScrubCredentialsCmd.Flags().Bool("yes", false, "Confirm destructive credential removal")
+	_ = apiSetCredentialRefCmd.MarkFlagRequired("credential-ref")
 
 	_ = apiRegisterCmd.MarkFlagRequired("name")
 	_ = apiRegisterCmd.MarkFlagRequired("url")
