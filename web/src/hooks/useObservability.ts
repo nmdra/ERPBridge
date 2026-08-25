@@ -11,22 +11,37 @@ export type LogEvent = {
   summary?: string;
 };
 
+export type MetricSample = {
+  name: string;
+  labels?: Record<string, string>;
+  value: number;
+};
+
+export type MetricRate = {
+  name: string;
+  labels?: Record<string, string>;
+  perSecond: number;
+};
+
 export type MetricsSnapshot = {
   state: string;
   observedAt?: string;
   sampleWindowStart?: string;
-  cumulative: Array<{
-    name: string;
-    labels?: Record<string, string>;
-    value: number;
-  }>;
-  rates: Array<{
-    name: string;
-    labels?: Record<string, string>;
-    perSecond: number;
-  }>;
+  cumulative: MetricSample[];
+  rates: MetricRate[];
   averageLatencySeconds?: number;
 };
+
+export type MetricsHistoryPoint = MetricsSnapshot & { observedAt: string };
+
+export function metricSeriesKey(name: string, labels?: Record<string, string>) {
+  return [
+    name,
+    ...Object.keys(labels ?? {})
+      .sort()
+      .map((key) => `${key}=${labels?.[key] ?? ""}`),
+  ].join("|");
+}
 
 type LogResponse = { state: string; items: LogEvent[] };
 
@@ -112,7 +127,13 @@ type PluginBindingResponse = {
   items: PluginBindingProjection[];
 };
 
-type AsyncState<T> = { data: T | null; error: string | null; loading: boolean };
+type AsyncState<T> = {
+  data: T | null;
+  error: string | null;
+  loading: boolean;
+  lastUpdated?: string;
+  stale?: boolean;
+};
 
 export function useTools(contextName: string): AsyncState<ToolResponse> {
   const [state, setState] = useState<AsyncState<ToolResponse>>({
@@ -233,7 +254,13 @@ export function useLogs(
     apiFetch<LogResponse>(path)
       .then((response) => {
         if (!active) return;
-        setState({ data: response.items, error: null, loading: false });
+        setState({
+          data: response.items,
+          error: null,
+          loading: false,
+          lastUpdated: new Date().toISOString(),
+          stale: false,
+        });
         return streamLogEvents(
           `/api/console/v1/logs/stream?context=${encodeURIComponent(contextName)}`,
           controller.signal,
@@ -242,6 +269,8 @@ export function useLogs(
             setState((current) => ({
               ...current,
               data: [...(current.data ?? []), event as LogEvent].slice(-1000),
+              lastUpdated: new Date().toISOString(),
+              stale: false,
             }));
           },
         );
@@ -256,6 +285,7 @@ export function useLogs(
             error:
               error instanceof Error ? error.message : "Logs are unavailable",
             loading: false,
+            stale: Boolean(current.data),
           }));
           setStreaming(false);
         }
@@ -269,12 +299,15 @@ export function useLogs(
   return { ...state, streaming };
 }
 
-export function useMetrics(contextName: string): AsyncState<MetricsSnapshot> {
+export function useMetrics(contextName: string): AsyncState<MetricsSnapshot> & {
+  history: MetricsHistoryPoint[];
+} {
   const [state, setState] = useState<AsyncState<MetricsSnapshot>>({
     data: null,
     error: null,
     loading: true,
   });
+  const [history, setHistory] = useState<MetricsHistoryPoint[]>([]);
   useEffect(() => {
     let active = true;
     const load = () => {
@@ -282,22 +315,35 @@ export function useMetrics(contextName: string): AsyncState<MetricsSnapshot> {
         `/api/console/v1/metrics?context=${encodeURIComponent(contextName)}`,
       )
         .then((data) => {
-          if (active) setState({ data, error: null, loading: false });
+          if (!active) return;
+          const observedAt = data.observedAt ?? new Date().toISOString();
+          setState({
+            data,
+            error: null,
+            loading: false,
+            lastUpdated: observedAt,
+            stale: false,
+          });
+          setHistory((current) =>
+            [...current, { ...data, observedAt }].slice(-30),
+          );
         })
         .catch((error: unknown) => {
           if (active) {
-            setState({
-              data: null,
+            setState((current) => ({
+              ...current,
               error:
                 error instanceof Error
                   ? error.message
                   : "Metrics are unavailable",
               loading: false,
-            });
+              stale: Boolean(current.data),
+            }));
           }
         });
     };
-    setState({ data: null, error: null, loading: true });
+    setState({ data: null, error: null, loading: true, stale: false });
+    setHistory([]);
     load();
     const interval = window.setInterval(load, 10000);
     return () => {
@@ -305,7 +351,7 @@ export function useMetrics(contextName: string): AsyncState<MetricsSnapshot> {
       window.clearInterval(interval);
     };
   }, [contextName]);
-  return state;
+  return { ...state, history };
 }
 
 export function useFilteredLogs(

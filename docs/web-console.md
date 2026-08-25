@@ -30,13 +30,27 @@ A clean checkout serves a tracked
 fallback page until the frontend build creates hashed assets. Release builds
 run the frontend build before GoReleaser and reject a fallback asset.
 
-## Themes and accessibility
+## Workspace, themes, and accessibility
 
-The console defaults to light mode and supports dark and system themes. It
-stores an explicit choice in browser storage and follows the operating system
-when the choice is system. The sidebar can be collapsed on wide screens and
-keeps icon labels available through accessible names and tooltips. The console
-also follows `prefers-reduced-motion`.
+The console uses an operations-first workspace. Monitor contains Overview,
+Logs, and Metrics. Inventory contains Contexts, Tools, and Plugins. Diagnose
+contains Integration topology. The visible Contexts page lists configured
+`bridgectl` contexts; `/deployments` remains as a compatible deep link. The
+context selector starts from the configured current context and applies browser-
+local changes without changing persistent CLI configuration.
+
+The Overview dashboard starts with context health and freshness, then shows
+active tools, cache keys, server version, current-session rates, and safe
+investigation links. Partial refresh failures retain the last safe observation
+and identify it as stale.
+
+The console uses green as its brand accent and keeps success, warning, danger,
+and information colors semantically distinct. It defaults to light mode and
+supports direct light, dark, and system choices. Preferences are stored in
+browser storage. The sidebar becomes an accessible navigation drawer on small
+screens, and the console provides a skip link, visible keyboard focus,
+`aria-current` navigation, reduced-motion support, and text alternatives for
+charts and topology.
 
 Status badges include text and an icon. Color does not carry status meaning by
 itself. Graph and chart pages provide an HTML list or table alternative.
@@ -138,12 +152,14 @@ URLs or credentials.
 
 The console returns stable JSON error states for missing contexts, unavailable
 endpoints, unauthorized reads, timeouts, malformed upstream data, and bounded
-response failures. It does not return an upstream error body. The Tools page
-renders the safe tool projection as a filterable table. Tool names link to a
-read-only manifest page with descriptive guidance, input fields, execution
-paths, security roles, routing hints, cache settings, and lifecycle metadata.
-The page does not invoke or mutate tools. Manifest projections omit credential
-references, default values, raw output schemas, and full upstream URLs.
+response failures. It does not return an upstream error body. Logs, tools, and
+plugins use shared search/filter surfaces and distinguish empty results from
+filtered results. The Tools page renders the safe tool projection as a
+filterable table. Tool names link to a read-only manifest page with descriptive
+guidance, input fields, execution paths, security roles, routing hints, cache
+settings, and lifecycle metadata. The page does not invoke or mutate tools.
+Manifest projections omit credential references, default values, raw output
+schemas, and full upstream URLs.
 
 ## Topology semantics
 
@@ -195,10 +211,12 @@ or oversized events. Live streams use a capability-protected fetch stream and
 stop when the browser disconnects. The server limits concurrent streams.
 
 Metrics are live scrape samples. The console preserves cumulative totals and
-calculates rates only from successive samples during the current session. It
-uses histogram sum and count for average latency. It does not claim percentile
-latency or historical Prometheus data. Unknown metric families do not fail the
-snapshot. Charts include a text or table view.
+calculates rates only from successive samples during the current browser
+session. It joins each rate to the complete metric label set, shows compact
+responsive session trends, and keeps a labeled table and text summary as the
+accessible alternative. It uses histogram sum and count for average latency.
+It does not claim percentile latency or historical Prometheus data. Unknown
+metric families do not fail the snapshot.
 
 ## Plugins
 

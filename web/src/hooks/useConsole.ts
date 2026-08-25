@@ -17,6 +17,8 @@ export type AsyncState<T> = {
   data: T | null;
   error: string | null;
   loading: boolean;
+  lastUpdated?: string;
+  stale?: boolean;
 };
 
 export function useContexts(): AsyncState<ContextProjection[]> {
@@ -66,6 +68,19 @@ export type ServerInfoResponse = {
   observedAt?: string;
 };
 
+export type HealthResponse = {
+  state: string;
+  status?: string;
+};
+
+export type CacheResponse = {
+  state: string;
+  stats?: {
+    exactKeys: number;
+    redisMemory?: string;
+  };
+};
+
 export function useServerInfo(
   contextName: string,
 ): AsyncState<ServerInfoResponse> {
@@ -95,6 +110,100 @@ export function useServerInfo(
       });
     return () => {
       active = false;
+    };
+  }, [contextName]);
+  return state;
+}
+
+export function useHealth(contextName: string): AsyncState<HealthResponse> {
+  const [state, setState] = useState<AsyncState<HealthResponse>>({
+    data: null,
+    error: null,
+    loading: true,
+  });
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      apiFetch<HealthResponse>(
+        `/api/console/v1/health?context=${encodeURIComponent(contextName)}`,
+      )
+        .then((data) => {
+          if (active) {
+            setState({
+              data,
+              error: null,
+              loading: false,
+              lastUpdated: new Date().toISOString(),
+              stale: false,
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          if (active) {
+            setState((current) => ({
+              ...current,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Health is unavailable",
+              loading: false,
+              stale: Boolean(current.data),
+            }));
+          }
+        });
+    };
+    load();
+    const interval = window.setInterval(load, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [contextName]);
+  return state;
+}
+
+export function useCache(contextName: string): AsyncState<CacheResponse> {
+  const [state, setState] = useState<AsyncState<CacheResponse>>({
+    data: null,
+    error: null,
+    loading: true,
+  });
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      apiFetch<CacheResponse>(
+        `/api/console/v1/cache?context=${encodeURIComponent(contextName)}`,
+      )
+        .then((data) => {
+          if (active) {
+            setState({
+              data,
+              error: null,
+              loading: false,
+              lastUpdated: new Date().toISOString(),
+              stale: false,
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          if (active) {
+            setState((current) => ({
+              ...current,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Cache data is unavailable",
+              loading: false,
+              stale: Boolean(current.data),
+            }));
+          }
+        });
+    };
+    load();
+    const interval = window.setInterval(load, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
     };
   }, [contextName]);
   return state;

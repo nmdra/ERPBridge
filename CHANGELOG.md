@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add a green-accent operational console workspace with grouped navigation,
+  responsive mobile navigation, context-aware overview dashboard, session-local
+  metric trends, label-safe metric tables, and consistent stale/empty states
 - Add topology search and facet filters, shared node/edge selection,
   relationship highlighting, safe edge inspection, and incomplete-graph
   warnings without exposing endpoints, credentials, or raw configuration

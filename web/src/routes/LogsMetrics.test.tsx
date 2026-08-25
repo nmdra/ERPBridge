@@ -95,3 +95,38 @@ test("renders a metrics table", async () => {
     screen.getByRole("table", { name: "Live metric samples" }),
   ).toBeInTheDocument();
 });
+
+test("keeps labeled metric rates aligned with their series", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            state: "available",
+            cumulative: [
+              { name: "requests", labels: { method: "GET" }, value: 10 },
+              { name: "requests", labels: { method: "POST" }, value: 20 },
+            ],
+            rates: [
+              { name: "requests", labels: { method: "GET" }, perSecond: 1 },
+              { name: "requests", labels: { method: "POST" }, perSecond: 2 },
+            ],
+            observedAt: "2026-08-25T12:00:00Z",
+          }),
+          { status: 200 },
+        ),
+      ),
+    ),
+  );
+
+  render(<Metrics contextName="local" />);
+  const table = await screen.findByRole("table", {
+    name: "Live metric samples",
+  });
+  const rows = within(table).getAllByRole("row");
+  expect(rows[1]).toHaveTextContent("method=GET");
+  expect(rows[1]).toHaveTextContent("1.00/s");
+  expect(rows[2]).toHaveTextContent("method=POST");
+  expect(rows[2]).toHaveTextContent("2.00/s");
+});
