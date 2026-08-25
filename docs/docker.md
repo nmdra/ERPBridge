@@ -44,6 +44,10 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | `RATE_LIMIT_RPS` | Per-session requests per second. | `10` |
 | `RATE_LIMIT_BURST` | Token bucket burst size. | `20` |
 | `INSECURE_AUTH_ALLOWED_HOSTS` | Development-only exact `host:port` exceptions for credentialed HTTP calls. | `mock-erp:8081` |
+| `API_AUTH_TOKEN` | Bearer token for protected admin, MCP, and direct-invoke routes. | unset |
+| `PLUGIN_ENDPOINT_ALLOWLIST` | Exact `host:port` values allowed for credentialed plugin resources. | unset |
+| `PLUGIN_MOCK_API_KEY` | Environment-backed API key reference used by the plugin integration fixture. | unset |
+| `MOCK_PLUGIN_API_KEY` | API key accepted by the separately deployed mock plugin fixture. | unset |
 
 For the full list of server environment variables, see the [Environment Variables Reference](./environment-variables.md).
 
@@ -54,8 +58,10 @@ credential values to this repository.
 
 Credentialed ERP and plugin endpoints must use HTTPS. The bundled MockERP
 fixture is HTTP-only, so Compose explicitly sets
-`INSECURE_AUTH_ALLOWED_HOSTS=mock-erp:8081`. This exact host and port exception
-is for local development only. Do not set a broad or production allowlist.
+`INSECURE_AUTH_ALLOWED_HOSTS=mock-erp:8081`. The opt-in plugin integration
+fixture adds `mock-plugin:8080` to this exact host-and-port list and sets
+`PLUGIN_ENDPOINT_ALLOWLIST=mock-plugin:8080`. These exceptions are for local
+development only. Do not set a broad or production allowlist.
 
 ## 3. Tool Registry
 
@@ -140,7 +146,23 @@ services:
 
 The image is not part of the ERPBridge server image. The plugin receives only a
 normalized result and binding configuration; it does not receive ERP
-credentials or inbound request headers.
+credentials, inbound request headers, or caller identity. A credentialed
+plugin resource stores an environment-variable reference, not the key value:
+
+```yaml
+metadata:
+  type: docker
+spec:
+  endpoint: http://mock-plugin:8080
+  auth:
+    type: api-key
+    credentialRef: PLUGIN_MOCK_API_KEY
+    header: X-API-Key
+```
+
+The server resolves the reference at invocation time and sends one API-key
+header. The control plane must have `API_AUTH_TOKEN` enabled, and the endpoint
+must match `PLUGIN_ENDPOINT_ALLOWLIST` exactly.
 
 The repository includes an opt-in black-box test. It builds the deterministic
 fixture from the sibling `../ERPBridge-Plugins` polyrepo, starts it with the
@@ -152,7 +174,11 @@ make test-plugin-integration
 
 The test uses the Compose project name `erpbridge-plugin-test` and ports
 `18080`, `18081`, `18090`, and `16379` so it does not reuse the normal local
-stack. Do not run it when those ports are already in use.
+stack. It generates separate admin, ERP, and plugin credentials at runtime,
+passes them only to the services that need them, and checks missing, wrong, and
+correct plugin API keys at `/v1/process`. The plugin `/health` endpoint remains
+unprotected for readiness checks. Do not run it when those ports are already
+in use.
 
 ## 7. Connecting MCP Clients
 

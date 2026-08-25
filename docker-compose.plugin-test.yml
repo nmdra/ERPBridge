@@ -5,15 +5,19 @@ services:
 
   mock-plugin:
     image: ${MOCK_PLUGIN_IMAGE:?the integration script must provide a pinned plugin image}
+    environment:
+      MOCK_PLUGIN_API_KEY: ${MOCK_PLUGIN_API_KEY:?the integration script must provide a plugin API key}
     ports:
       - "18090:8080"
 
   erpbridge-server:
     environment:
       ERP_PRIMARY_KEY: ${ERP_PRIMARY_KEY:?the integration script must provide a test credential reference}
+      PLUGIN_MOCK_API_KEY: ${PLUGIN_MOCK_API_KEY:?the integration script must provide a plugin API key reference}
+      API_AUTH_TOKEN: ${API_AUTH_TOKEN:?the integration script must provide an admin API token}
+      PLUGIN_ENDPOINT_ALLOWLIST: mock-plugin:8080
       # Exact development-only exceptions for the isolated HTTP fixture.
       INSECURE_AUTH_ALLOWED_HOSTS: mock-erp:8081,mock-plugin:8080
-      API_AUTH_TOKEN: ""
     depends_on:
       mock-plugin:
         condition: service_started

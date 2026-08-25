@@ -230,7 +230,7 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   `.env.example`, `docker-compose.yml`, `docker-compose.plugin-test.yml`,
   `docs/environment-variables.md`, `docs/docker.md`, `CHANGELOG.md`;
   **Verify:** `go test ./internal/security ./internal/connector ./internal/mcp -run 'Test(Outbound|Client|PluginClient)'` and
-  `MOCK_ERP_CREDENTIALS_JSON='{}' MOCK_PLUGIN_IMAGE=example.invalid/mock:latest ERP_PRIMARY_KEY=test docker compose -f docker-compose.yml -f docker-compose.plugin-test.yml config --quiet`;
+  `MOCK_ERP_CREDENTIALS_JSON='{}' MOCK_PLUGIN_IMAGE=example.invalid/mock:latest ERP_PRIMARY_KEY=test MOCK_PLUGIN_API_KEY=test PLUGIN_MOCK_API_KEY=test API_AUTH_TOKEN=test docker compose -f docker-compose.yml -f docker-compose.plugin-test.yml config --quiet`;
   **Commit:** `fix: require secure credential transport`.)
 
 - [x] **Task 5: Prove persistence, pipeline, and cache invariants.** Add
@@ -249,7 +249,7 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   `go test ./internal/mcp -run 'Test(PluginStore|PluginAPI|ServerPlugin|CacheMiddleware)'`;
   **Commit:** `test: cover authenticated plugin runtime behavior`.)
 
-- [ ] **Task 6: Authenticate the real plugin fixture.** Add optional API-key
+- [x] **Task 6: Authenticate the real plugin fixture.** Add optional API-key
   enforcement to the separate mock plugin while leaving `/health` unprotected.
   Generate a distinct `MOCK_PLUGIN_API_KEY`, inject it only into mock-plugin and
   ERPBridge, and apply the fixture `Plugin` with `metadata.type: docker`, a
@@ -265,8 +265,8 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   `internal/integration/plugin_system_test.go`, `Makefile`, `docs/docker.md`,
   `CHANGELOG.md`; **Verify:**
   `cd ../ERPBridge-Plugins/plugins/mock-plugin && go test ./...`, then
-  `make test-plugin-integration` and
-  `docker compose -p erpbridge-plugin-test -f docker-compose.yml -f docker-compose.plugin-test.yml ps`;
+  `make test-plugin-integration`, then
+  `MOCK_ERP_CREDENTIALS_JSON='{}' MOCK_PLUGIN_IMAGE=example.invalid/mock:latest ERP_PRIMARY_KEY=test MOCK_PLUGIN_API_KEY=test PLUGIN_MOCK_API_KEY=test API_AUTH_TOKEN=test docker compose -p erpbridge-plugin-test -f docker-compose.yml -f docker-compose.plugin-test.yml ps -a`;
   **Commit:** `test: authenticate plugin integration fixture`.)
 
 - [ ] **Task 7: Remove legacy plaintext ERP credential persistence.** First
@@ -313,7 +313,7 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   `../erpbridge-docs/CHANGELOG.md`; **Verify:**
   `go test ./internal/logger ./internal/security ./internal/connector ./internal/idp ./internal/mcp ./internal/cli`,
   `golangci-lint run ./internal/logger ./internal/security ./internal/connector ./internal/idp ./internal/mcp ./internal/cli`,
-  `make test`, `MOCK_ERP_CREDENTIALS_JSON='{}' MOCK_PLUGIN_IMAGE=example.invalid/mock:latest ERP_PRIMARY_KEY=test docker compose -f docker-compose.yml -f docker-compose.plugin-test.yml config --quiet`,
+  `make test`, `MOCK_ERP_CREDENTIALS_JSON='{}' MOCK_PLUGIN_IMAGE=example.invalid/mock:latest ERP_PRIMARY_KEY=test MOCK_PLUGIN_API_KEY=test PLUGIN_MOCK_API_KEY=test API_AUTH_TOKEN=test docker compose -f docker-compose.yml -f docker-compose.plugin-test.yml config --quiet`,
   `make test-plugin-integration`, `git diff --check`, and
   `cd ../erpbridge-docs && npm run build`.)
 

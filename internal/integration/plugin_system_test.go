@@ -17,12 +17,14 @@ import (
 )
 
 const (
-	jsonRPCVersion        = "2.0"
-	jsonRPCField          = "jsonrpc"
-	jsonMethodField       = "method"
-	jsonParamsField       = "params"
-	jsonNameField         = "name"
-	integrationCredential = "ERP_PRIMARY_KEY" // #nosec G101 -- This is a non-secret environment-variable reference.
+	jsonRPCVersion           = "2.0"
+	jsonRPCField             = "jsonrpc"
+	jsonMethodField          = "method"
+	jsonParamsField          = "params"
+	jsonNameField            = "name"
+	integrationCredential    = "ERP_PRIMARY_KEY"     // #nosec G101 -- This is a non-secret environment-variable reference.
+	pluginCredentialRef      = "PLUGIN_MOCK_API_KEY" // #nosec G101 -- This is a non-secret environment-variable reference.
+	integrationAdminTokenEnv = "API_AUTH_TOKEN"      // #nosec G101 -- This is an environment-variable name.
 )
 
 func TestPluginSystemBlackBox(t *testing.T) {
@@ -35,8 +37,16 @@ func TestPluginSystemBlackBox(t *testing.T) {
 	plugin := mcp.Plugin{
 		APIVersion: mcp.PluginAPIVersion,
 		Kind:       mcp.PluginKind,
-		Metadata:   mcp.PluginMetadata{Name: "mock-plugin", Version: "0.1.0", IsActive: true},
-		Spec:       mcp.PluginSpec{Endpoint: "http://mock-plugin:8080", TimeoutMilliseconds: 2000},
+		Metadata:   mcp.PluginMetadata{Name: "mock-plugin", Version: "0.1.0", Type: mcp.PluginTypeDocker, IsActive: true},
+		Spec: mcp.PluginSpec{
+			Endpoint:            "http://mock-plugin:8080",
+			TimeoutMilliseconds: 2000,
+			Auth: &mcp.PluginAuth{
+				Type:          mcp.PluginAuthTypeAPIKey,
+				CredentialRef: pluginCredentialRef,
+				Header:        "X-API-Key",
+			},
+		},
 	}
 	applyJSON(t, client, baseURL+"/apis/erpbridge.io/v1/plugins", plugin)
 
@@ -127,6 +137,7 @@ func applyJSON(t *testing.T, client *http.Client, endpoint string, resource any)
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	setIntegrationAdminAuth(t, request)
 	response, err := client.Do(request) //nolint:gosec // The test endpoint is controlled by the integration harness.
 	if err != nil {
 		t.Fatal(err)
@@ -146,6 +157,7 @@ func invokeDirect(t *testing.T, client *http.Client, baseURL, name string) map[s
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	setIntegrationAdminAuth(t, request)
 	response, err := client.Do(request) //nolint:gosec // The test endpoint is controlled by the integration harness.
 	if err != nil {
 		t.Fatal(err)
@@ -178,6 +190,7 @@ func mcpRequest(t *testing.T, client *http.Client, baseURL, sessionID string, pa
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json, text/event-stream")
+	setIntegrationAdminAuth(t, request)
 	if sessionID != "" {
 		request.Header.Set("Mcp-Session-Id", sessionID)
 	}
@@ -193,6 +206,15 @@ func mcpRequest(t *testing.T, client *http.Client, baseURL, sessionID string, pa
 	contents, _ := io.ReadAll(response.Body)
 	result := decodeMCPResponse(t, contents)
 	return response.Header.Get("Mcp-Session-Id"), result
+}
+
+func setIntegrationAdminAuth(t *testing.T, request *http.Request) {
+	t.Helper()
+	token := os.Getenv(integrationAdminTokenEnv)
+	if token == "" {
+		t.Fatal("integration admin credential is not configured")
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
 }
 
 func decodeMCPResponse(t *testing.T, body []byte) map[string]any {
