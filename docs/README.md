@@ -19,6 +19,7 @@ Welcome to the ERPBridge documentation. This wiki-style guide helps you understa
 ## 🛠 Developer Resources
 
 - **[CLI Reference (bridgectl)](./cli/bridgectl.md)**: Comprehensive guide to the developer CLI.
+- **[ERPBridge Console](./web-console.md)**: Local read-only monitoring console launched by `bridgectl web`.
 - **[CLI API Management](./cli/bridgectl_api.md)**: How to register and test ERP endpoints.
 - **[CLI Tool Management](./cli/bridgectl_tool.md)**: Managing the live tool registry using `apply`, `get`, and `validate`.
 - **[CLI Cache Management](./cli/bridgectl_cache.md)**: Monitoring and flushing the exact match cache.

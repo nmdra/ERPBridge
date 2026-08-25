@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add the loopback-only read-only `bridgectl web` console command, including
+  per-launch capability protection, browser security headers, and graceful
+  local lifecycle
+- Add the pinned React, TypeScript, Vite, Tailwind CSS, and testing toolchain
+  for the embedded console frontend
+- Add semantic light, dark, and system themes with accessible status primitives
+  for the console
+- Embed hashed frontend assets in `bridgectl` builds and verify release-like
+  binaries against the fallback asset and compressed-size budget
+- Add explicit `bridgectl web --dev` proxying for local Vite development
+- Add capability-protected context and deployment projections without upstream
+  credentials or arbitrary proxying
+- Add safe health, MCP tool inventory, and cache statistics projections with
+  fixed upstream route mapping
+- Add bounded, redacted recent-log and SSE projections with stream limits
+- Add typed live Prometheus snapshots with session-local rates and average
+  latency from histogram sum and count
+- Add the console application shell, routes, deployment selector, and safe
+  context switching without changing persistent CLI state
+- Add bounded live log filters and current-session metric tables with accessible
+  text alternatives
+- Add bounded API-to-MCP topology aggregation with exact, base-prefix,
+  ambiguous, and unresolved match states
+- Add a lazy-loaded topology canvas with keyboard-accessible relationship and
+  path tables
+- Add authenticated safe server build and runtime metadata with older-server
+  fallback handling
+- Add clickable Tools inventory entries and read-only, user-friendly manifest
+  detail pages with safe input, execution, security, routing, and lifecycle
+  projections
+- Default the console to light mode, add a collapsible sidebar, and brand the
+  interface as ERPBridge Console
+- Add a homepage notice that directs monitoring to the console and configuration
+  changes to `bridgectl`
+- Sort Logs page events with the most recent valid timestamps first
+
+### Changed
+
+- Keep the Tailwind 3 toolchain paired with `tailwind-merge` 2.6, align Node
+  types with the Node 22 runtime, and pin the compatible React Flow release so
+  production asset builds remain deterministic.
+
+### Fixed
+
+- Keep authenticated upstream response bodies readable until each console
+  projection or stream finishes consuming them.
+- Render the safe MCP tool inventory on the Tools route instead of showing a
+  placeholder page.
+- Treat root API registrations as non-authoritative topology base prefixes
+  across generated tool HTTP methods.
+
 ## [v0.3.0-alpha.3] - 2026-08-25
 
 ### Added

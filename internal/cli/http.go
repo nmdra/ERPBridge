@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/nmdra/ERPBridge/internal/bridgeclient"
 	"github.com/spf13/cobra"
 )
 
@@ -17,14 +18,7 @@ func newBridgeRequest(cmd *cobra.Command, method, target string, body io.Reader)
 	if requestContext == nil {
 		requestContext = context.Background()
 	}
-	req, err := http.NewRequestWithContext(requestContext, method, target, body)
-	if err != nil {
-		return nil, err
-	}
-	if token := bridgeAPIToken(); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	return req, nil
+	return bridgeclient.NewAuthenticatedRequest(requestContext, method, target, body, bridgeAPIToken())
 }
 
 func doBridgeRequest(cmd *cobra.Command, method, target string) (*http.Response, error) {
@@ -45,14 +39,9 @@ func doBridgeRequestWithHeaders(cmd *cobra.Command, method, target string, body 
 }
 
 func bridgeAPIToken() string {
-	if tokenOverride != "" {
-		return tokenOverride
-	}
-	if token := os.Getenv("BRIDGE_API_TOKEN"); token != "" {
-		return token
-	}
+	contextToken := ""
 	if cfg != nil {
-		return cfg.ActiveContext().APIToken
+		contextToken = cfg.ActiveContext().APIToken
 	}
-	return ""
+	return bridgeclient.ResolveToken(tokenOverride, os.Getenv("BRIDGE_API_TOKEN"), contextToken)
 }

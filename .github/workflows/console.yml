@@ -1,0 +1,54 @@
+name: ERPBridge Console
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "internal/web/**"
+      - "internal/bridgeclient/**"
+      - "internal/cli/**"
+      - "Makefile"
+      - ".goreleaser.yaml"
+      - ".github/workflows/console.yml"
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "internal/web/**"
+      - "internal/bridgeclient/**"
+      - "internal/cli/**"
+      - "Makefile"
+      - ".goreleaser.yaml"
+      - ".github/workflows/console.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  console:
+    name: frontend and console checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: web/.nvmrc
+      - name: Install frontend dependencies
+        run: npm ci --prefix web
+      - name: Check frontend types
+        run: npm run typecheck --prefix web
+      - name: Test frontend
+        run: npm test --prefix web -- --run
+      - name: Lint frontend
+        run: npm run lint --prefix web
+      - name: Check frontend format
+        run: npm run format-check --prefix web
+      - name: Build frontend
+        run: npm run build --prefix web
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.26.2
+      - name: Test Go packages
+        run: go test ./...
+      - name: Build CLI and verify assets
+        run: scripts/verify-console-assets.sh

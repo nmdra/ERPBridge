@@ -36,6 +36,9 @@ go.work.sum
 /middleware
 /schemas/
 dist/
+web/node_modules/
+internal/web/prebuilt/build/index.html
+internal/web/prebuilt/build/assets/
 
 /data
 
@@ -44,3 +47,5 @@ dist/
 # Agents
 graphify-out/
 .antigravitycli/
+.scratch/
+.playwright-cli/

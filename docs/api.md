@@ -151,6 +151,11 @@ SHA-256 hash.
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
 | `/metrics` | `GET` | Prometheus-formatted metrics. |
+| `/api/info` | `GET` | Authenticated safe build and runtime metadata. |
+
+`/api/info` returns the server version, optional commit and build date, cache
+backend label, active tool count, and observation time. It does not return
+credentials or ERP configuration.
 
 MCP tool invocation and duration series are initialized when each tool is
 registered, so their metric families and zero-valued samples are available on
