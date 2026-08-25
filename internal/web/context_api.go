@@ -43,6 +43,8 @@ func NewConsoleHandler(options HandlerOptions) http.Handler {
 	mux.HandleFunc("/api/console/v1/deployment", console.deployment)
 	mux.HandleFunc("/api/console/v1/health", console.health)
 	mux.HandleFunc("/api/console/v1/tools", console.tools)
+	mux.HandleFunc("/api/console/v1/plugins", console.plugins)
+	mux.HandleFunc("/api/console/v1/plugin-bindings", console.pluginBindings)
 	mux.HandleFunc("/api/console/v1/cache", console.cache)
 	mux.HandleFunc("/api/console/v1/logs/recent", console.logsRecent)
 	mux.HandleFunc("/api/console/v1/logs/stream", console.logsStream)
