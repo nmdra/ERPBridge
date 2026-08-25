@@ -5,8 +5,11 @@ starting implementation work.
 
 ## Active
 
-## Upcoming
+- [`Plan-Plugin-Endpoint-Authentication.md`](./active/Plan-Plugin-Endpoint-Authentication.md)
+  — harden plugin and ERP credentials: protected plugin endpoint auth, secure
+  outbound transport, logging redaction, and legacy registry migration.
 
+## Upcoming
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
   specification evaluation and migration. It is not authorization to begin
   implementation.
