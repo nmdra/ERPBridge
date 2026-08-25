@@ -190,15 +190,23 @@ label, not a full upstream URL.
 
 The topology includes MCP transport, MCP tool, ERP API, plugin binding,
 external plugin, and unresolved endpoint nodes. Plugin relationships appear only
-when both plugin list routes are available. Use the search field and the node
-kind, match-confidence, and context-state filters to narrow the graph. The
-canvas and accessible relationship list share selection state: selecting a node
-highlights its immediate relationships, while selecting an edge shows its source,
-target, match confidence, authority, context state, and safe endpoint paths. The
-BFF reports when safety caps omit nodes or edges, so an incomplete graph is not
-mistaken for a complete one. The BFF reads the local registry server-side and
-strips all registry authentication fields. The canvas loads on demand so the
-list view remains available on small or keyboard-only clients.
+when both plugin list routes are available. When a filtered graph has at least
+20 nodes or 30 edges, the canvas starts with a compact endpoint-component
+overview. Each component shows one safe ERP
+endpoint identity, its MCP tool count, and a match-state summary. Select a
+component to show its related MCP tools, endpoint, bindings, and plugins; use
+Escape or the back control to return to the overview. The raw accessible
+relationship list remains available for the complete filtered graph.
+
+Use the search field and the node kind, match-confidence, and context-state
+filters to narrow the graph. The canvas and accessible relationship list share
+selection state: selecting a node highlights its immediate relationships, while
+selecting an edge shows its source, target, match confidence, authority, context
+state, and safe endpoint paths. The BFF reports when safety caps omit nodes or
+edges, so an incomplete graph is not mistaken for a complete one. The BFF reads
+the local registry server-side and strips all registry authentication fields.
+The canvas loads on demand so the list view remains available on small or
+keyboard-only clients.
 
 ## Logs and metrics
 

@@ -177,6 +177,86 @@ test("renders a bounded 100-node and 200-edge topology", async () => {
   expect(screen.getAllByRole("button", { name: "Inspect" })).toHaveLength(200);
 });
 
+test("collapses a large graph and drills into one endpoint component", async () => {
+  const user = userEvent.setup();
+  const nodes = [
+    {
+      id: "transport",
+      kind: "mcp-transport",
+      label: "MCP transport",
+    },
+    {
+      id: "api",
+      kind: "erp-api",
+      label: "Invoices",
+      api: {
+        name: "Invoices",
+        method: "GET",
+        endpointPath: "/invoices",
+      },
+    },
+    ...Array.from({ length: 40 }, (_, index) => ({
+      id: `tool-${index}`,
+      kind: "mcp-tool",
+      label: `invoice-tool-${index}`,
+      tool: {
+        name: `invoice-tool-${index}`,
+        version: "1.0.0",
+        endpointPath: "/invoices",
+      },
+    })),
+  ];
+  const edges = Array.from({ length: 40 }, (_, index) => [
+    {
+      id: `transport-${index}`,
+      source: "transport",
+      target: `tool-${index}`,
+      matchKind: "exact",
+      authoritative: true,
+    },
+    {
+      id: `api-${index}`,
+      source: `tool-${index}`,
+      target: "api",
+      matchKind: "exact",
+      authoritative: true,
+    },
+  ]).flat();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ state: "available", nodes, edges }), {
+          status: 200,
+        }),
+      ),
+    ),
+  );
+
+  render(<Topology contextName="local" />);
+  await screen.findByRole("table", {
+    name: "Accessible topology relationships",
+  });
+
+  expect(
+    screen.getByText(/Compact overview: showing 1 of 1 endpoint components/),
+  ).toBeInTheDocument();
+  await screen.findByLabelText("Interactive API to MCP topology");
+  await user.click(screen.getAllByRole("button", { name: "Invoices" })[0]);
+  expect(
+    screen.getByText(/Showing related nodes for Invoices/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Back to compact overview" }),
+  ).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Back to compact overview" }),
+  );
+  expect(
+    screen.getByText(/Compact overview: showing 1 of 1 endpoint components/),
+  ).toBeInTheDocument();
+});
+
 test("selects an edge and exposes safe match details", async () => {
   const user = userEvent.setup();
   render(<Topology contextName="local" />);

@@ -119,6 +119,18 @@ func TestTopologyReportsTruncation(t *testing.T) {
 	if !topology.Truncated || topology.Omitted == nil || topology.Omitted.Nodes == 0 || topology.Omitted.Edges == 0 {
 		t.Fatalf("topology truncation = %+v", topology)
 	}
+	nodeIDs := make(map[string]struct{}, len(topology.Nodes))
+	for _, node := range topology.Nodes {
+		nodeIDs[node.ID] = struct{}{}
+	}
+	for _, edge := range topology.Edges {
+		if _, ok := nodeIDs[edge.Source]; !ok {
+			t.Fatalf("edge source %q is not admitted", edge.Source)
+		}
+		if _, ok := nodeIDs[edge.Target]; !ok {
+			t.Fatalf("edge target %q is not admitted", edge.Target)
+		}
+	}
 }
 
 func TestTopologyResolvesExactAmbiguousAndUnresolvedTools(t *testing.T) {

@@ -219,6 +219,23 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	admittedNodeIDs := make(map[string]struct{}, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		admittedNodeIDs[node.ID] = struct{}{}
+	}
+	closedEdges := graph.Edges[:0]
+	for _, edge := range graph.Edges {
+		if _, sourceOK := admittedNodeIDs[edge.Source]; !sourceOK {
+			continue
+		}
+		if _, targetOK := admittedNodeIDs[edge.Target]; !targetOK {
+			continue
+		}
+		closedEdges = append(closedEdges, edge)
+	}
+	graph.Edges = closedEdges
+
 	if candidateNodes > len(graph.Nodes) || candidateEdges > len(graph.Edges) {
 		graph.Truncated = true
 		graph.Omitted = &TopologyOmitted{

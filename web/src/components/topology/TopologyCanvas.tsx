@@ -32,6 +32,8 @@ import type {
 type FlowNodeData = {
   label: string;
   kind: string;
+  summary?: string;
+  compact: boolean;
   selected: boolean;
   dimmed: boolean;
   onSelect: () => void;
@@ -49,7 +51,12 @@ function NodeIcon({ kind }: { kind: string }) {
   return <Server aria-hidden="true" size={15} />;
 }
 
-function nodeClass(kind: string, selected: boolean, dimmed: boolean) {
+function nodeClass(
+  kind: string,
+  compact: boolean,
+  selected: boolean,
+  dimmed: boolean,
+) {
   const colorClass =
     kind === "erp-api"
       ? "border-emerald-500/60 bg-emerald-500/10"
@@ -65,7 +72,7 @@ function nodeClass(kind: string, selected: boolean, dimmed: boolean) {
                 ? "border-destructive/60 bg-destructive/10"
                 : "border-border bg-card";
   return [
-    "relative w-40 min-w-40 max-w-40 rounded-md border px-3 py-2 text-card-foreground shadow-sm outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-ring",
+    `relative ${compact ? "w-56 min-w-56 max-w-56" : "w-40 min-w-40 max-w-40"} rounded-md border px-3 py-2 text-card-foreground shadow-sm outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-ring`,
     colorClass,
     selected ? "z-20 ring-2 ring-primary shadow-lg" : "",
     dimmed ? "opacity-25" : "opacity-100",
@@ -77,7 +84,7 @@ function TopologyFlowNode({ data }: { data: FlowNodeData }) {
     <div
       aria-label={`${data.label}, ${data.kind}`}
       aria-pressed={data.selected}
-      className={nodeClass(data.kind, data.selected, data.dimmed)}
+      className={nodeClass(data.kind, data.compact, data.selected, data.dimmed)}
       onClick={data.onSelect}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -91,13 +98,21 @@ function TopologyFlowNode({ data }: { data: FlowNodeData }) {
       <Handle position={Position.Top} type="target" />
       <div className="flex items-center gap-2 text-xs font-medium">
         <NodeIcon kind={data.kind} />
-        <span className="min-w-0 truncate" title={data.label}>
+        <span
+          className={`min-w-0 ${data.compact ? "break-words" : "truncate"}`}
+          title={data.label}
+        >
           {data.label}
         </span>
       </div>
       <span className="mt-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
         {data.kind}
       </span>
+      {data.summary ? (
+        <span className="mt-1 block break-words text-[10px] text-muted-foreground">
+          {data.summary}
+        </span>
+      ) : null}
       <Handle position={Position.Bottom} type="source" />
     </div>
   );
@@ -138,6 +153,8 @@ function layoutTopologyNodes(
   nodes: TopologyNode[],
   edges: TopologyEdge[],
   selection: TopologySelection,
+  compact: boolean,
+  summaries: Record<string, string>,
 ): TopologyFlowNode[] {
   const transports = groupNodes(nodes, "mcp-transport");
   const tools = groupNodes(nodes, "mcp-tool");
@@ -163,12 +180,23 @@ function layoutTopologyNodes(
     data: {
       label: node.label,
       kind: node.kind,
+      summary: summaries[node.id],
+      compact,
       selected: selection?.kind === "node" && selection.id === node.id,
       dimmed: Boolean(selection) && !connectedIDs.has(node.id),
       onSelect: () => undefined,
     },
     type: "topology",
   });
+
+  if (compact) {
+    return apis.map((node, index) =>
+      place(node, {
+        x: (index % 3) * 280,
+        y: Math.floor(index / 3) * 150,
+      }),
+    );
+  }
 
   return [
     ...transports.map((node, index) =>
@@ -228,6 +256,8 @@ export function TopologyCanvas({
   onSelectNode,
   onSelectEdge,
   onClearSelection,
+  compact = false,
+  nodeSummaries = {},
 }: {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
@@ -235,17 +265,25 @@ export function TopologyCanvas({
   onSelectNode: (id: string) => void;
   onSelectEdge: (id: string) => void;
   onClearSelection: () => void;
+  compact?: boolean;
+  nodeSummaries?: Record<string, string>;
 }) {
   const flowNodes = useMemo<Node<FlowNodeData>[]>(
     () =>
-      layoutTopologyNodes(nodes, edges, selection).map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          onSelect: () => onSelectNode(node.id),
-        },
-      })),
-    [edges, nodes, onSelectNode, selection],
+      layoutTopologyNodes(nodes, edges, selection, compact, nodeSummaries).map(
+        (node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            onSelect: () => onSelectNode(node.id),
+          },
+        }),
+      ),
+    [compact, edges, nodeSummaries, nodes, onSelectNode, selection],
+  );
+  const nodeKey = useMemo(
+    () => nodes.map((node) => node.id).join("|"),
+    [nodes],
   );
   const flowEdges = useMemo<Edge[]>(
     () =>
@@ -296,6 +334,7 @@ export function TopologyCanvas({
       >
         <ReactFlow
           edges={flowEdges}
+          key={nodeKey}
           edgesFocusable
           elevateEdgesOnSelect
           fitView
@@ -316,7 +355,9 @@ export function TopologyCanvas({
             className="rounded-md border border-border bg-card/90 px-2 py-1 text-xs text-muted-foreground shadow-sm"
             position="top-left"
           >
-            Click a node or relationship to inspect it. Press Escape to clear.
+            {compact
+              ? "Select an endpoint component to show related MCP nodes."
+              : "Click a node or relationship to inspect it. Press Escape to clear."}
           </Panel>
         </ReactFlow>
       </div>
@@ -344,7 +385,11 @@ export function TopologyCanvas({
           <span className="h-2.5 w-2.5 rounded-sm border border-violet-500/60 bg-violet-500/20" />
           Plugin
         </span>
-        <span>Edge labels show match confidence.</span>
+        <span>
+          {compact
+            ? "Endpoint components are collapsed until selected."
+            : "Edge labels show match confidence."}
+        </span>
       </div>
     </div>
   );

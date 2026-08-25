@@ -22,6 +22,13 @@ import {
   type TopologyNodeKind,
   type TopologySelection,
 } from "../hooks/useTopology";
+import {
+  buildEndpointComponents,
+  compactTopologyComponentLimit,
+  componentSummary,
+  focusedComponentGraph,
+  shouldUseCompactTopology,
+} from "./topologyPresentation";
 
 const TopologyCanvas = lazy(() =>
   import("../components/topology/TopologyCanvas").then((module) => ({
@@ -144,7 +151,7 @@ function TopologyInspector({
             Selected relationship
           </p>
           <h2 className="mt-1 font-medium">Selected relationship</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
             {source?.label ?? "Unknown"} → {target?.label ?? "Unknown"}
           </p>
           <dl className="mt-3 space-y-2 text-sm">
@@ -169,7 +176,7 @@ function TopologyInspector({
             </div>
             <div>
               <dt className="text-muted-foreground">Source path</dt>
-              <dd>
+              <dd className="break-words [overflow-wrap:anywhere]">
                 {source?.tool?.endpointPath ??
                   source?.api?.endpointPath ??
                   source?.label ??
@@ -178,7 +185,7 @@ function TopologyInspector({
             </div>
             <div>
               <dt className="text-muted-foreground">Target path</dt>
-              <dd>
+              <dd className="break-words [overflow-wrap:anywhere]">
                 {target?.tool?.endpointPath ??
                   target?.api?.endpointPath ??
                   target?.label ??
@@ -198,7 +205,9 @@ function TopologyInspector({
           <p className="text-xs uppercase tracking-wider text-muted-foreground">
             Selected node
           </p>
-          <h2 className="mt-1 font-medium">{selectedNode.label}</h2>
+          <h2 className="mt-1 break-words font-medium [overflow-wrap:anywhere]">
+            {selectedNode.label}
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {nodeKindLabels[selectedNode.kind as TopologyNodeKind] ??
               selectedNode.kind}
@@ -211,13 +220,17 @@ function TopologyInspector({
             {selectedNode.tool ? (
               <div>
                 <dt className="text-muted-foreground">Endpoint path</dt>
-                <dd>{selectedNode.tool.endpointPath ?? "—"}</dd>
+                <dd className="break-words [overflow-wrap:anywhere]">
+                  {selectedNode.tool.endpointPath ?? "—"}
+                </dd>
               </div>
             ) : null}
             {selectedNode.api ? (
               <div>
                 <dt className="text-muted-foreground">Endpoint path</dt>
-                <dd>{selectedNode.api.endpointPath}</dd>
+                <dd className="break-words [overflow-wrap:anywhere]">
+                  {selectedNode.api.endpointPath}
+                </dd>
               </div>
             ) : null}
             {selectedNode.plugin ? (
@@ -290,6 +303,9 @@ export function Topology({ contextName }: { contextName: string }) {
   );
   const [selectedContexts, setSelectedContexts] = useState<string[]>([]);
   const [selection, setSelection] = useState<TopologySelection>(null);
+  const [focusedEndpointID, setFocusedEndpointID] = useState<string | null>(
+    null,
+  );
 
   const data = topology.data;
   const allNodes = useMemo(() => data?.nodes ?? [], [data?.nodes]);
@@ -337,6 +353,45 @@ export function Topology({ contextName }: { contextName: string }) {
     });
   }, [allEdges, selectedContexts, selectedMatches, visibleNodes]);
 
+  const allEndpointComponents = useMemo(
+    () => buildEndpointComponents(allNodes, allEdges),
+    [allEdges, allNodes],
+  );
+  const endpointComponents = useMemo(
+    () => buildEndpointComponents(visibleNodes, visibleEdges),
+    [visibleEdges, visibleNodes],
+  );
+  const compactMode =
+    !focusedEndpointID &&
+    endpointComponents.length > 0 &&
+    shouldUseCompactTopology(visibleNodes, visibleEdges);
+  const compactComponents = endpointComponents.slice(
+    0,
+    compactTopologyComponentLimit,
+  );
+  const focusedComponent = allEndpointComponents.find(
+    (component) => component.endpoint.id === focusedEndpointID,
+  );
+  const focusedGraph = focusedComponent
+    ? focusedComponentGraph(focusedComponent, allNodes, allEdges)
+    : null;
+  const canvasNodes = focusedGraph
+    ? focusedGraph.nodes
+    : compactMode
+      ? compactComponents.map((component) => component.endpoint)
+      : visibleNodes;
+  const canvasEdges = focusedGraph
+    ? focusedGraph.edges
+    : compactMode
+      ? []
+      : visibleEdges;
+  const canvasSummaries = Object.fromEntries(
+    compactComponents.map((component) => [
+      component.endpoint.id,
+      componentSummary(component),
+    ]),
+  );
+
   const selectedNode =
     selection?.kind === "node"
       ? (allNodes.find((node) => node.id === selection.id) ?? null)
@@ -348,7 +403,20 @@ export function Topology({ contextName }: { contextName: string }) {
 
   useEffect(() => {
     setSelection(null);
+    setFocusedEndpointID(null);
   }, [contextName]);
+
+  useEffect(() => {
+    if (
+      focusedEndpointID &&
+      !endpointComponents.some(
+        (component) => component.endpoint.id === focusedEndpointID,
+      )
+    ) {
+      setFocusedEndpointID(null);
+      setSelection(null);
+    }
+  }, [endpointComponents, focusedEndpointID]);
 
   useEffect(() => {
     if (!selection) return;
@@ -361,15 +429,26 @@ export function Topology({ contextName }: { contextName: string }) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelection(null);
+      if (event.key !== "Escape") return;
+      setSelection(null);
+      setFocusedEndpointID(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const selectNode = useCallback((id: string) => {
-    setSelection({ kind: "node", id });
-  }, []);
+  const selectNode = useCallback(
+    (id: string) => {
+      setSelection({ kind: "node", id });
+      if (
+        compactMode &&
+        endpointComponents.some((component) => component.endpoint.id === id)
+      ) {
+        setFocusedEndpointID(id);
+      }
+    },
+    [compactMode, endpointComponents],
+  );
   const selectEdge = useCallback((id: string) => {
     setSelection({ kind: "edge", id });
   }, []);
@@ -378,6 +457,8 @@ export function Topology({ contextName }: { contextName: string }) {
     setSelectedKinds([]);
     setSelectedMatches([]);
     setSelectedContexts([]);
+    setFocusedEndpointID(null);
+    setSelection(null);
   }, []);
   const filterCount =
     selectedKinds.length +
@@ -586,14 +667,55 @@ export function Topology({ contextName }: { contextName: string }) {
         ) : null}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      {compactMode ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm"
+          role="status"
+        >
+          <span>
+            Compact overview: showing {compactComponents.length} of{" "}
+            {endpointComponents.length} endpoint components. Select a component
+            to show its related MCP graph.
+          </span>
+          {endpointComponents.length > compactTopologyComponentLimit ? (
+            <span className="text-muted-foreground">
+              {endpointComponents.length - compactTopologyComponentLimit} more
+              available through search and filters.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {focusedComponent ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+          <span>
+            Showing related nodes for {focusedComponent.endpoint.label}.
+          </span>
+          <button
+            className="text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => {
+              setFocusedEndpointID(null);
+              setSelection(null);
+            }}
+            type="button"
+          >
+            Back to compact overview
+          </button>
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <Suspense fallback={<Skeleton className="h-[36rem] w-full" />}>
           <TopologyCanvas
-            edges={visibleEdges}
-            onClearSelection={() => setSelection(null)}
+            compact={compactMode}
+            edges={canvasEdges}
+            nodeSummaries={compactMode ? canvasSummaries : {}}
+            onClearSelection={() => {
+              setSelection(null);
+              setFocusedEndpointID(null);
+            }}
             onSelectEdge={selectEdge}
             onSelectNode={selectNode}
-            nodes={visibleNodes}
+            nodes={canvasNodes}
             selection={selection}
           />
         </Suspense>
