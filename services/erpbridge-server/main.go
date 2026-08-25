@@ -26,7 +26,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var version = "dev"
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
 
 func serveHTTP(ctx context.Context, server *http.Server, listener net.Listener) error {
 	serveErr := make(chan error, 1)
@@ -134,6 +138,7 @@ func main() {
 		RequestsPerSecond: rateRPS,
 		Burst:             rateBurst,
 	}, dbPath)
+	server.SetServerInfo(mcp.ServerInfo{Version: version, Commit: commit, Date: date})
 
 	// Setup signal-aware context for background workers
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

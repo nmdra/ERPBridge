@@ -10,12 +10,12 @@ MOCK_ERP_OPENAPI_URL ?= https://raw.githubusercontent.com/nmdra/mockerp/v$(MOCK_
 MOCK_ERP_OPENAPI_FILE ?= /tmp/mockerp-openapi-v$(MOCK_ERP_VERSION).yaml
 SERVER_PORT=8080
 
-.PHONY: all build clean test lint run-mock run-server generate-tools setup test-plugin-integration
+.PHONY: all build clean test lint run-mock run-server generate-tools setup test-plugin-integration web-install web-build web-test web-lint
 
 all: build
 
 # Build both server and CLI
-build:
+build: web-build
 	@echo "Building binaries..."
 	@go build -o $(BINARY_SERVER) ./services/erpbridge-server/main.go
 	@go build -o $(BINARY_CLI) ./tools/bridgectl/main.go
@@ -25,8 +25,24 @@ clean:
 	@echo "Cleaning up..."
 	@rm -f $(BINARY_SERVER) $(BINARY_CLI)
 	@rm -rf $(BUILD_DIR)
+	@rm -rf internal/web/prebuilt/build/assets internal/web/prebuilt/build/index.html
 	@rm -f $(DB_PATH)
 	@rm -rf schemas/erp
+
+# Run frontend checks without a browser
+web-install:
+	@npm ci --prefix web
+
+web-build: web-install
+	@npm run build --prefix web
+
+web-test: web-install
+	@npm run typecheck --prefix web
+	@npm test --prefix web -- --run
+	@npm run format-check --prefix web
+
+web-lint: web-install
+	@npm run lint --prefix web
 
 # Run tests
 test:
@@ -81,3 +97,7 @@ help:
 	@echo "  setup           Install Go dependencies"
 	@echo "  generate-tools  Fetch versioned OpenAPI, generate, and apply tools"
 	@echo "  test-plugin-integration  Run the isolated external-plugin integration test"
+	@echo "  web-install     Install frontend dependencies"
+	@echo "  web-build       Build embedded frontend assets"
+	@echo "  web-test        Run frontend typecheck and tests"
+	@echo "  web-lint        Run frontend lint"

@@ -18,3 +18,11 @@ linters:
     - unconvert # flags unnecessary type conversions
     - unparam # flags unused function parameters
     - whitespace
+
+  settings:
+    goconst:
+      ignore-tests: true
+
+  exclusions:
+    paths:
+      - web/node_modules

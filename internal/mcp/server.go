@@ -45,6 +45,7 @@ type Server struct {
 	BusinessHooks       *BusinessHooks
 	toolMiddlewares     []server.ToolHandlerMiddleware
 	authWarnOnce        sync.Once
+	serverInfo          ServerInfo
 }
 
 const (
@@ -691,6 +692,7 @@ func (s *Server) ServeHTTP(mux *http.ServeMux, _ string) {
 	mux.Handle("/api/auth/tokens/", http.HandlerFunc(s.handleTokenAPI))
 	mux.Handle("/api/tools/invoke", s.AuthHandler(http.HandlerFunc(s.handleDirectInvoke), "", true))
 	mux.Handle("/api/cache/stats", s.AuthHandler(http.HandlerFunc(s.handleCacheStats), "", true))
+	mux.Handle("/api/info", s.AuthHandler(http.HandlerFunc(s.handleInfo), "", true))
 	mux.Handle("/api/cache/flush", s.AuthHandler(http.HandlerFunc(s.handleCacheFlush), "", true))
 	mux.Handle("/api/logs/stream", s.AuthHandler(http.HandlerFunc(s.handleLogStream), "logs", false))
 	mux.Handle("/api/logs/recent", s.AuthHandler(http.HandlerFunc(s.handleLogRecent), "logs", false))

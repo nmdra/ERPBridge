@@ -5,6 +5,8 @@ project_name: erpbridge
 
 before:
   hooks:
+    - npm ci --prefix web
+    - npm run build --prefix web
     - go mod tidy
 
 builds:
@@ -40,7 +42,7 @@ builds:
       - amd64
       - arm64
     goarm64:
-     - v8.0
+      - v8.0
     ldflags:
       - -s -w
       - -X main.version={{.Version}}

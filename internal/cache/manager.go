@@ -152,6 +152,18 @@ type Stats struct {
 	RedisMemory string `json:"redisMemory"`
 }
 
+// BackendName returns the configured cache backend label.
+func (m *Manager) BackendName() string {
+	switch m.backend.(type) {
+	case *MemoryBackend:
+		return "memory"
+	case *RedisBackend:
+		return "redis"
+	default:
+		return "unknown"
+	}
+}
+
 // Stats returns current exact key count and used memory from Redis.
 func (m *Manager) Stats(ctx context.Context) (Stats, error) {
 	stats, err := m.backend.Stats(ctx)

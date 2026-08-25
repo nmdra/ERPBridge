@@ -1,0 +1,250 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { apiFetch, streamLogEvents } from "../lib/api";
+
+export type LogEvent = {
+  timestamp?: string;
+  level?: string;
+  component?: string;
+  toolName?: string;
+  requestId?: string;
+  summary?: string;
+};
+
+export type MetricsSnapshot = {
+  state: string;
+  observedAt?: string;
+  sampleWindowStart?: string;
+  cumulative: Array<{
+    name: string;
+    labels?: Record<string, string>;
+    value: number;
+  }>;
+  rates: Array<{
+    name: string;
+    labels?: Record<string, string>;
+    perSecond: number;
+  }>;
+  averageLatencySeconds?: number;
+};
+
+type LogResponse = { state: string; items: LogEvent[] };
+
+export type ToolManifest = {
+  apiVersion?: string;
+  kind?: string;
+  description: {
+    short?: string;
+    whenToUse?: string[];
+    whenNotToUse?: string[];
+    examples?: string[];
+  };
+  inputType?: string;
+  inputFields?: Array<{
+    name: string;
+    type?: string;
+    description?: string;
+    enum?: string[];
+    required: boolean;
+  }>;
+  outputType?: string;
+  execution: {
+    type?: string;
+    method?: string;
+    endpointPath?: string;
+    responsePath?: string;
+    mapping?: Record<string, string>;
+  };
+  security: { authType?: string; allowedRoles?: string[] };
+  routing?: {
+    priority: number;
+    signals?: string[];
+    antiSignals?: string[];
+  };
+};
+
+export type ToolProjection = {
+  name: string;
+  version: string;
+  module?: string;
+  status?: string;
+  active: boolean;
+  description?: string;
+  method?: string;
+  endpointPath?: string;
+  responsePath?: string;
+  allowedRoles?: string[];
+  cache?: { enabled: boolean; ttlSeconds: number; isReadOnly: boolean };
+  lifecycle?: {
+    status: string;
+    deprecatedAt?: string;
+    sunsetAt?: string;
+    replacement?: string;
+  };
+  manifest?: ToolManifest;
+};
+
+type ToolResponse = { state: string; items: ToolProjection[] };
+
+type AsyncState<T> = { data: T | null; error: string | null; loading: boolean };
+
+export function useTools(contextName: string): AsyncState<ToolResponse> {
+  const [state, setState] = useState<AsyncState<ToolResponse>>({
+    data: null,
+    error: null,
+    loading: true,
+  });
+  useEffect(() => {
+    let active = true;
+    setState({ data: null, error: null, loading: true });
+    apiFetch<ToolResponse>(
+      `/api/console/v1/tools?context=${encodeURIComponent(contextName)}`,
+    )
+      .then((data) => {
+        if (active) setState({ data, error: null, loading: false });
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setState({
+            data: null,
+            error:
+              error instanceof Error ? error.message : "Tools are unavailable",
+            loading: false,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [contextName]);
+  return state;
+}
+
+export function useLogs(
+  contextName: string,
+): AsyncState<LogEvent[]> & { streaming: boolean } {
+  const [state, setState] = useState<AsyncState<LogEvent[]>>({
+    data: null,
+    error: null,
+    loading: true,
+  });
+  const [streaming, setStreaming] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    setState({ data: null, error: null, loading: true });
+    const path = `/api/console/v1/logs/recent?context=${encodeURIComponent(contextName)}`;
+    apiFetch<LogResponse>(path)
+      .then((response) => {
+        if (!active) return;
+        setState({ data: response.items, error: null, loading: false });
+        return streamLogEvents(
+          `/api/console/v1/logs/stream?context=${encodeURIComponent(contextName)}`,
+          controller.signal,
+          (event) => {
+            if (!active) return;
+            setState((current) => ({
+              ...current,
+              data: [...(current.data ?? []), event as LogEvent].slice(-1000),
+            }));
+          },
+        );
+      })
+      .then(() => {
+        if (active) setStreaming(false);
+      })
+      .catch((error: unknown) => {
+        if (active && !controller.signal.aborted) {
+          setState((current) => ({
+            ...current,
+            error:
+              error instanceof Error ? error.message : "Logs are unavailable",
+            loading: false,
+          }));
+          setStreaming(false);
+        }
+      });
+    setStreaming(true);
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [contextName]);
+  return { ...state, streaming };
+}
+
+export function useMetrics(contextName: string): AsyncState<MetricsSnapshot> {
+  const [state, setState] = useState<AsyncState<MetricsSnapshot>>({
+    data: null,
+    error: null,
+    loading: true,
+  });
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      apiFetch<MetricsSnapshot>(
+        `/api/console/v1/metrics?context=${encodeURIComponent(contextName)}`,
+      )
+        .then((data) => {
+          if (active) setState({ data, error: null, loading: false });
+        })
+        .catch((error: unknown) => {
+          if (active) {
+            setState({
+              data: null,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Metrics are unavailable",
+              loading: false,
+            });
+          }
+        });
+    };
+    setState({ data: null, error: null, loading: true });
+    load();
+    const interval = window.setInterval(load, 10000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [contextName]);
+  return state;
+}
+
+export function useFilteredLogs(
+  events: LogEvent[] | null,
+  filters: {
+    level: string;
+    component: string;
+    tool: string;
+    requestId: string;
+  },
+) {
+  return useMemo(() => {
+    return (events ?? [])
+      .filter((event) => {
+        return (
+          (!filters.level || event.level === filters.level) &&
+          (!filters.component || event.component === filters.component) &&
+          (!filters.tool || event.toolName === filters.tool) &&
+          (!filters.requestId || event.requestId === filters.requestId)
+        );
+      })
+      .sort((left, right) => {
+        const leftTimestamp = left.timestamp ?? "";
+        const rightTimestamp = right.timestamp ?? "";
+        const leftTime = Date.parse(leftTimestamp);
+        const rightTime = Date.parse(rightTimestamp);
+        const leftValid = !Number.isNaN(leftTime);
+        const rightValid = !Number.isNaN(rightTime);
+
+        if (leftValid && rightValid && leftTime !== rightTime) {
+          return rightTime - leftTime;
+        }
+        if (leftValid !== rightValid) return rightValid ? 1 : -1;
+        if (leftTimestamp === rightTimestamp) return 0;
+        return rightTimestamp > leftTimestamp ? 1 : -1;
+      });
+  }, [events, filters]);
+}
