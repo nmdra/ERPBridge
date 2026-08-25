@@ -1,7 +1,10 @@
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 
+import { PageHeader } from "../components/layout/PageHeader";
 import { Card, CardContent } from "../components/ui/card";
 import { EmptyState } from "../components/ui/empty-state";
+import { FilterToolbar } from "../components/ui/filter-toolbar";
 import { Skeleton } from "../components/ui/skeleton";
 import { StatusBadge } from "../components/status/StatusBadge";
 import {
@@ -206,32 +209,24 @@ export function PluginDetails({
       : [];
 
   return (
-    <div className="space-y-4">
-      <Link className="text-sm text-primary hover:underline" href="/plugins">
+    <div className="space-y-6">
+      <Link
+        className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        href="/plugins"
+      >
         ← Back to plugins
       </Link>
-      <Card>
-        <CardContent>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                External plugin
-              </p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-                {plugin.name}
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                version {plugin.version}
-                {plugin.type ? ` · ${plugin.type}` : ""}
-              </p>
-            </div>
-            <StatusBadge
-              label={activeStatus(plugin.active)}
-              tone={plugin.active ? "success" : "neutral"}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <PageHeader
+        actions={
+          <StatusBadge
+            label={activeStatus(plugin.active)}
+            tone={plugin.active ? "success" : "neutral"}
+          />
+        }
+        description={`Version ${plugin.version}${plugin.type ? ` · ${plugin.type}` : ""}`}
+        eyebrow="External plugin"
+        title={plugin.name}
+      />
       <Card>
         <CardContent>
           <h2 className="font-medium">Plugin details</h2>
@@ -295,9 +290,36 @@ export function PluginDetails({
 export function Plugins({ contextName }: { contextName: string }) {
   const plugins = usePlugins(contextName);
   const bindings = usePluginBindings(contextName);
+  const [filter, setFilter] = useState("");
+
+  const visiblePlugins = useMemo(() => {
+    const query = filter.toLowerCase().trim();
+    return (plugins.data?.items ?? []).filter((plugin) =>
+      `${plugin.name} ${plugin.version} ${plugin.type ?? ""}`
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [filter, plugins.data?.items]);
+  const visibleBindings = useMemo(() => {
+    const query = filter.toLowerCase().trim();
+    return (bindings.data?.items ?? []).filter((binding) =>
+      `${binding.name} ${binding.pluginRef.name} ${binding.pluginRef.version} ${binding.toolRef.name} ${binding.phase}`
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [bindings.data?.items, filter]);
 
   if (plugins.loading || bindings.loading) {
-    return <Skeleton className="h-64 w-full" />;
+    return (
+      <div className="space-y-6" aria-busy="true">
+        <PageHeader
+          description="Read-only plugin and binding metadata."
+          eyebrow="Inventory"
+          title="Plugins"
+        />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
   }
 
   if (
@@ -314,16 +336,26 @@ export function Plugins({ contextName }: { contextName: string }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm text-muted-foreground">External extensions</p>
-        <h2 className="mt-1 text-2xl font-semibold tracking-tight">Plugins</h2>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Read-only plugin and binding metadata. ERPBridge does not deploy
-          plugin processes, expose their endpoints, or show their credentials.
-        </p>
-      </div>
-      {plugins.data?.state === "available" && plugins.data.items.length ? (
-        <PluginTable plugins={plugins.data.items} />
+      <PageHeader
+        description="Read-only plugin and binding metadata. ERPBridge does not deploy plugin processes, expose their endpoints, or show their credentials."
+        eyebrow="Inventory"
+        title="Plugins"
+      />
+      <FilterToolbar
+        summary={`${visiblePlugins.length} plugins and ${visibleBindings.length} bindings match the current search.`}
+      >
+        <label className="text-sm sm:col-span-2 lg:col-span-4">
+          <span className="font-medium">Search plugins and bindings</span>
+          <input
+            className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3"
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Name, version, tool, phase, or type"
+            value={filter}
+          />
+        </label>
+      </FilterToolbar>
+      {plugins.data?.state === "available" && visiblePlugins.length ? (
+        <PluginTable plugins={visiblePlugins} />
       ) : (
         <EmptyState
           title="No plugins registered"
@@ -337,8 +369,8 @@ export function Plugins({ contextName }: { contextName: string }) {
           phase.
         </p>
       </div>
-      {bindings.data?.state === "available" && bindings.data.items.length ? (
-        <BindingTable bindings={bindings.data.items} />
+      {bindings.data?.state === "available" && visibleBindings.length ? (
+        <BindingTable bindings={visibleBindings} />
       ) : (
         <EmptyState
           title="No plugin bindings registered"

@@ -8,6 +8,7 @@ import {
 } from "react";
 import { AlertTriangle, Filter, X } from "lucide-react";
 
+import { PageHeader } from "../components/layout/PageHeader";
 import { Card, CardContent } from "../components/ui/card";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton } from "../components/ui/skeleton";
@@ -384,44 +385,58 @@ export function Topology({ contextName }: { contextName: string }) {
     selectedContexts.length +
     (normalizedSearch ? 1 : 0);
 
-  if (topology.loading) return <Skeleton className="h-48 w-full" />;
+  if (topology.loading) {
+    return (
+      <div className="space-y-6" aria-busy="true">
+        <PageHeader
+          description="Investigate safe relationships across tools, APIs, bindings, plugins, and unresolved endpoints."
+          eyebrow="Diagnose"
+          title="Integration topology"
+        />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
   if (!data || topology.error || data.state !== "available") {
     return (
-      <EmptyState
-        title="Topology is unavailable"
-        message={
-          topology.error ??
-          "The selected context has no readable tool inventory."
-        }
-      />
+      <div className="space-y-6">
+        <PageHeader
+          description="Investigate safe relationships across tools, APIs, bindings, plugins, and unresolved endpoints."
+          eyebrow="Diagnose"
+          title="Integration topology"
+        />
+        <EmptyState
+          title="Topology is unavailable"
+          message={
+            topology.error ??
+            "The selected context has no readable tool inventory."
+          }
+        />
+      </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <PageHeader
+        description="Investigate safe relationships across tools, APIs, bindings, plugins, and unresolved endpoints."
+        eyebrow="Diagnose"
+        title="Integration topology"
+      />
       <Card>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="font-medium">API to MCP topology</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Investigate safe relationships across tools, APIs, bindings,
-                plugins, and unresolved endpoints.
-              </p>
-            </div>
-            <div
-              className="flex items-center gap-2 text-sm tabular-nums text-muted-foreground"
-              role="status"
-              aria-live="polite"
-            >
-              <span>
-                {visibleNodes.length} of {allNodes.length} nodes
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {visibleEdges.length} of {allEdges.length} edges
-              </span>
-            </div>
+          <div
+            className="flex flex-wrap items-center gap-2 text-sm tabular-nums text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
+            <span>
+              {visibleNodes.length} of {allNodes.length} nodes
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {visibleEdges.length} of {allEdges.length} edges
+            </span>
           </div>
           {data.truncated ? (
             <div

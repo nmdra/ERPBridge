@@ -169,8 +169,11 @@ test("renders a bounded 100-node and 200-edge topology", async () => {
   await screen.findByRole("table", {
     name: "Accessible topology relationships",
   });
-  expect(screen.getByRole("status")).toHaveTextContent("100 of 100 nodes");
-  expect(screen.getByRole("status")).toHaveTextContent("200 of 200 edges");
+  const countStatus = screen
+    .getAllByRole("status")
+    .find((element) => element.textContent?.includes("100 of 100 nodes"));
+  expect(countStatus).toHaveTextContent("100 of 100 nodes");
+  expect(countStatus).toHaveTextContent("200 of 200 edges");
   expect(screen.getAllByRole("button", { name: "Inspect" })).toHaveLength(200);
 });
 

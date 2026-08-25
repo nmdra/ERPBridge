@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 
+import { PageHeader } from "../components/layout/PageHeader";
 import { Card, CardContent } from "../components/ui/card";
+import { FilterToolbar } from "../components/ui/filter-toolbar";
 import { EmptyState } from "../components/ui/empty-state";
 import { Skeleton } from "../components/ui/skeleton";
 import { StatusBadge } from "../components/status/StatusBadge";
@@ -275,90 +277,120 @@ export function Tools({ contextName }: { contextName: string }) {
     );
   }, [filter, tools.data?.items]);
 
-  if (tools.loading) return <Skeleton className="h-48 w-full" />;
+  if (tools.loading) {
+    return (
+      <div className="space-y-6" aria-busy="true">
+        <PageHeader
+          description="Safe, read-only MCP tool projections and manifests."
+          eyebrow="Inventory"
+          title="Tools"
+        />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
   if (tools.error || !tools.data || tools.data.state !== "available") {
     return (
-      <EmptyState
-        title="Tools are unavailable"
-        message={
-          tools.error ?? "The selected context has no readable tool inventory."
-        }
-      />
+      <div className="space-y-6">
+        <PageHeader
+          description="Safe, read-only MCP tool projections and manifests."
+          eyebrow="Inventory"
+          title="Tools"
+        />
+        <EmptyState
+          title="Tools are unavailable"
+          message={
+            tools.error ??
+            "The selected context has no readable tool inventory."
+          }
+        />
+      </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-medium">Tools</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {tools.data.items.length} safe MCP tool projections. Select a tool
-              to inspect its read-only manifest. Credentials and full upstream
-              URLs are hidden.
-            </p>
-          </div>
-          <label className="text-sm" htmlFor="tool-filter">
-            Filter
-            <input
-              className="ml-2 h-9 rounded-md border border-border bg-card px-2"
-              id="tool-filter"
-              placeholder="name, module, or path"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-            />
-          </label>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="overflow-x-auto p-0">
-          <table className="w-full text-left text-sm">
-            <caption className="sr-only">Safe MCP tool inventory</caption>
-            <thead className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-5 py-3">Name</th>
-                <th className="px-5 py-3">Module</th>
-                <th className="px-5 py-3">Version</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Method and path</th>
-                <th className="px-5 py-3">Cache</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleTools.map((tool) => (
-                <tr
-                  className="border-b border-border last:border-0"
-                  key={`${tool.name}@${tool.version}`}
-                >
-                  <th className="px-5 py-3 font-medium">
-                    <Link
-                      className="text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      href={`/tools/${encodeURIComponent(tool.name)}`}
+    <div className="space-y-6">
+      <PageHeader
+        description="Inspect safe MCP tool projections and read-only manifests. Credentials and full upstream URLs remain hidden."
+        eyebrow="Inventory"
+        title="Tools"
+      />
+      <FilterToolbar
+        summary={`${visibleTools.length} of ${tools.data.items.length} tools match the current filter.`}
+      >
+        <label
+          className="text-sm sm:col-span-2 lg:col-span-4"
+          htmlFor="tool-filter"
+        >
+          <span className="font-medium">Search tools</span>
+          <input
+            className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3"
+            id="tool-filter"
+            placeholder="Name, module, version, status, or path"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+          />
+        </label>
+      </FilterToolbar>
+      {visibleTools.length ? (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[58rem] text-left text-sm">
+                <caption className="sr-only">Safe MCP tool inventory</caption>
+                <thead className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-5 py-3">Name</th>
+                    <th className="px-5 py-3">Module</th>
+                    <th className="px-5 py-3">Version</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3">Method and path</th>
+                    <th className="px-5 py-3">Cache</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleTools.map((tool) => (
+                    <tr
+                      className="border-b border-border last:border-0"
+                      key={`${tool.name}@${tool.version}`}
                     >
-                      {tool.name}
-                    </Link>
-                  </th>
-                  <td className="px-5 py-3">{tool.module ?? "—"}</td>
-                  <td className="px-5 py-3">{tool.version}</td>
-                  <td className="px-5 py-3">
-                    <StatusBadge
-                      label={toolStatus(tool)}
-                      tone={tool.active ? "success" : "neutral"}
-                    />
-                  </td>
-                  <td className="px-5 py-3">
-                    {tool.method ?? "—"} {tool.endpointPath ?? "—"}
-                  </td>
-                  <td className="px-5 py-3">
-                    {tool.cache?.enabled ? `${tool.cache.ttlSeconds}s` : "off"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+                      <th className="px-5 py-3 font-medium">
+                        <Link
+                          className="text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          href={`/tools/${encodeURIComponent(tool.name)}`}
+                        >
+                          {tool.name}
+                        </Link>
+                      </th>
+                      <td className="px-5 py-3">{tool.module ?? "—"}</td>
+                      <td className="px-5 py-3">{tool.version}</td>
+                      <td className="px-5 py-3">
+                        <StatusBadge
+                          label={toolStatus(tool)}
+                          tone={tool.active ? "success" : "neutral"}
+                        />
+                      </td>
+                      <td className="px-5 py-3">
+                        {tool.method ?? "—"} {tool.endpointPath ?? "—"}
+                      </td>
+                      <td className="px-5 py-3">
+                        {tool.cache?.enabled
+                          ? `${tool.cache.ttlSeconds}s`
+                          : "off"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <EmptyState
+          title="No matching tools"
+          message="Adjust the search to see safe tool projections."
+        />
+      )}
     </div>
   );
 }
@@ -400,31 +432,24 @@ export function ToolDetails({
   }
 
   return (
-    <div className="space-y-4">
-      <Link className="text-sm text-primary hover:underline" href="/tools">
+    <div className="space-y-6">
+      <Link
+        className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        href="/tools"
+      >
         ← Back to tools
       </Link>
-      <Card>
-        <CardContent>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                MCP tool
-              </p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-                {tool.name}
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {tool.module ?? "Unassigned module"} · version {tool.version}
-              </p>
-            </div>
-            <StatusBadge
-              label={toolStatus(tool)}
-              tone={tool.active ? "success" : "neutral"}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <PageHeader
+        actions={
+          <StatusBadge
+            label={toolStatus(tool)}
+            tone={tool.active ? "success" : "neutral"}
+          />
+        }
+        description={`${tool.module ?? "Unassigned module"} · version ${tool.version}`}
+        eyebrow="MCP tool"
+        title={tool.name}
+      />
       {tool.manifest ? (
         <>
           <ManifestDetails manifest={tool.manifest} />
