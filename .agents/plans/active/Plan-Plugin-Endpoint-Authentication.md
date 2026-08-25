@@ -291,7 +291,7 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   `tmp=$(mktemp -d) && go build -o "$tmp/bridgectl" tools/bridgectl/main.go && (cd "$tmp" && ./bridgectl doc) && diff -ru docs/cli "$tmp/docs/cli"`;
   **Commit:** `fix: remove plaintext ERP registry credentials`.)
 
-- [ ] **Task 8: Synchronize public documentation and run final security gates.**
+- [x] **Task 8: Synchronize public documentation and run final security gates.**
   Before changing the public repository, create its required plan at
   `../erpbridge-docs/.agents/plans/Plan-plugin-credential-security.md` for
   this credential-security update. Then mirror the in-repository schema,

@@ -55,14 +55,17 @@ for attempt in $(seq 1 60); do
 done
 
 plugin_process_payload='{"protocolVersion":"v1","invocationId":"black-box","tool":{"name":"fixture","version":"1.0.0"},"result":{}}'
+#gitleaks:allow -- curl checks use generated fixture credentials only.
 missing_key_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST --header 'Content-Type: application/json' \
   --data "$plugin_process_payload" http://127.0.0.1:18090/v1/process)
 wrong_key_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST --header 'Content-Type: application/json' --header 'X-API-Key: wrong-plugin-key' \
   --data "$plugin_process_payload" http://127.0.0.1:18090/v1/process)
-correct_key_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
-  --request POST --header 'Content-Type: application/json' --header "X-API-Key: $MOCK_PLUGIN_API_KEY" \
+#gitleaks:allow -- generated fixture key is piped through stdin and never printed.
+correct_key_status=$(printf 'X-API-Key: %s\n' "$MOCK_PLUGIN_API_KEY" | \
+  curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST --header 'Content-Type: application/json' --header @- \
   --data "$plugin_process_payload" http://127.0.0.1:18090/v1/process)
 if [[ "$missing_key_status" != "401" || "$wrong_key_status" != "401" || "$correct_key_status" != "200" ]]; then
   echo "plugin API-key black-box checks failed" >&2
