@@ -4,6 +4,18 @@ import { afterEach } from "vitest";
 
 afterEach(cleanup);
 
+if (!globalThis.ResizeObserver) {
+  class ResizeObserverMock {
+    disconnect() {}
+    observe() {}
+    unobserve() {}
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    configurable: true,
+    value: ResizeObserverMock,
+  });
+}
+
 if (!window.localStorage) {
   const values = new Map<string, string>();
   const storage: Storage = {

@@ -22,9 +22,17 @@ const (
 
 // TopologyResponse is the bounded, safe API-to-MCP graph.
 type TopologyResponse struct {
-	State string         `json:"state"`
-	Nodes []TopologyNode `json:"nodes"`
-	Edges []TopologyEdge `json:"edges"`
+	State     string           `json:"state"`
+	Nodes     []TopologyNode   `json:"nodes"`
+	Edges     []TopologyEdge   `json:"edges"`
+	Truncated bool             `json:"truncated"`
+	Omitted   *TopologyOmitted `json:"omitted,omitempty"`
+}
+
+// TopologyOmitted reports safe counts omitted by the graph safety caps.
+type TopologyOmitted struct {
+	Nodes int `json:"nodes"`
+	Edges int `json:"edges"`
 }
 
 // TopologyNode represents a transport, tool, API, plugin, binding, or unresolved endpoint.
@@ -102,6 +110,7 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 	}
 	apis := registry.List()
 	sort.Slice(apis, func(i, j int) bool { return apis[i].Name < apis[j].Name })
+	candidateNodes, candidateEdges := topologyCandidateCounts(tools, apis, plugins, bindings, pluginsAvailable, ctx.ERPBase)
 
 	graph := TopologyResponse{State: stateAvailable, Nodes: make([]TopologyNode, 0), Edges: make([]TopologyEdge, 0)}
 	transportID := "transport:" + ctxName
@@ -210,7 +219,54 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if candidateNodes > len(graph.Nodes) || candidateEdges > len(graph.Edges) {
+		graph.Truncated = true
+		graph.Omitted = &TopologyOmitted{
+			Nodes: maxInt(0, candidateNodes-len(graph.Nodes)),
+			Edges: maxInt(0, candidateEdges-len(graph.Edges)),
+		}
+	}
 	writeJSON(w, http.StatusOK, graph)
+}
+
+func topologyCandidateCounts(tools []mcp.Tool, apis []idp.API, plugins []mcp.Plugin, bindings []mcp.PluginBinding, pluginsAvailable bool, base string) (int, int) {
+	unresolved := 0
+	for _, tool := range tools {
+		_, matched := matchAPI(tool, apis, base)
+		if matched == nil {
+			unresolved++
+		}
+	}
+	nodes := 1 + len(apis) + len(tools) + unresolved
+	edges := len(tools) * 2
+	if !pluginsAvailable {
+		return nodes, edges
+	}
+	nodes += len(plugins) + len(bindings)
+	pluginIDs := make(map[string]struct{}, len(plugins))
+	for _, plugin := range plugins {
+		pluginIDs[resourceIdentity(plugin.Metadata.Name, plugin.Metadata.Version)] = struct{}{}
+	}
+	toolIDs := make(map[string]struct{}, len(tools))
+	for _, tool := range tools {
+		toolIDs[resourceIdentity(tool.Metadata.Name, tool.Metadata.Version)] = struct{}{}
+	}
+	for _, binding := range bindings {
+		if _, ok := toolIDs[resourceIdentity(binding.Spec.ToolRef.Name, binding.Spec.ToolRef.Version)]; !ok {
+			continue
+		}
+		if _, ok := pluginIDs[resourceIdentity(binding.Spec.PluginRef.Name, binding.Spec.PluginRef.Version)]; ok {
+			edges += 2
+		}
+	}
+	return nodes, edges
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func targetMCPServer() bridgeclient.Target { return bridgeclient.TargetMCPServer }

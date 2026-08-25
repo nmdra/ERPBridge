@@ -2,14 +2,31 @@ import { useEffect, useState } from "react";
 
 import { apiFetch } from "../lib/api";
 
+export const topologyNodeKinds = [
+  "mcp-transport",
+  "mcp-tool",
+  "erp-api",
+  "plugin-binding",
+  "external-plugin",
+  "unresolved-endpoint",
+] as const;
+
+export type TopologyNodeKind = (typeof topologyNodeKinds)[number];
+export type TopologyMatchKind =
+  "exact" | "base-prefix" | "ambiguous" | "unresolved";
+export type TopologySelection =
+  { kind: "node"; id: string } | { kind: "edge"; id: string } | null;
+
 export type TopologyNode = {
   id: string;
-  kind: string;
+  kind: TopologyNodeKind | string;
   label: string;
   contextState?: string;
   tool?: {
     name: string;
     version: string;
+    active?: boolean;
+    status?: string;
     method?: string;
     endpointPath?: string;
     responsePath?: string;
@@ -46,7 +63,7 @@ export type TopologyEdge = {
   id: string;
   source: string;
   target: string;
-  matchKind: string;
+  matchKind: TopologyMatchKind | string;
   contextState?: string;
   authoritative: boolean;
 };
@@ -55,6 +72,8 @@ export type TopologyResponse = {
   state: string;
   nodes: TopologyNode[];
   edges: TopologyEdge[];
+  truncated?: boolean;
+  omitted?: { nodes: number; edges: number };
 };
 
 export function useTopology(contextName: string) {

@@ -1,5 +1,5 @@
 # Active Plans
 
-No plans are currently active. Completed plans are archived in
-[`../completed/`](../completed/); upcoming work remains in
-[`../upcoming/`](../upcoming/).
+- [`Plan-Console-UX-Revamp.md`](./Plan-Console-UX-Revamp.md) — production-grade
+  console UX revamp with topology filtering, selection, highlighting,
+  responsive clarity, and scale/completeness safeguards.

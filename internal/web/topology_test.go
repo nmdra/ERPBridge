@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -72,6 +73,51 @@ func TestTopologyIncludesPluginBindingsWhenFeatureIsAvailable(t *testing.T) {
 	}
 	if pluginEdges != 2 {
 		t.Fatalf("plugin edges = %d, edges = %+v", pluginEdges, topology.Edges)
+	}
+}
+
+func TestTopologyReportsTruncation(t *testing.T) {
+	tools := make([]mcp.Tool, maxTopologyNodes+1)
+	for index := range tools {
+		tools[index] = mcp.Tool{
+			Metadata: mcp.Metadata{Name: "tool-" + fmt.Sprint(index), Version: "1.0.0"},
+			Spec:     mcp.ToolSpec{Execution: mcp.Execution{Method: http.MethodGet, Endpoint: "/api/resource/" + fmt.Sprint(index)}},
+		}
+	}
+	payload, err := json.Marshal(tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/apis/erpbridge.io/v1/tools" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(payload)
+	}))
+	defer upstream.Close()
+
+	cfg := &config.Config{CurrentContext: "local", Contexts: map[string]config.Context{"local": {MCPServer: upstream.URL, ERPBase: "http://erp.local"}}}
+	console, err := NewServer(Options{ListenAddress: "127.0.0.1:0", Handler: NewConsoleHandler(HandlerOptions{Config: cfg})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = console.Close() }()
+
+	request := httptest.NewRequest(http.MethodGet, console.URL()+"/api/console/v1/topology?context=local", nil)
+	request.Host = console.Host()
+	request.Header.Set(CapabilityHeader, console.Capability())
+	recorder := httptest.NewRecorder()
+	console.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", recorder.Code, recorder.Body.String())
+	}
+	var topology TopologyResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &topology); err != nil {
+		t.Fatal(err)
+	}
+	if !topology.Truncated || topology.Omitted == nil || topology.Omitted.Nodes == 0 || topology.Omitted.Edges == 0 {
+		t.Fatalf("topology truncation = %+v", topology)
 	}
 }
 
