@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -296,6 +297,106 @@ func TestServerPlugin_RevalidatesTransformedOutput(t *testing.T) {
 	s.pluginClient = processor
 	invokeMCPHandler(t, s.handleMCPToolCall(baseInvalid.Metadata.Name), baseInvalid.Metadata.Name)
 	require.Empty(t, processor.Calls())
+}
+
+func TestServerPlugin_MissingCredentialMCPAndDirectPoliciesMakeNoOutboundCalls(t *testing.T) {
+	for _, policy := range []string{PluginFailurePolicyContinue, PluginFailurePolicyFail} {
+		t.Run(policy, func(t *testing.T) {
+			const missingCredentialRef = "PLUGIN_MISSING_RUNTIME_CREDENTIAL" // #nosec G101 -- environment-variable reference used by this test.
+			t.Setenv(missingCredentialRef, "")
+
+			calls := 0
+			client := NewPluginClient(&http.Client{Transport: pluginRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+				calls++
+				return nil, errors.New("plugin transport must not be called")
+			})})
+			s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+			tool := newPluginPipelineTool("missing-credential-tool-" + policy)
+			s.RegisterTool(tool)
+			binding := validPluginBindingForTest()
+			binding.Spec.ToolRef.Name = tool.Metadata.Name
+			binding.Spec.FailurePolicy = policy
+			plugin := validPluginForTest("https://plugin.example.test")
+			plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: missingCredentialRef}
+			s.pluginRegistry.Replace(buildPluginBindingSnapshot([]*Plugin{&plugin}, []*PluginBinding{&binding}, []*Tool{tool}))
+			s.pluginClient = client
+
+			mcpResult := invokeMCPHandler(t, s.handleMCPToolCall(tool.Metadata.Name), tool.Metadata.Name)
+			if policy == PluginFailurePolicyContinue {
+				require.False(t, mcpResult.IsError)
+				require.Equal(t, true, textResult(t, mcpResult)[pluginResultSourceField])
+			} else {
+				require.True(t, mcpResult.IsError)
+				require.Contains(t, mcpResult.Content, mcp.TextContent{Type: textContentType, Text: pluginProcessingFailureMessage})
+			}
+
+			request := httptest.NewRequest(http.MethodPost, "/api/tools/invoke", bytes.NewBufferString(`{"name":"`+tool.Metadata.Name+`","arguments":{}}`))
+			recorder := httptest.NewRecorder()
+			s.handleDirectInvoke(recorder, request)
+			if policy == PluginFailurePolicyContinue {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				require.JSONEq(t, `{"result":{"source":true}}`, recorder.Body.String())
+			} else {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				require.JSONEq(t, `{"error":"`+pluginProcessingFailureMessage+`"}`, recorder.Body.String())
+			}
+			require.Zero(t, calls)
+		})
+	}
+}
+
+func TestServerPlugin_CacheCredentialRotationUsesNewValueAfterFlush(t *testing.T) {
+	const credentialA = "plugin-credential-a" // #nosec G101 -- test-only rotation sentinel.
+	const credentialB = "plugin-credential-b" // #nosec G101 -- test-only rotation sentinel.
+	t.Setenv(pluginTestCredentialRef, credentialA)
+
+	var headers []string
+	transport := pluginRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		headers = append(headers, request.Header.Get(pluginAuthorizationHeader))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(`{"result":{"source":true,"processed":true}}`)),
+			Header:     make(http.Header),
+			Request:    request,
+		}, nil
+	})
+	cacheManager := cache.NewMemoryManager(10, logger.Init())
+	s := NewServer(nil, cacheManager, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	tool := newPluginPipelineTool("rotating-cached-plugin-tool")
+	tool.Spec.Cache = &cache.Config{Enabled: true, TTLSeconds: 60}
+	s.RegisterTool(tool)
+	binding := validPluginBindingForTest()
+	binding.Spec.ToolRef.Name = tool.Metadata.Name
+	plugin := validPluginForTest("https://plugin.example.test")
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginTestCredentialRef}
+	s.pluginRegistry.Replace(buildPluginBindingSnapshot([]*Plugin{&plugin}, []*PluginBinding{&binding}, []*Tool{tool}))
+	s.pluginClient = NewPluginClient(&http.Client{Transport: transport})
+	handler := s.CacheMiddleware(tool)(s.handleMCPToolCall(tool.Metadata.Name))
+
+	invokeMCPHandler(t, handler, tool.Metadata.Name)
+	invokeMCPHandler(t, handler, tool.Metadata.Name)
+	require.Equal(t, []string{"Bearer " + credentialA}, headers)
+
+	t.Setenv(pluginTestCredentialRef, credentialB)
+	t.Setenv(authTokenEnv, "runtime-admin-token")
+	mux := http.NewServeMux()
+	s.ServeHTTP(mux, "")
+
+	unauthenticatedFlush := httptest.NewRequest(http.MethodPost, "/api/cache/flush?tool="+tool.Metadata.Name, nil)
+	unauthenticatedRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(unauthenticatedRecorder, unauthenticatedFlush)
+	require.Equal(t, http.StatusUnauthorized, unauthenticatedRecorder.Code)
+
+	authenticatedFlush := httptest.NewRequest(http.MethodPost, "/api/cache/flush?tool="+tool.Metadata.Name, nil)
+	authenticatedFlush.Header.Set("Authorization", "Bearer runtime-admin-token")
+	authenticatedRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(authenticatedRecorder, authenticatedFlush)
+	require.Equal(t, http.StatusOK, authenticatedRecorder.Code)
+
+	// Recreate the runtime client to model a rollout after credential rotation.
+	s.pluginClient = NewPluginClient(&http.Client{Transport: transport})
+	invokeMCPHandler(t, handler, tool.Metadata.Name)
+	require.Equal(t, []string{"Bearer " + credentialA, "Bearer " + credentialB}, headers)
 }
 
 func TestServerPlugin_CacheHitCallsPluginOnce(t *testing.T) {

@@ -233,7 +233,7 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   `MOCK_ERP_CREDENTIALS_JSON='{}' MOCK_PLUGIN_IMAGE=example.invalid/mock:latest ERP_PRIMARY_KEY=test docker compose -f docker-compose.yml -f docker-compose.plugin-test.yml config --quiet`;
   **Commit:** `fix: require secure credential transport`.)
 
-- [ ] **Task 5: Prove persistence, pipeline, and cache invariants.** Add
+- [x] **Task 5: Prove persistence, pipeline, and cache invariants.** Add
   persistence round-trip tests proving plugin type/auth references are stored
   but resolved values are absent from raw SQLite JSON. Use the real
   `PluginClient` with a capture transport in MCP and direct-invoke tests to

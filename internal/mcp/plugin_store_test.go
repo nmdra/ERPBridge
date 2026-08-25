@@ -62,6 +62,34 @@ func TestPluginStore_CRUDAndExactBindingLookup(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestPluginStore_PersistsPluginAuthReferenceWithoutResolvedCredential(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "auth.db"))
+	require.NoError(t, err)
+	defer func() { _ = store.Close() }()
+
+	const credential = "plugin-store-secret" // #nosec G101 -- test-only sentinel for SQLite secret absence.
+	t.Setenv(pluginTestCredentialRef, credential)
+	plugin := validPluginForTest("https://plugin.example.test")
+	plugin.Metadata.Type = PluginTypeDocker
+	plugin.Spec.Auth = &PluginAuth{
+		Type:          PluginAuthTypeAPIKey,
+		CredentialRef: pluginTestCredentialRef,
+		Header:        pluginDefaultAPIKeyHeader,
+	}
+	require.NoError(t, store.SavePlugin(&plugin))
+
+	var raw string
+	require.NoError(t, store.db.QueryRow(`SELECT data FROM plugins WHERE name = ? AND version = ?`, plugin.Metadata.Name, plugin.Metadata.Version).Scan(&raw))
+	require.Contains(t, raw, `"type":"docker"`)
+	require.Contains(t, raw, `"credentialRef":"`+pluginTestCredentialRef+`"`)
+	require.NotContains(t, raw, credential)
+
+	stored, err := store.GetPlugin(plugin.Metadata.Name, plugin.Metadata.Version)
+	require.NoError(t, err)
+	require.Equal(t, PluginTypeDocker, stored.Metadata.Type)
+	require.Equal(t, plugin.Spec.Auth, stored.Spec.Auth)
+}
+
 func TestPluginStore_CanonicalizesPluginType(t *testing.T) {
 	store, err := NewStore(filepath.Join(t.TempDir(), "types.db"))
 	require.NoError(t, err)
