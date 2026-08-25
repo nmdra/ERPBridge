@@ -174,10 +174,15 @@ label, not a full upstream URL.
 
 The topology includes MCP transport, MCP tool, ERP API, plugin binding,
 external plugin, and unresolved endpoint nodes. Plugin relationships appear only
-when both plugin list routes are available. It caps node and edge counts and
-provides an accessible list and path view in addition to the interactive canvas. The BFF reads the local registry
-server-side and strips all registry authentication fields. The canvas loads on
-demand so the list view remains available on small or keyboard-only clients.
+when both plugin list routes are available. Use the search field and the node
+kind, match-confidence, and context-state filters to narrow the graph. The
+canvas and accessible relationship list share selection state: selecting a node
+highlights its immediate relationships, while selecting an edge shows its source,
+target, match confidence, authority, context state, and safe endpoint paths. The
+BFF reports when safety caps omit nodes or edges, so an incomplete graph is not
+mistaken for a complete one. The BFF reads the local registry server-side and
+strips all registry authentication fields. The canvas loads on demand so the
+list view remains available on small or keyboard-only clients.
 
 ## Logs and metrics
 

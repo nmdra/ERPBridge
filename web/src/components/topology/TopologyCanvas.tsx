@@ -1,3 +1,5 @@
+import { useCallback, useMemo, type MouseEvent } from "react";
+
 import {
   Background,
   Controls,
@@ -209,6 +211,16 @@ function edgeColor(matchKind: string) {
   return "hsl(var(--primary))";
 }
 
+function miniMapNodeColor(node: Node<FlowNodeData>) {
+  if (node.data?.kind === "external-plugin") return "#8b5cf6";
+  if (node.data?.kind === "mcp-tool") return "#2563eb";
+  if (node.data?.kind === "plugin-binding") return "#d97706";
+  if (node.data?.kind === "erp-api") return "#059669";
+  return "#64748b";
+}
+
+const fitViewOptions = { duration: 200, maxZoom: 1.2, padding: 0.2 };
+
 export function TopologyCanvas({
   nodes,
   edges,
@@ -224,80 +236,82 @@ export function TopologyCanvas({
   onSelectEdge: (id: string) => void;
   onClearSelection: () => void;
 }) {
-  const flowNodes: Node<FlowNodeData>[] = layoutTopologyNodes(
-    nodes,
-    edges,
-    selection,
-  ).map((node) => ({
-    ...node,
-    data: {
-      ...node.data,
-      onSelect: () => onSelectNode(node.id),
-    },
-  }));
-  const flowEdges: Edge[] = edges.map((edge) => {
-    const selected = selection?.kind === "edge" && selection.id === edge.id;
-    const connected =
-      !selection ||
-      selected ||
-      (selection.kind === "node" &&
-        (edge.source === selection.id || edge.target === selection.id));
-    const color = edgeColor(edge.matchKind);
-    return {
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      animated: edge.matchKind === "base-prefix",
-      selected,
-      label: edge.matchKind,
-      labelStyle: { fontSize: 10, fontWeight: selected ? 700 : 500 },
-      labelBgStyle: { fill: "hsl(var(--card))", fillOpacity: 0.9 },
-      labelBgPadding: [4, 2],
-      labelBgBorderRadius: 4,
-      markerEnd: { type: MarkerType.ArrowClosed, color },
-      style: {
-        stroke: color,
-        strokeWidth: selected ? 3 : 1.5,
-        opacity: connected ? 1 : 0.2,
-      },
-      zIndex: selected ? 10 : 0,
-    };
-  });
+  const flowNodes = useMemo<Node<FlowNodeData>[]>(
+    () =>
+      layoutTopologyNodes(nodes, edges, selection).map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          onSelect: () => onSelectNode(node.id),
+        },
+      })),
+    [edges, nodes, onSelectNode, selection],
+  );
+  const flowEdges = useMemo<Edge[]>(
+    () =>
+      edges.map((edge) => {
+        const selected = selection?.kind === "edge" && selection.id === edge.id;
+        const connected =
+          !selection ||
+          selected ||
+          (selection.kind === "node" &&
+            (edge.source === selection.id || edge.target === selection.id));
+        const color = edgeColor(edge.matchKind);
+        return {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          animated: edge.matchKind === "base-prefix",
+          selected,
+          label: edge.matchKind,
+          labelStyle: { fontSize: 10, fontWeight: selected ? 700 : 500 },
+          labelBgStyle: { fill: "hsl(var(--card))", fillOpacity: 0.9 },
+          labelBgPadding: [4, 2],
+          labelBgBorderRadius: 4,
+          markerEnd: { type: MarkerType.ArrowClosed, color },
+          style: {
+            stroke: color,
+            strokeWidth: selected ? 3 : 1.5,
+            opacity: connected ? 1 : 0.2,
+          },
+          zIndex: selected ? 10 : 0,
+        };
+      }),
+    [edges, selection],
+  );
+  const handleEdgeClick = useCallback(
+    (_event: MouseEvent, edge: Edge) => onSelectEdge(edge.id),
+    [onSelectEdge],
+  );
+  const handleNodeClick = useCallback(
+    (_event: MouseEvent, node: Node) => onSelectNode(node.id),
+    [onSelectNode],
+  );
 
   return (
     <div className="space-y-2">
       <div
         aria-label="Interactive API to MCP topology"
-        className="h-[36rem] overflow-hidden rounded-lg border border-border bg-muted/30"
+        className="h-[28rem] overflow-hidden rounded-lg border border-border bg-muted/30 sm:h-[36rem]"
       >
         <ReactFlow
           edges={flowEdges}
           edgesFocusable
           elevateEdgesOnSelect
           fitView
-          fitViewOptions={{ duration: 200, maxZoom: 1.2, padding: 0.2 }}
+          fitViewOptions={fitViewOptions}
           maxZoom={1.5}
           minZoom={0.1}
           nodeTypes={nodeTypes}
           nodes={flowNodes}
           nodesFocusable
-          onEdgeClick={(_, edge) => onSelectEdge(edge.id)}
-          onNodeClick={(_, node) => onSelectNode(node.id)}
+          onEdgeClick={handleEdgeClick}
+          onNodeClick={handleNodeClick}
           onPaneClick={onClearSelection}
         >
           <Background />
           <Controls />
-          <MiniMap
-            nodeColor={(node) => {
-              if (node.data?.kind === "external-plugin") return "#8b5cf6";
-              if (node.data?.kind === "mcp-tool") return "#2563eb";
-              if (node.data?.kind === "plugin-binding") return "#d97706";
-              if (node.data?.kind === "erp-api") return "#059669";
-              return "#64748b";
-            }}
-            pannable
-            zoomable
-          />
+          <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
           <Panel
             className="rounded-md border border-border bg-card/90 px-2 py-1 text-xs text-muted-foreground shadow-sm"
             position="top-left"

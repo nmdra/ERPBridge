@@ -133,6 +133,47 @@ test("filters plugin nodes without placing them in the MCP tools facet", async (
   expect(screen.getByRole("button", { name: "Inspect" })).toBeInTheDocument();
 });
 
+test("renders a bounded 100-node and 200-edge topology", async () => {
+  const nodes = Array.from({ length: 100 }, (_, index) => ({
+    id: `node-${index}`,
+    kind: "mcp-tool",
+    label: `tool-${index}`,
+    tool: { name: `tool-${index}`, version: "1.0.0" },
+  }));
+  const edges = Array.from({ length: 200 }, (_, index) => ({
+    id: `edge-${index}`,
+    source: `node-${index % 100}`,
+    target: `node-${(index + 1) % 100}`,
+    matchKind: "exact",
+    authoritative: true,
+  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            state: "available",
+            nodes,
+            edges,
+            truncated: false,
+          }),
+          { status: 200 },
+        ),
+      ),
+    ),
+  );
+
+  render(<Topology contextName="local" />);
+
+  await screen.findByRole("table", {
+    name: "Accessible topology relationships",
+  });
+  expect(screen.getByRole("status")).toHaveTextContent("100 of 100 nodes");
+  expect(screen.getByRole("status")).toHaveTextContent("200 of 200 edges");
+  expect(screen.getAllByRole("button", { name: "Inspect" })).toHaveLength(200);
+});
+
 test("selects an edge and exposes safe match details", async () => {
   const user = userEvent.setup();
   render(<Topology contextName="local" />);

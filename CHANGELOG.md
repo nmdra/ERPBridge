@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add topology search and facet filters, shared node/edge selection,
+  relationship highlighting, safe edge inspection, and incomplete-graph
+  warnings without exposing endpoints, credentials, or raw configuration
 - Add read-only plugin and binding metadata views, clickable exact-version
   plugin detail pages, and plugin-aware topology nodes without exposing
   endpoints, credentials, or raw configuration

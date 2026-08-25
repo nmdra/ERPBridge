@@ -56,6 +56,7 @@ type FilterCheckboxProps = {
   label: string;
   count?: number;
   checked: boolean;
+  disabled?: boolean;
   onChange: () => void;
 };
 
@@ -63,13 +64,15 @@ function FilterCheckbox({
   label,
   count,
   checked,
+  disabled = false,
   onChange,
 }: FilterCheckboxProps) {
   return (
-    <label className="flex min-h-9 items-center gap-2 rounded-md px-2 text-sm hover:bg-muted">
+    <label className="flex min-h-9 items-center gap-2 rounded-md px-2 text-sm hover:bg-muted has-[:disabled]:opacity-50">
       <input
         checked={checked}
         className="h-4 w-4 rounded border-border text-primary focus:ring-ring"
+        disabled={disabled}
         onChange={onChange}
         type="checkbox"
       />
@@ -343,6 +346,10 @@ export function Topology({ contextName }: { contextName: string }) {
       : null;
 
   useEffect(() => {
+    setSelection(null);
+  }, [contextName]);
+
+  useEffect(() => {
     if (!selection) return;
     const visible =
       selection.kind === "node"
@@ -469,6 +476,7 @@ export function Topology({ contextName }: { contextName: string }) {
                   <FilterCheckbox
                     checked={selectedKinds.includes(kind)}
                     count={allNodes.filter((node) => node.kind === kind).length}
+                    disabled={!allNodes.some((node) => node.kind === kind)}
                     key={kind}
                     label={nodeKindLabels[kind]}
                     onChange={() =>
@@ -489,6 +497,7 @@ export function Topology({ contextName }: { contextName: string }) {
                     count={
                       allEdges.filter((edge) => edge.matchKind === kind).length
                     }
+                    disabled={!allEdges.some((edge) => edge.matchKind === kind)}
                     key={kind}
                     label={matchKindLabels[kind]}
                     onChange={() =>
@@ -512,6 +521,9 @@ export function Topology({ contextName }: { contextName: string }) {
                       allNodes.filter(
                         (node) => nodeContextState(node) === state,
                       ).length
+                    }
+                    disabled={
+                      !allNodes.some((node) => nodeContextState(node) === state)
                     }
                     key={state}
                     label={

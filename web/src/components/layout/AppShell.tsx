@@ -135,8 +135,8 @@ export function AppShell({
         </div>
       </aside>
       <div className="min-w-0">
-        <header className="flex min-h-16 items-center justify-between border-b border-border bg-card px-5 lg:px-8">
-          <div>
+        <header className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-5 py-3 lg:px-8">
+          <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               ERPBridge{" "}
               <span className="text-[0.6rem] font-normal normal-case tracking-normal">
@@ -145,12 +145,12 @@ export function AppShell({
             </p>
             <h1 className="text-lg font-semibold">{title}</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <label className="sr-only" htmlFor="deployment-select">
               Select deployment
             </label>
             <select
-              className="h-9 rounded-md border border-border bg-card px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-9 max-w-[12rem] rounded-md border border-border bg-card px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               id="deployment-select"
               onChange={(event) => onContextChange(event.target.value)}
               value={selectedContext}

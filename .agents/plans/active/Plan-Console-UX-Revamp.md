@@ -158,7 +158,7 @@ mutation interface.
   **Verify:** keyboard-focused React Testing Library assertions for row
   selection, `aria-pressed`, filter counts, and edge details.)
 
-- [ ] **Task 5: Clarify the React Flow canvas and responsive shell.** Add explicit
+- [x] **Task 5: Clarify the React Flow canvas and responsive shell.** Add explicit
   category/relationship legend treatment, compact edge match labels, a stable
   initial viewport/fit action, and memoized flow arrays/callbacks. Remove the
   filter-driven remount/timer churn. Keep the accessible list immediately
@@ -171,7 +171,7 @@ mutation interface.
   **Verify:** `npm run format-check --prefix web`, typecheck, lint, frontend
   tests, and a manual narrow viewport check.)
 
-- [ ] **Task 6: Add scale, security, and regression coverage.** Add a deterministic
+- [x] **Task 6: Add scale, security, and regression coverage.** Add a deterministic
   100-node/200-edge fixture and test that filtering and selection remain bounded
   and responsive enough for the console target. Verify no topology response or
   browser text contains credentials, plugin endpoints, raw binding config, or
