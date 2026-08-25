@@ -111,7 +111,40 @@ You can use the local `bridgectl` binary to interact with the server running in 
 When the container receives `SIGTERM` or `SIGINT`, ERPBridge stops accepting new
 HTTP connections and gracefully shuts down the listener before the process exits.
 
-## 6. Connecting MCP Clients
+## 6. External plugins
+
+ERPBridge does not install, start, update, or schedule plugin code. Deploy each
+plugin process separately, then apply a `Plugin` resource with its reachable
+endpoint and an exact-version `PluginBinding`. See the [External Plugin
+Resource Schema](./plugin-schema.md) for the manifest and `/v1/process` JSON
+contract.
+
+For a deployment that uses a published plugin image, pin the image tag in the
+operator-owned deployment configuration:
+
+```yaml
+services:
+  response-transformer:
+    image: ghcr.io/nmdra/erpbridge-plugins/mock-plugin:0.1.0
+```
+
+The image is not part of the ERPBridge server image. The plugin receives only a
+normalized result and binding configuration; it does not receive ERP
+credentials or inbound request headers.
+
+The repository includes an opt-in black-box test. It builds the deterministic
+fixture from the sibling `../ERPBridge-Plugins` polyrepo, starts it with the
+pinned MockERP image, and removes only its isolated containers and volumes:
+
+```bash
+make test-plugin-integration
+```
+
+The test uses the Compose project name `erpbridge-plugin-test` and ports
+`18080`, `18081`, `18090`, and `16379` so it does not reuse the normal local
+stack. Do not run it when those ports are already in use.
+
+## 7. Connecting MCP Clients
 
 ERPBridge supports the **Stdio** and **Streamable HTTP** transports.
 
@@ -165,7 +198,7 @@ Cursor connects to remote MCP servers via HTTP. Use this method when the ERPBrid
 3. **Verify:**
     You see a green status indicator. You can now use the ERP tools in Cursor Chat or Composer.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 - **Connection Refused:** Make sure that `ERP_BASE_URL` in `docker-compose.yml` uses the service name `http://mock-erp:8081` instead of `localhost`. Compose pulls `ghcr.io/nmdra/mockerp:0.2.1`; override `MOCK_ERP_IMAGE` only with a compatible image.
 - **Claude Stdio Timeout:** If Claude fails to connect, build the server binary first and run it directly. This shows any startup errors.

@@ -84,12 +84,37 @@ bindings. Bound response processing runs only on cache misses; the cache stores
 the final transformed MCP result. Plugin and binding lifecycle changes flush
 affected tool cache entries.
 
+### Plugin HTTP protocol
+
+For an active `after_response` binding, ERPBridge sends a synchronous JSON
+request to `<spec.endpoint>/v1/process`:
+
+```json
+{
+  "protocolVersion": "v1",
+  "invocationId": "generated-id",
+  "tool": {"name": "list_employees", "version": "1.0.0"},
+  "result": {"employees": []},
+  "config": {"mode": "safe"}
+}
+```
+
+The plugin must return `{"result": <JSON value>}`. Request and response JSON
+are limited to 1 MiB. Redirects and retries are disabled. A timeout, non-2xx
+response, malformed or oversized response, or transformed output that fails
+the tool schema follows the binding policy: `continue` keeps the original
+result and `fail` returns a generic tool error. Plugin URLs, payloads,
+credentials, and plugin error bodies are not returned to callers.
+
+The protocol does not include original arguments, inbound headers, caller
+identity, caller tokens, or ERP credentials.
+
 ### Admission Rules
 
 The server rejects tool definitions when:
 
 - The tool name starts with `get-` or `post-`.
-- The endpoint path contains embedded secrets (for example `token ` or `key=`).
+- The endpoint path contains embedded secrets (for example `token` or `key=`).
 - `spec.security.allowedRoles` contains an invalid, duplicate, empty, or more
   than 32 roles.
 - A guarded tool defines its own `role` input property or requires that field.
