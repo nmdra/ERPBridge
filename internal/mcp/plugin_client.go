@@ -14,6 +14,11 @@ import (
 	"time"
 )
 
+// PluginProcessor is the external-plugin invocation seam used by the server.
+type PluginProcessor interface {
+	Process(context.Context, *Plugin, PluginInvocation) (*PluginResponse, error)
+}
+
 // PluginClient calls a separately running external plugin over HTTP JSON.
 type PluginClient struct {
 	httpClient *http.Client

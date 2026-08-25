@@ -47,11 +47,12 @@ spec:
     mode: safe
 ```
 
-The only phase accepted by the control plane is `after_response`. The future
-response pipeline will use active bindings in ascending priority order after a
-successful tool result has passed its output schema. The default failure policy
-is `continue`; `fail` returns a generic tool error.
-Plugin and binding resources are versioned declarative records. A soft delete
+The only phase accepted by the control plane is `after_response`. The response
+pipeline uses active bindings in ascending priority order after a successful
+tool result has passed its output schema. The default failure policy is
+`continue`; `fail` returns a generic tool error.
+Plugin resources are versioned declarative records. Bindings are named
+declarative records that reference exact plugin and tool versions. A soft delete
 sets `isActive: false` and retains the record. A plugin cannot be hard-deleted
 while an active binding references that exact plugin version. Inactive
 bindings remain retained until they are explicitly hard-deleted.
@@ -83,3 +84,7 @@ The protocol does not include original tool arguments, inbound headers, caller
 identity, caller tokens, or ERP credentials. Request and response JSON are
 limited to 1 MiB. Calls use the invocation context and resource timeout,
 disable redirects, and do not retry.
+
+Bindings run only after a successful tool result and only on a cache miss. The
+cache stores the final transformed MCP result. Applying, updating, or deleting
+a plugin or binding flushes the affected tool cache entries.

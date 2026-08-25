@@ -15,6 +15,15 @@ const (
 	queryTrueValue      = "true"
 )
 
+func writeReconciliationPending(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		statusKey: "pending",
+		"message": "desired state is stored and awaits successful reconciliation",
+	})
+}
+
 // handlePluginAPI serves the Plugin control-plane resource.
 func (s *Server) handlePluginAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -74,7 +83,10 @@ func (s *Server) handlePluginApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to save plugin: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.reconcileLocked(r.Context())
+	if err := s.reconcileLocked(r.Context()); err != nil {
+		writeReconciliationPending(w)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -148,7 +160,10 @@ func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to delete plugin: "+deleteErr.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.reconcileLocked(r.Context())
+	if err := s.reconcileLocked(r.Context()); err != nil {
+		writeReconciliationPending(w)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -191,7 +206,10 @@ func (s *Server) handlePluginBindingApply(w http.ResponseWriter, r *http.Request
 		http.Error(w, "failed to save plugin binding: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.reconcileLocked(r.Context())
+	if err := s.reconcileLocked(r.Context()); err != nil {
+		writeReconciliationPending(w)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -265,7 +283,10 @@ func (s *Server) handlePluginBindingDelete(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "failed to delete plugin binding: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.reconcileLocked(r.Context())
+	if err := s.reconcileLocked(r.Context()); err != nil {
+		writeReconciliationPending(w)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

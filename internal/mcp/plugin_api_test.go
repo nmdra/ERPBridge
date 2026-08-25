@@ -4,14 +4,48 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/stretchr/testify/require"
 )
+
+type reconcileFailureBackend struct {
+	scans int
+}
+
+func (b *reconcileFailureBackend) Get(context.Context, string) ([]byte, error) {
+	return nil, errors.New("cache miss")
+}
+
+func (b *reconcileFailureBackend) Set(context.Context, string, []byte, time.Duration) error {
+	return nil
+}
+
+func (b *reconcileFailureBackend) Delete(context.Context, ...string) (int, error) {
+	return 0, nil
+}
+
+func (b *reconcileFailureBackend) Scan(context.Context, string) ([]string, error) {
+	b.scans++
+	if b.scans > 1 {
+		return nil, errors.New("cache unavailable")
+	}
+	return nil, nil
+}
+
+func (b *reconcileFailureBackend) FlushAll(context.Context) (int, error) {
+	return 0, nil
+}
+
+func (b *reconcileFailureBackend) Stats(context.Context) (cache.BackendStats, error) {
+	return cache.BackendStats{}, nil
+}
 
 func newPluginAPITestServer(t *testing.T, cacheManager *cache.Manager) *Server {
 	t.Helper()
@@ -129,6 +163,22 @@ func TestPluginRegistry_ReconcileRefreshesDirectStoreChanges(t *testing.T) {
 	require.NoError(t, s.store.SavePlugin(&plugin))
 	s.Reconcile(context.Background())
 	require.Len(t, s.pluginRegistry.BindingsForTool(pluginTestToolName, testVersion100), 1)
+}
+
+func TestPluginAPI_ReconciliationFailureReturnsPending(t *testing.T) {
+	cacheManager := cache.NewManagerWithBackend(&reconcileFailureBackend{}, logger.Init())
+	s := newPluginAPITestServer(t, cacheManager)
+	plugin := validPluginForTest("http://plugin.example.test")
+	require.Equal(t, http.StatusCreated, pluginAPIRequest(t, s, http.MethodPost, "/apis/erpbridge.io/v1/plugins", plugin).Code)
+
+	binding := validPluginBindingForTest()
+	response := pluginAPIRequest(t, s, http.MethodPost, "/apis/erpbridge.io/v1/pluginbindings", binding)
+	require.Equal(t, http.StatusAccepted, response.Code)
+	require.Contains(t, response.Body.String(), `"status":"pending"`)
+	stored, err := s.store.GetPluginBinding(binding.Metadata.Name)
+	require.NoError(t, err)
+	require.True(t, stored.Metadata.IsActive)
+	require.Empty(t, s.pluginRegistry.BindingsForTool(pluginTestToolName, testVersion100))
 }
 
 func TestPluginAPI_HardDeleteConflictAndStoreErrors(t *testing.T) {

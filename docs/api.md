@@ -80,7 +80,9 @@ plugin with an active binding returns `409 Conflict` and cannot be hard-deleted.
 Binding admission requires an active exact plugin version and active exact MCP
 tool version. Use `name` and `version` filters for plugins, and `name`,
 `pluginName`, `pluginVersion`, `toolName`, or `toolVersion` filters for
-bindings.
+bindings. Bound response processing runs only on cache misses; the cache stores
+the final transformed MCP result. Plugin and binding lifecycle changes flush
+affected tool cache entries.
 
 ### Admission Rules
 

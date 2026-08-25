@@ -168,10 +168,6 @@ func MetricsMiddleware() server.ToolHandlerMiddleware {
 func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			if s.cache != nil && t.Spec.Cache != nil && t.Spec.Cache.Enabled {
-				s.pluginLifecycleMu.RLock()
-				defer s.pluginLifecycleMu.RUnlock()
-			}
 			if s.cache == nil || t.Spec.Cache == nil {
 				return next(ctx, req)
 			}
@@ -181,10 +177,14 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 			if len(t.Spec.Security.AllowedRoles) > 0 {
 				role, _ = CallerRoleFromContext(ctx)
 			}
+			cacheGeneration := uint64(0)
 
 			if t.Spec.Cache.Enabled {
-				// READ from cache
+				// Read the cache and lifecycle generation as one short critical section.
+				s.pluginLifecycleMu.RLock()
+				cacheGeneration = s.lifecycleGeneration
 				entry, err := s.cache.Get(ctx, t.Metadata.Name, role, args, *t.Spec.Cache)
+				s.pluginLifecycleMu.RUnlock()
 				if err == nil && entry != nil && entry.HitType != "miss" {
 					var cachedResult mcp.CallToolResult
 					if unmarshalErr := json.Unmarshal(entry.Response, &cachedResult); unmarshalErr == nil {
@@ -197,19 +197,26 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 				metrics.CacheMissesTotal.Inc()
 			}
 
-			// Execute next
+			// Execute next outside the lifecycle lock. A generation check below
+			// prevents an in-flight pre-change result from repopulating the cache.
 			result, err := next(ctx, req)
 			if err != nil || result == nil || result.IsError {
 				return result, err
 			}
 
-			// WRITE to cache only for enabled read caching.
+			// WRITE to cache only for enabled read caching and an unchanged lifecycle.
 			if t.Spec.Cache.Enabled {
 				respJSON, marshalErr := json.Marshal(result)
 				if marshalErr != nil {
 					s.log.Warn("failed to marshal cache result", slog.String("error", marshalErr.Error()))
-				} else if cacheErr := s.cache.Set(ctx, t.Metadata.Name, role, args, respJSON, *t.Spec.Cache); cacheErr != nil {
-					s.log.Warn("failed to cache result", slog.String("error", cacheErr.Error()))
+				} else {
+					s.pluginLifecycleMu.RLock()
+					if cacheGeneration == s.lifecycleGeneration {
+						if cacheErr := s.cache.Set(ctx, t.Metadata.Name, role, args, respJSON, *t.Spec.Cache); cacheErr != nil {
+							s.log.Warn("failed to cache result", slog.String("error", cacheErr.Error()))
+						}
+					}
+					s.pluginLifecycleMu.RUnlock()
 				}
 			}
 

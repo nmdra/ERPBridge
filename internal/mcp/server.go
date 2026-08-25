@@ -26,23 +26,25 @@ import (
 
 // Server is the primary MCP server implementation for ERPBridge.
 type Server struct {
-	mcpServer         *server.MCPServer
-	connector         ERPConnector
-	cache             *cache.Manager
-	log               *slog.Logger
-	mu                sync.RWMutex
-	pluginLifecycleMu sync.RWMutex
-	store             *Store
-	registry          *ToolRegistry
-	pluginRegistry    *PluginRegistry
-	lastDesiredHash   string
-	resources         map[string]*Resource
-	prompts           map[string]*Prompt
-	Notifier          *CustomNotifier
-	TelemetryHooks    *TelemetryHooks
-	BusinessHooks     *BusinessHooks
-	toolMiddlewares   []server.ToolHandlerMiddleware
-	authWarnOnce      sync.Once
+	mcpServer           *server.MCPServer
+	connector           ERPConnector
+	cache               *cache.Manager
+	log                 *slog.Logger
+	mu                  sync.RWMutex
+	pluginLifecycleMu   sync.RWMutex
+	store               *Store
+	registry            *ToolRegistry
+	pluginRegistry      *PluginRegistry
+	pluginClient        PluginProcessor
+	lifecycleGeneration uint64
+	lastDesiredHash     string
+	resources           map[string]*Resource
+	prompts             map[string]*Prompt
+	Notifier            *CustomNotifier
+	TelemetryHooks      *TelemetryHooks
+	BusinessHooks       *BusinessHooks
+	toolMiddlewares     []server.ToolHandlerMiddleware
+	authWarnOnce        sync.Once
 }
 
 const (
@@ -93,6 +95,7 @@ func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Lo
 		store:          store,
 		registry:       NewToolRegistry(),
 		pluginRegistry: NewPluginRegistry(),
+		pluginClient:   NewPluginClientWithLogger(mcpLog),
 		resources:      make(map[string]*Resource),
 		prompts:        make(map[string]*Prompt),
 		Notifier:       NewCustomNotifier(s),
@@ -359,19 +362,19 @@ func (s *Server) StartController(ctx context.Context) {
 func (s *Server) Reconcile(ctx context.Context) {
 	s.pluginLifecycleMu.Lock()
 	defer s.pluginLifecycleMu.Unlock()
-	s.reconcileLocked(ctx)
+	_ = s.reconcileLocked(ctx)
 }
 
-func (s *Server) reconcileLocked(ctx context.Context) {
+func (s *Server) reconcileLocked(ctx context.Context) error {
 	if s.store == nil {
-		return
+		return nil
 	}
 
 	// Check if state has changed
 	currentHash, err := s.store.GetStateHash()
 	if err != nil {
 		s.log.Error("failed to get state hash", slog.String("error", err.Error()))
-		return
+		return fmt.Errorf("get state hash: %w", err)
 	}
 
 	s.mu.RLock()
@@ -379,7 +382,7 @@ func (s *Server) reconcileLocked(ctx context.Context) {
 	s.mu.RUnlock()
 
 	if currentHash == lastHash {
-		return
+		return nil
 	}
 
 	s.log.Info("reconciling tools", slog.String("old_hash", lastHash), slog.String("new_hash", currentHash))
@@ -387,21 +390,22 @@ func (s *Server) reconcileLocked(ctx context.Context) {
 	desiredTools, err := s.store.List()
 	if err != nil {
 		s.log.Error("failed to list desired tools", slog.String("error", err.Error()))
-		return
+		return fmt.Errorf("list desired tools: %w", err)
 	}
 	desiredPlugins, err := s.store.ListPlugins()
 	if err != nil {
 		s.log.Error("failed to list desired plugins", slog.String("error", err.Error()))
-		return
+		return fmt.Errorf("list desired plugins: %w", err)
 	}
 	desiredBindings, err := s.store.ListPluginBindings()
 	if err != nil {
 		s.log.Error("failed to list desired plugin bindings", slog.String("error", err.Error()))
-		return
+		return fmt.Errorf("list desired plugin bindings: %w", err)
 	}
 	if s.pluginRegistry == nil {
 		s.pluginRegistry = NewPluginRegistry()
 	}
+	s.lifecycleGeneration++
 	oldBindings := s.pluginRegistry.SnapshotBindings()
 	nextSnapshot := buildPluginBindingSnapshot(desiredPlugins, desiredBindings, desiredTools)
 	var nextBindings []*PluginBinding
@@ -414,7 +418,7 @@ func (s *Server) reconcileLocked(ctx context.Context) {
 	}
 	if err := s.flushPluginBindingTargets(ctx, oldBindings, nextBindings); err != nil {
 		s.log.Error("failed to invalidate plugin binding caches", slog.String("error", err.Error()))
-		return
+		return fmt.Errorf("invalidate plugin binding caches: %w", err)
 	}
 	s.pluginRegistry.Replace(nextSnapshot)
 	s.warnUnresolvedCredentials()
@@ -453,6 +457,7 @@ func (s *Server) reconcileLocked(ctx context.Context) {
 	s.mu.Lock()
 	s.lastDesiredHash = currentHash
 	s.mu.Unlock()
+	return nil
 }
 
 // DeregisterTool removes a tool from the server's registry and active MCP server.
@@ -527,17 +532,8 @@ func (s *Server) RegisterTool(t *Tool) {
 	mcpTool.InputSchema = mcp.ToolInputSchema{}
 	mcpTool.OutputSchema = mcp.ToolOutputSchema{}
 
-	// Add tool to server with handler
-	handler := s.handleMCPToolCall(t.Metadata.Name)
-
-	// Apply tool-specific middlewares
-	handler = s.CacheMiddleware(t)(handler)
-	handler = s.RoleAuthzMiddleware(t)(handler)
-
-	// Apply global middlewares
-	for _, v := range slices.Backward(s.toolMiddlewares) {
-		handler = v(handler)
-	}
+	// Add tool to server with the shared middleware and execution seam.
+	handler := s.applyToolMiddlewares(t, s.handleMCPToolCall(t.Metadata.Name))
 
 	s.mcpServer.AddTool(mcpTool, handler)
 	metrics.InitializeToolMetrics(t.Metadata.Name)
@@ -550,29 +546,48 @@ func (s *Server) RegisterTool(t *Tool) {
 func (s *Server) handleMCPToolCall(name string) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		s.mu.RLock()
-		// Resolve the latest stable version for this tool name
+		// Resolve the latest stable version for this tool name.
 		t, err := s.registry.Resolve(name, "")
 		s.mu.RUnlock()
 
 		if err != nil {
 			return nil, fmt.Errorf("tool not found: %s (%w)", name, err)
 		}
-
-		// Type assertion for arguments
-		args, ok := request.Params.Arguments.(map[string]any)
-		if !ok && request.Params.Arguments != nil {
-			return nil, fmt.Errorf("invalid arguments format")
+		args, err := toolArguments(request)
+		if err != nil {
+			return nil, err
 		}
-
-		result, err := t.Execute(ctx, args, s.connector)
+		result, err := s.executeToolCall(ctx, t, args)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-
-		// Convert result to mcp-go format
-		resultJSON, _ := json.Marshal(result.Result)
-		return mcp.NewToolResultText(string(resultJSON)), nil
+		return result, nil
 	}
+}
+
+func (s *Server) executeToolRequest(ctx context.Context, tool *Tool, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args, err := toolArguments(request)
+	if err != nil {
+		return nil, err
+	}
+	return s.executeToolCall(ctx, tool, args)
+}
+
+func toolArguments(request mcp.CallToolRequest) (map[string]any, error) {
+	args, ok := request.Params.Arguments.(map[string]any)
+	if !ok && request.Params.Arguments != nil {
+		return nil, fmt.Errorf("invalid arguments format")
+	}
+	return args, nil
+}
+
+func (s *Server) applyToolMiddlewares(tool *Tool, handler server.ToolHandlerFunc) server.ToolHandlerFunc {
+	handler = s.CacheMiddleware(tool)(handler)
+	handler = s.RoleAuthzMiddleware(tool)(handler)
+	for _, middleware := range slices.Backward(s.toolMiddlewares) {
+		handler = middleware(handler)
+	}
+	return handler
 }
 
 // MCPServer returns the underlying mcp-go MCPServer instance.
@@ -738,7 +753,10 @@ func (s *Server) handleToolApply(w http.ResponseWriter, r *http.Request) {
 
 	// Immediate reconciliation for responsiveness
 	s.RegisterTool(&t)
-	s.reconcileLocked(r.Context())
+	if err := s.reconcileLocked(r.Context()); err != nil {
+		writeReconciliationPending(w)
+		return
+	}
 	s.warnUnresolvedCredentials()
 
 	w.WriteHeader(http.StatusCreated)
@@ -812,7 +830,10 @@ func (s *Server) handleToolDelete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.reconcileLocked(r.Context())
+	if err := s.reconcileLocked(r.Context()); err != nil {
+		writeReconciliationPending(w)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -914,33 +935,21 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 	mcpReq.Params.Name = req.Name
 	mcpReq.Params.Arguments = authorizedArgs
 
-	// Base handler for direct invoke
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args, ok := request.Params.Arguments.(map[string]any)
-		if !ok && request.Params.Arguments != nil {
-			return nil, fmt.Errorf("invalid arguments format")
-		}
-		result, err := t.Execute(ctx, args, s.connector)
-		if err != nil {
-			return nil, err
-		}
-		resultJSON, _ := json.Marshal(result.Result)
-		return mcp.NewToolResultText(string(resultJSON)), nil
-	}
-
-	// Apply tool-specific middlewares
-	handler = s.CacheMiddleware(t)(handler)
-	handler = s.RoleAuthzMiddleware(t)(handler)
-
-	// Apply global middlewares
-	for _, v := range slices.Backward(s.toolMiddlewares) {
-		handler = v(handler)
-	}
+	// Use the same execution and middleware seam as MCP tools/call.
+	handler := s.applyToolMiddlewares(t, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return s.executeToolRequest(ctx, t, request)
+	})
 
 	// Execute through the middleware chain
 	mcpResult, err := handler(directContext, mcpReq)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, ErrPluginProcessingFailed) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{pluginErrorField: ErrPluginProcessingFailed.Error()})
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
