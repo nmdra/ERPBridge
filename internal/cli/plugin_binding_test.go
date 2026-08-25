@@ -58,6 +58,30 @@ spec:
 	require.Equal(t, "second", bindings[1].Metadata.Name)
 }
 
+func TestDecodePluginBindingDocuments_RejectsUnknownFields(t *testing.T) {
+	data := []byte(`apiVersion: erpbridge.io/v1
+kind: PluginBinding
+metadata:
+  name: strict
+spec:
+  pluginRef:
+    name: response-transformer
+    version: 1.0.0
+  toolRef:
+    name: list-orders
+    version: 1.0.0
+  phase: after_response
+  token: raw-secret
+`)
+	_, err := decodePluginBindingDocuments(data, "binding.yaml")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown")
+
+	_, err = decodePluginBindingDocuments([]byte(`{"apiVersion":"erpbridge.io/v1","kind":"PluginBinding","metadata":{"name":"strict"},"spec":{"pluginRef":{"name":"response-transformer","version":"1.0.0"},"toolRef":{"name":"list-orders","version":"1.0.0"},"phase":"after_response","token":"raw-secret"}}`), "binding.json")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown")
+}
+
 func TestPluginBindingApplyCmd_SendsResourceAndAuth(t *testing.T) {
 	var received http.Request
 	var receivedBinding mcp.PluginBinding

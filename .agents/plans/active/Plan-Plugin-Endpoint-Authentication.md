@@ -178,7 +178,7 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   **Verify:** `go test ./internal/logger ./internal/connector -run 'Test.*(Redact|Body|Log)'`;
   **Commit:** `fix: redact outbound ERP logs`.)
 
-- [ ] **Task 2: Define strict, canonical plugin resources and protected
+- [x] **Task 2: Define strict, canonical plugin resources and protected
   admission.** Write failing tests before implementation. Add plugin type
   constants, canonical defaulting, `PluginAuth`, environment-reference syntax
   and `PLUGIN_` prefix validation, safe auth-header validation, and strict

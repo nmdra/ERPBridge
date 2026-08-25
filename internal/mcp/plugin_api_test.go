@@ -85,6 +85,9 @@ func TestPluginAPI_ApplyListFilterAndLifecycle(t *testing.T) {
 
 	response := pluginAPIRequest(t, s, http.MethodPost, "/apis/erpbridge.io/v1/plugins", plugin)
 	require.Equal(t, http.StatusCreated, response.Code)
+	storedPlugin, err := s.store.GetPlugin(plugin.Metadata.Name, plugin.Metadata.Version)
+	require.NoError(t, err)
+	require.Equal(t, PluginTypeAPI, storedPlugin.Metadata.Type)
 
 	response = pluginAPIRequest(t, s, http.MethodGet, "/apis/erpbridge.io/v1/plugins?name=response-transformer&version=1.0.0", nil)
 	require.Equal(t, http.StatusOK, response.Code)
@@ -105,9 +108,105 @@ func TestPluginAPI_ApplyListFilterAndLifecycle(t *testing.T) {
 
 	response = pluginAPIRequest(t, s, http.MethodDelete, "/apis/erpbridge.io/v1/plugins?name=response-transformer&version=1.0.0", nil)
 	require.Equal(t, http.StatusNoContent, response.Code)
-	storedPlugin, err := s.store.GetPlugin(plugin.Metadata.Name, plugin.Metadata.Version)
+	storedPlugin, err = s.store.GetPlugin(plugin.Metadata.Name, plugin.Metadata.Version)
 	require.NoError(t, err)
 	require.False(t, storedPlugin.Metadata.IsActive)
+}
+
+func TestPluginAPI_RejectsUnknownPluginFields(t *testing.T) {
+	s := newPluginAPITestServer(t, nil)
+	body := []byte(`{
+		"apiVersion":"erpbridge.io/v1",
+		"kind":"Plugin",
+		"metadata":{"name":"strict-plugin","version":"1.0.0"},
+		"spec":{"endpoint":"https://plugin.example.test","timeoutMilliseconds":1000,"token":"raw-secret"}
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/apis/erpbridge.io/v1/plugins", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+	s.handlePluginAPI(response, req)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), "unknown field")
+}
+
+func TestPluginBindingAPI_RejectsUnknownFields(t *testing.T) {
+	s := newPluginAPITestServer(t, nil)
+	body := []byte(`{
+		"apiVersion":"erpbridge.io/v1",
+		"kind":"PluginBinding",
+		"metadata":{"name":"strict-binding"},
+		"spec":{"pluginRef":{"name":"response-transformer","version":"1.0.0"},"toolRef":{"name":"list-orders","version":"1.0.0"},"phase":"after_response","token":"raw-secret"}
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/apis/erpbridge.io/v1/pluginbindings", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+	s.handlePluginBindingAPI(response, req)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), "unknown field")
+}
+
+func TestPluginAPI_RejectsUnknownPluginAuthFields(t *testing.T) {
+	s := newPluginAPITestServer(t, nil)
+	body := []byte(`{
+		"apiVersion":"erpbridge.io/v1",
+		"kind":"Plugin",
+		"metadata":{"name":"strict-auth-plugin","version":"1.0.0"},
+		"spec":{"endpoint":"https://plugin.example.test","timeoutMilliseconds":1000,"auth":{"type":"bearer","credentialRef":"PLUGIN_TEST_TOKEN","token":"raw-secret"}}
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/apis/erpbridge.io/v1/plugins", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+	s.handlePluginAPI(response, req)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), "unknown field")
+}
+
+func TestPluginAPI_RequiresProtectedAdmissionForCredentialedPlugin(t *testing.T) {
+	plugin := validPluginForTest("https://plugin.example.test")
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginTestCredentialRef}
+
+	t.Run("rejects open control plane", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:443")
+		s := newPluginAPITestServer(t, nil)
+		response := pluginAPIRequest(t, s, http.MethodPost, "/apis/erpbridge.io/v1/plugins", plugin)
+		require.Equal(t, http.StatusUnprocessableEntity, response.Code)
+	})
+
+	t.Run("rejects missing endpoint allowlist", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "admin-token")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "")
+		s := newPluginAPITestServer(t, nil)
+		response := applyCredentialedPlugin(t, s, plugin, true)
+		require.Equal(t, http.StatusUnprocessableEntity, response.Code)
+	})
+
+	t.Run("rejects a non-admin caller", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "admin-token")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:443")
+		s := newPluginAPITestServer(t, nil)
+		response := applyCredentialedPlugin(t, s, plugin, false)
+		require.Equal(t, http.StatusUnprocessableEntity, response.Code)
+	})
+
+	t.Run("accepts authenticated admin and allowed endpoint", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "admin-token")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:443")
+		s := newPluginAPITestServer(t, nil)
+		response := applyCredentialedPlugin(t, s, plugin, true)
+		require.Equal(t, http.StatusCreated, response.Code)
+	})
+}
+
+func applyCredentialedPlugin(t *testing.T, s *Server, plugin Plugin, admin bool) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(plugin)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/apis/erpbridge.io/v1/plugins", bytes.NewReader(body))
+	req = req.WithContext(WithCallerIdentity(req.Context(), CallerIdentity{IsAdmin: admin}))
+	response := httptest.NewRecorder()
+	s.handlePluginAPI(response, req)
+	return response
 }
 
 func TestPluginAPI_RejectsInvalidAndMissingReferences(t *testing.T) {

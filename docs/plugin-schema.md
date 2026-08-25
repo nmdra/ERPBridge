@@ -12,16 +12,38 @@ kind: Plugin
 metadata:
   name: response-transformer
   version: 1.0.0
+  type: api
   isActive: true
 spec:
-  endpoint: http://plugin-host:9000
+  endpoint: https://plugin-host:9000
   timeoutMilliseconds: 5000
+  auth:
+    type: api-key
+    credentialRef: PLUGIN_RESPONSE_TRANSFORMER_KEY
+    header: X-API-Key
 ```
+
+`metadata.type` is `api` or `docker`. If it is omitted, ERPBridge stores `api`.
+The type describes the plugin deployment. ERPBridge does not start, install, or
+update Docker images.
 
 `spec.endpoint` must be an absolute `http` or `https` URL. It must not contain
 userinfo, query parameters, or a fragment. ERPBridge sends requests to
 `/v1/process` below that endpoint. The timeout must be between 1 millisecond
 and 5 minutes.
+
+`spec.auth` is optional. It supports `bearer` and `api-key` authentication.
+`api-key` can use `header`, or the default `X-API-Key` header. `credentialRef`
+must name a `PLUGIN_` environment variable. Manifests never contain the
+credential value. Bearer authentication cannot set `header`. API-key
+authentication cannot use reserved HTTP headers.
+
+Plugin JSON and YAML manifests reject unknown fields. This prevents a misspelled
+or raw credential field from changing the authentication behavior.
+
+A credentialed plugin requires `API_AUTH_TOKEN` and an authenticated admin
+request. Set `PLUGIN_ENDPOINT_ALLOWLIST` to comma-separated exact `host:port`
+values. The plugin endpoint must match one value before ERPBridge stores it.
 
 ## PluginBinding
 

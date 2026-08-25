@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 
@@ -16,6 +17,16 @@ const (
 	PluginKind = "Plugin"
 	// PluginBindingKind is the Kubernetes-style resource kind for bindings.
 	PluginBindingKind = "PluginBinding"
+
+	// PluginTypeAPI classifies an already-running API plugin.
+	PluginTypeAPI = "api"
+	// PluginTypeDocker classifies an already-running Docker plugin.
+	PluginTypeDocker = "docker"
+
+	// PluginAuthTypeBearer identifies bearer authentication.
+	PluginAuthTypeBearer = "bearer"
+	// PluginAuthTypeAPIKey identifies API-key authentication.
+	PluginAuthTypeAPIKey = "api-key"
 
 	// PluginProtocolVersion is the wire-protocol version sent to plugins.
 	PluginProtocolVersion = "v1"
@@ -35,6 +46,8 @@ const (
 	// holding an invocation open without bound.
 	pluginMaxTimeoutMilliseconds = 5 * 60 * 1000
 	pluginProcessPath            = "/v1/process"
+	pluginSchemeHTTPS            = "https"
+	pluginSchemeHTTP             = "http"
 )
 
 // MaxPluginJSONBytes is the maximum size of an external-plugin JSON document.
@@ -53,13 +66,22 @@ type Plugin struct {
 type PluginMetadata struct {
 	Name     string `json:"name"`
 	Version  string `json:"version"`
+	Type     string `json:"type,omitempty"`
 	IsActive bool   `json:"isActive,omitempty"`
 }
 
-// PluginSpec contains the endpoint and invocation timeout for a plugin.
+// PluginAuth describes an environment-backed plugin credential.
+type PluginAuth struct {
+	Type          string `json:"type"`
+	CredentialRef string `json:"credentialRef"`
+	Header        string `json:"header,omitempty"`
+}
+
+// PluginSpec contains the endpoint, optional authentication, and invocation timeout for a plugin.
 type PluginSpec struct {
-	Endpoint            string `json:"endpoint"`
-	TimeoutMilliseconds int    `json:"timeoutMilliseconds"`
+	Endpoint            string      `json:"endpoint"`
+	TimeoutMilliseconds int         `json:"timeoutMilliseconds"`
+	Auth                *PluginAuth `json:"auth,omitempty"`
 }
 
 // PluginRef identifies an exact plugin version.
@@ -151,6 +173,10 @@ func (p *Plugin) Validate() error {
 	if strings.TrimSpace(p.Metadata.Version) == "" {
 		return fmt.Errorf("metadata.version is required")
 	}
+	p.canonicalizeType()
+	if p.Metadata.Type != PluginTypeAPI && p.Metadata.Type != PluginTypeDocker {
+		return fmt.Errorf("metadata.type must be %q or %q", PluginTypeAPI, PluginTypeDocker)
+	}
 	if _, err := semver.NewVersion(p.Metadata.Version); err != nil {
 		return fmt.Errorf("metadata.version must be a valid semver version: %w", err)
 	}
@@ -165,7 +191,78 @@ func (p *Plugin) Validate() error {
 	if err := validatePluginEndpoint(u); err != nil {
 		return fmt.Errorf("spec.endpoint: %w", err)
 	}
+	if err := p.Spec.Auth.validate(); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (p *Plugin) canonicalizeType() {
+	if p.Metadata.Type == "" {
+		p.Metadata.Type = PluginTypeAPI
+	}
+}
+
+func (a *PluginAuth) validate() error {
+	if a == nil {
+		return nil
+	}
+	if a.Type != PluginAuthTypeBearer && a.Type != PluginAuthTypeAPIKey {
+		return fmt.Errorf("spec.auth.type must be %q or %q", PluginAuthTypeBearer, PluginAuthTypeAPIKey)
+	}
+	if !validPluginCredentialRef(a.CredentialRef) {
+		return fmt.Errorf("spec.auth.credentialRef must be a PLUGIN_ environment variable name")
+	}
+	if a.Type == PluginAuthTypeBearer && a.Header != "" {
+		return fmt.Errorf("spec.auth.header is only supported for api-key authentication")
+	}
+	if a.Type == PluginAuthTypeAPIKey && a.Header != "" && !validPluginAuthHeader(a.Header) {
+		return fmt.Errorf("spec.auth.header is not a permitted HTTP header")
+	}
+	return nil
+}
+
+func validPluginCredentialRef(ref string) bool {
+	if !strings.HasPrefix(ref, "PLUGIN_") || len(ref) == len("PLUGIN_") {
+		return false
+	}
+	for i, r := range ref {
+		if (r >= 'A' && r <= 'Z') || r == '_' || (i > 0 && r >= '0' && r <= '9') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validPluginAuthHeader(header string) bool {
+	if header == "" || reservedPluginAuthHeaders[strings.ToLower(header)] {
+		return false
+	}
+	for _, r := range header {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || strings.ContainsRune("!#$%&'*+-.^_`|~", r) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+var reservedPluginAuthHeaders = map[string]bool{
+	"accept":              true,
+	"authorization":       true,
+	"connection":          true,
+	"content-type":        true,
+	"cookie":              true,
+	"host":                true,
+	"keep-alive":          true,
+	"proxy-authenticate":  true,
+	"proxy-authorization": true,
+	"proxy-connection":    true,
+	"te":                  true,
+	"trailer":             true,
+	"transfer-encoding":   true,
+	"upgrade":             true,
 }
 
 // Validate checks a binding resource without resolving its references.
@@ -230,6 +327,26 @@ func (b *PluginBinding) ToolKey() string {
 		return ""
 	}
 	return b.Spec.ToolRef.Name + "@" + b.Spec.ToolRef.Version
+}
+
+func pluginEndpointHostPort(raw string) (string, error) {
+	endpoint, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", err
+	}
+	if err := validatePluginEndpoint(endpoint); err != nil {
+		return "", err
+	}
+	port := endpoint.Port()
+	if port == "" {
+		switch endpoint.Scheme {
+		case pluginSchemeHTTPS:
+			port = "443"
+		case pluginSchemeHTTP:
+			port = "80"
+		}
+	}
+	return strings.ToLower(net.JoinHostPort(endpoint.Hostname(), port)), nil
 }
 
 func validatePluginEndpoint(endpoint *url.URL) error {

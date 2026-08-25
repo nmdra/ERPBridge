@@ -26,6 +26,7 @@ func (s *Store) savePlugin(plugin *Plugin) error {
 	if plugin == nil {
 		return errors.New("plugin is required")
 	}
+	plugin.canonicalizeType()
 	data, err := json.Marshal(plugin)
 	if err != nil {
 		return fmt.Errorf("marshal plugin: %w", err)
@@ -66,6 +67,7 @@ func (s *Store) ListPlugins() ([]*Plugin, error) {
 		if err := json.Unmarshal([]byte(data), &plugin); err != nil {
 			return nil, fmt.Errorf("unmarshal plugin: %w", err)
 		}
+		plugin.canonicalizeType()
 		plugins = append(plugins, &plugin)
 	}
 	if err := rows.Err(); err != nil {
@@ -88,6 +90,7 @@ func (s *Store) GetPlugin(name, version string) (*Plugin, error) {
 	if err := json.Unmarshal([]byte(data), &plugin); err != nil {
 		return nil, fmt.Errorf("unmarshal plugin: %w", err)
 	}
+	plugin.canonicalizeType()
 	return &plugin, nil
 }
 

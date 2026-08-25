@@ -82,6 +82,31 @@ spec:
 	require.Equal(t, "second", plugins[1].Metadata.Name)
 }
 
+func TestDecodePluginDocuments_RejectsUnknownFields(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		path string
+		data string
+	}{
+		{
+			name: "JSON",
+			path: "plugin.json",
+			data: `{"apiVersion":"erpbridge.io/v1","kind":"Plugin","metadata":{"name":"strict","version":"1.0.0"},"spec":{"endpoint":"https://plugin.example.test","timeoutMilliseconds":1000,"token":"raw-secret"}}`,
+		},
+		{
+			name: "YAML",
+			path: "plugin.yaml",
+			data: "apiVersion: erpbridge.io/v1\nkind: Plugin\nmetadata:\n  name: strict\n  version: 1.0.0\nspec:\n  endpoint: https://plugin.example.test\n  timeoutMilliseconds: 1000\n  token: raw-secret\n",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := decodePluginDocuments([]byte(test.data), test.path)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "unknown")
+		})
+	}
+}
+
 func TestPluginApplyCmd_SendsAuthenticatedResource(t *testing.T) {
 	var received http.Request
 	var receivedPlugin mcp.Plugin
@@ -251,9 +276,11 @@ func TestPluginDeleteCmd_ConfirmationCanAbort(t *testing.T) {
 
 func TestPluginOutputTableAndYAML(t *testing.T) {
 	plugin := testCLIPlugin()
+	plugin.Metadata.Type = mcp.PluginTypeAPI
 	var table bytes.Buffer
 	require.NoError(t, (&PluginListResponse{Plugins: []*mcp.Plugin{&plugin}}).RenderTable(&table))
 	require.Contains(t, table.String(), testPluginName)
+	require.Contains(t, table.String(), mcp.PluginTypeAPI)
 
 	var yamlOutput bytes.Buffer
 	require.NoError(t, yaml.NewEncoder(&yamlOutput).Encode(plugin))

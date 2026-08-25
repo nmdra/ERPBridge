@@ -8,13 +8,16 @@ import (
 )
 
 const (
-	pluginTestVersion  = testVersion100
-	pluginTestModeKey  = "mode"
-	pluginTestMode     = "safe"
-	pluginTestResultID = "order-1"
-	pluginTestToolName = "list-orders"
-	pluginTimeoutError = "timeout"
-	pluginVersionError = "metadata.version"
+	pluginTestVersion        = testVersion100
+	pluginTestModeKey        = "mode"
+	pluginTestMode           = "safe"
+	pluginTestResultID       = "order-1"
+	pluginTestToolName       = "list-orders"
+	pluginTimeoutError       = "timeout"
+	pluginVersionError       = "metadata.version"
+	pluginAuthHeaderError    = "spec.auth.header"
+	pluginTestCredentialRef  = "PLUGIN_TEST_TOKEN" // #nosec G101 -- this is an environment-variable reference used by tests.
+	pluginHTTPValidationText = "http"
 )
 
 func validPluginForTest(endpoint string) Plugin {
@@ -91,7 +94,7 @@ func TestPlugin_Validate(t *testing.T) {
 		},
 		"rejects non-http endpoint": {
 			mutate:  func(plugin *Plugin) { plugin.Spec.Endpoint = "ftp://plugins.example.test" },
-			wantErr: "http",
+			wantErr: pluginHTTPValidationText,
 		},
 		"rejects endpoint userinfo": {
 			mutate:  func(plugin *Plugin) { plugin.Spec.Endpoint = "https://user:secret@plugins.example.test" },
@@ -104,6 +107,55 @@ func TestPlugin_Validate(t *testing.T) {
 		"rejects endpoint fragment": {
 			mutate:  func(plugin *Plugin) { plugin.Spec.Endpoint = "https://plugins.example.test#fragment" },
 			wantErr: "fragment",
+		},
+		"canonicalizes omitted plugin type": {
+			mutate:  func(_ *Plugin) {},
+			wantErr: "",
+		},
+		"accepts docker plugin type": {
+			mutate:  func(plugin *Plugin) { plugin.Metadata.Type = PluginTypeDocker },
+			wantErr: "",
+		},
+		"rejects unsupported plugin type": {
+			mutate:  func(plugin *Plugin) { plugin.Metadata.Type = "binary" },
+			wantErr: "metadata.type",
+		},
+		"accepts bearer auth": {
+			mutate: func(plugin *Plugin) {
+				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginTestCredentialRef}
+			},
+			wantErr: "",
+		},
+		"rejects plugin auth outside plugin prefix": {
+			mutate: func(plugin *Plugin) {
+				// #nosec G101 -- this is an environment-variable reference used by the test.
+				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: "API_AUTH_TOKEN"}
+			},
+			wantErr: "credentialRef",
+		},
+		"rejects bearer custom header": {
+			mutate: func(plugin *Plugin) {
+				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginTestCredentialRef, Header: "X-API-Key"}
+			},
+			wantErr: pluginAuthHeaderError,
+		},
+		"rejects reserved API key header": {
+			mutate: func(plugin *Plugin) {
+				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeAPIKey, CredentialRef: pluginTestCredentialRef, Header: "Authorization"}
+			},
+			wantErr: pluginAuthHeaderError,
+		},
+		"rejects malformed API key header": {
+			mutate: func(plugin *Plugin) {
+				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeAPIKey, CredentialRef: pluginTestCredentialRef, Header: "X API Key"}
+			},
+			wantErr: pluginAuthHeaderError,
+		},
+		"rejects hop by hop API key header": {
+			mutate: func(plugin *Plugin) {
+				plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeAPIKey, CredentialRef: pluginTestCredentialRef, Header: "Upgrade"}
+			},
+			wantErr: pluginAuthHeaderError,
 		},
 		"rejects zero timeout": {
 			mutate:  func(plugin *Plugin) { plugin.Spec.TimeoutMilliseconds = 0 },
@@ -126,10 +178,27 @@ func TestPlugin_Validate(t *testing.T) {
 			err := plugin.Validate()
 			if test.wantErr == "" {
 				require.NoError(t, err)
+				if name == "canonicalizes omitted plugin type" {
+					require.Equal(t, PluginTypeAPI, plugin.Metadata.Type)
+				}
 				return
 			}
 			require.Error(t, err)
 			require.Contains(t, err.Error(), test.wantErr)
+		})
+	}
+}
+
+func TestPluginAuthRejectsReservedHeaders(t *testing.T) {
+	for header := range reservedPluginAuthHeaders {
+		t.Run(header, func(t *testing.T) {
+			plugin := validPluginForTest("https://plugins.example.test")
+			plugin.Spec.Auth = &PluginAuth{
+				Type:          PluginAuthTypeAPIKey,
+				CredentialRef: pluginTestCredentialRef,
+				Header:        header,
+			}
+			require.ErrorContains(t, plugin.Validate(), pluginAuthHeaderError)
 		})
 	}
 }

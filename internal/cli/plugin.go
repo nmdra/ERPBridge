@@ -27,17 +27,33 @@ func decodePluginDocuments(data []byte, filePath string) ([]mcp.Plugin, error) {
 	return decodeResourceDocuments[mcp.Plugin](data, filePath)
 }
 
+func decodeStrictJSON(data []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("multiple JSON documents are not allowed")
+		}
+		return err
+	}
+	return nil
+}
+
 func decodeResourceDocuments[T any](data []byte, filePath string) ([]T, error) {
 	if strings.HasSuffix(strings.ToLower(filePath), ".json") {
 		var resources []T
-		if err := json.Unmarshal(data, &resources); err == nil {
+		if err := decodeStrictJSON(data, &resources); err == nil {
 			if len(resources) == 0 {
 				return nil, fmt.Errorf("unmarshal json (%s): no resource documents found", filePath)
 			}
 			return resources, nil
 		}
 		var resource T
-		if err := json.Unmarshal(data, &resource); err != nil {
+		if err := decodeStrictJSON(data, &resource); err != nil {
 			return nil, fmt.Errorf("unmarshal json (%s): %w", filePath, err)
 		}
 		return []T{resource}, nil
@@ -67,7 +83,7 @@ func decodeResourceDocuments[T any](data []byte, filePath string) ([]T, error) {
 				return nil, fmt.Errorf("marshal yaml document (%s): %w", filePath, err)
 			}
 			var resource T
-			if err := yaml.Unmarshal(encoded, &resource); err != nil {
+			if err := yaml.UnmarshalWithOptions(encoded, &resource, yaml.DisallowUnknownField()); err != nil {
 				return nil, fmt.Errorf("unmarshal yaml document (%s): %w", filePath, err)
 			}
 			resources = append(resources, resource)
@@ -318,13 +334,13 @@ type PluginListResponse struct {
 // RenderTable renders plugin identities and lifecycle state.
 func (r *PluginListResponse) RenderTable(w io.Writer) error {
 	tw := output.NewTabWriter(w)
-	_, _ = fmt.Fprintln(tw, "NAME\tVERSION\tENDPOINT\tSTATUS")
+	_, _ = fmt.Fprintln(tw, "NAME\tVERSION\tTYPE\tENDPOINT\tSTATUS")
 	for _, plugin := range r.Plugins {
 		status := "INACTIVE"
 		if plugin.Metadata.IsActive {
 			status = "ACTIVE"
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", plugin.Metadata.Name, plugin.Metadata.Version, plugin.Spec.Endpoint, status)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", plugin.Metadata.Name, plugin.Metadata.Version, plugin.Metadata.Type, plugin.Spec.Endpoint, status)
 	}
 	return tw.Flush()
 }

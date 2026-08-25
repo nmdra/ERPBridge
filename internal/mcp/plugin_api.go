@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 )
 
 const (
@@ -52,13 +55,33 @@ func (s *Server) handlePluginBindingAPI(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+func decodeStrictJSON(r io.Reader, target any) error {
+	decoder := json.NewDecoder(r)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("multiple JSON documents are not allowed")
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Server) handlePluginApply(w http.ResponseWriter, r *http.Request) {
 	var plugin Plugin
-	if err := json.NewDecoder(r.Body).Decode(&plugin); err != nil {
+	if err := decodeStrictJSON(r.Body, &plugin); err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := plugin.Validate(); err != nil {
+		http.Error(w, "invalid plugin: "+err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	if err := credentialedPluginAdmission(r.Context(), &plugin); err != nil {
 		http.Error(w, "invalid plugin: "+err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -167,9 +190,32 @@ func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func credentialedPluginAdmission(ctx context.Context, plugin *Plugin) error {
+	if plugin.Spec.Auth == nil {
+		return nil
+	}
+	if strings.TrimSpace(os.Getenv(authTokenEnv)) == "" {
+		return fmt.Errorf("credentialed plugins require %s to be configured", authTokenEnv)
+	}
+	identity, ok := CallerIdentityFromContext(ctx)
+	if !ok || !identity.IsAdmin {
+		return errors.New("credentialed plugins require an authenticated admin")
+	}
+	endpoint, err := pluginEndpointHostPort(plugin.Spec.Endpoint)
+	if err != nil {
+		return fmt.Errorf("normalize plugin endpoint: %w", err)
+	}
+	for _, allowed := range strings.Split(os.Getenv("PLUGIN_ENDPOINT_ALLOWLIST"), ",") {
+		if strings.EqualFold(strings.TrimSpace(allowed), endpoint) {
+			return nil
+		}
+	}
+	return fmt.Errorf("plugin endpoint %q is not in PLUGIN_ENDPOINT_ALLOWLIST", endpoint)
+}
+
 func (s *Server) handlePluginBindingApply(w http.ResponseWriter, r *http.Request) {
 	var binding PluginBinding
-	if err := json.NewDecoder(r.Body).Decode(&binding); err != nil {
+	if err := decodeStrictJSON(r.Body, &binding); err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return
 	}

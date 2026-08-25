@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -59,6 +60,29 @@ func TestPluginStore_CRUDAndExactBindingLookup(t *testing.T) {
 	require.NoError(t, store.HardDeletePlugin(plugin.Metadata.Name, plugin.Metadata.Version))
 	_, err = store.GetPlugin(plugin.Metadata.Name, plugin.Metadata.Version)
 	require.Error(t, err)
+}
+
+func TestPluginStore_CanonicalizesPluginType(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "types.db"))
+	require.NoError(t, err)
+	defer func() { _ = store.Close() }()
+
+	plugin := validPluginForTest("https://plugin.example.test")
+	require.NoError(t, store.SavePlugin(&plugin))
+	stored, err := store.GetPlugin(plugin.Metadata.Name, plugin.Metadata.Version)
+	require.NoError(t, err)
+	require.Equal(t, PluginTypeAPI, stored.Metadata.Type)
+
+	legacy := validPluginForTest("https://legacy.example.test")
+	legacy.Metadata.Name = "legacy-plugin"
+	data, err := json.Marshal(legacy)
+	require.NoError(t, err)
+	_, err = store.db.Exec(`INSERT INTO plugins (name, version, is_active, data) VALUES (?, ?, ?, ?)`, legacy.Metadata.Name, legacy.Metadata.Version, 1, string(data))
+	require.NoError(t, err)
+
+	stored, err = store.GetPlugin(legacy.Metadata.Name, legacy.Metadata.Version)
+	require.NoError(t, err)
+	require.Equal(t, PluginTypeAPI, stored.Metadata.Type)
 }
 
 func TestPluginStore_HardDeletePluginRejectsActiveBinding(t *testing.T) {
