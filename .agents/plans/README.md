@@ -5,9 +5,6 @@ starting implementation work.
 
 ## Active
 
-- [`Plan-Generic-External-Plugins.md`](./active/Plan-Generic-External-Plugins.md)
-  — generic external-plugin control-plane implementation.
-
 ## Upcoming
 
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
@@ -42,6 +39,9 @@ promotion to `active/`.
 - [`[COMPLETED]Plan-Mock-ERP.md`](./completed/[COMPLETED]Plan-Mock-ERP.md)
   — standalone MockERP extraction, pinned image consumption, and the
   ERPNext-aligned SQLite service.
+- [`[COMPLETED]Plan-Generic-External-Plugins.md`](./completed/[COMPLETED]Plan-Generic-External-Plugins.md)
+  — generic external-plugin control plane, response processing, CLI, and
+  black-box integration fixture.
 
 Completed plans are historical records. Do not execute their unchecked task
 lists as new work.
