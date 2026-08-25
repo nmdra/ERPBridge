@@ -1,1 +1,1 @@
-active/Plan-Plugin-Endpoint-Authentication.md
+completed/[COMPLETED]Plan-Plugin-Endpoint-Authentication.md
