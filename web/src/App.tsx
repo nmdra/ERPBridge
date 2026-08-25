@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Route, Switch } from "wouter";
 
 import { AppShell } from "./components/layout/AppShell";
-import { Card, CardContent } from "./components/ui/card";
-import { StatusBadge } from "./components/status/StatusBadge";
 import { useContexts } from "./hooks/useConsole";
+import { PageHeader } from "./components/layout/PageHeader";
+import { StateBanner } from "./components/ui/state-banner";
 import { Deployments } from "./routes/Deployments";
 import { Logs } from "./routes/Logs";
-import { Metrics } from "./routes/Metrics";
+import { Skeleton } from "./components/ui/skeleton";
 import { Overview } from "./routes/Overview";
 import { Placeholder } from "./routes/Placeholder";
 import { PluginDetails, Plugins } from "./routes/Plugins";
@@ -16,17 +16,22 @@ import { Topology } from "./routes/Topology";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { ToolDetails, Tools } from "./routes/Tools";
 
+const Metrics = lazy(() =>
+  import("./routes/Metrics").then((module) => ({ default: module.Metrics })),
+);
+
 function ConsoleApp() {
   const contexts = useContexts();
-  const [selectedContext, setSelectedContext] = useState("local");
+  const [selectedContext, setSelectedContext] = useState("");
 
   useEffect(() => {
-    const current = contexts.data?.find((context) => context.current);
-    if (
-      current &&
-      !contexts.data?.some((context) => context.name === selectedContext)
-    ) {
-      setSelectedContext(current.name);
+    if (!contexts.data?.length) return;
+    const selectedStillExists = contexts.data.some(
+      (context) => context.name === selectedContext,
+    );
+    if (!selectedContext || !selectedStillExists) {
+      const current = contexts.data.find((context) => context.current);
+      setSelectedContext(current?.name ?? contexts.data[0].name);
     }
   }, [contexts.data, selectedContext]);
 
@@ -37,83 +42,86 @@ function ConsoleApp() {
       selectedContext={selectedContext}
     >
       <div className="mx-auto max-w-7xl space-y-6">
-        <Switch>
-          <Route path="/">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                Deployment overview
-              </p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight">
-                ERPBridge Console
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Monitor configured deployments without changing their persistent
-                CLI context.
-              </p>
-              <div className="mt-3">
-                <StatusBadge label="Read-only monitoring" tone="info" />
-              </div>
-              <Card className="mt-5 border-primary/30 bg-primary/5" role="note">
-                <CardContent className="py-4">
-                  <p className="text-sm font-medium">ERPBridge Console</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    ERPBridge Console is the read-only solution for monitoring
-                    the ERPBridge server. Use{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      bridgectl
-                    </code>{" "}
-                    to configure and modify ERPBridge.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            <Overview contextName={selectedContext} />
-          </Route>
-          <Route path="/deployments">
-            <Deployments contexts={contexts.data} error={contexts.error} />
-          </Route>
-          <Route path="/logs">
-            <Logs contextName={selectedContext} />
-          </Route>
-          <Route path="/metrics">
-            <Metrics contextName={selectedContext} />
-          </Route>
-          <Route path="/tools/:toolName">
-            {(params) => (
-              <ToolDetails
-                contextName={selectedContext}
-                toolName={params.toolName ?? ""}
-              />
-            )}
-          </Route>
-          <Route path="/tools">
-            <Tools contextName={selectedContext} />
-          </Route>
-          <Route path="/topology">
-            <Topology contextName={selectedContext} />
-          </Route>
-          <Route path="/plugins/:pluginName/:pluginVersion">
-            {(params) => (
-              <PluginDetails
-                contextName={selectedContext}
-                pluginName={params.pluginName ?? ""}
-                pluginVersion={params.pluginVersion ?? ""}
-              />
-            )}
-          </Route>
-          <Route path="/plugins">
-            <Plugins contextName={selectedContext} />
-          </Route>
-          <Route path="/settings">
-            <Settings />
-          </Route>
-          <Route>
-            <Placeholder
-              title="Page not found"
-              message="The selected console page does not exist."
+        {!selectedContext ? (
+          <div className="space-y-6">
+            <PageHeader
+              description="Select a configured bridgectl context to begin read-only monitoring."
+              eyebrow="Monitor"
+              title="Overview"
             />
-          </Route>
-        </Switch>
+            <StateBanner
+              message={
+                contexts.loading
+                  ? "Loading configured contexts. No upstream data is requested until a context is selected."
+                  : (contexts.error ??
+                    "Add a bridgectl context to begin read-only monitoring.")
+              }
+              title={
+                contexts.loading
+                  ? "Loading contexts"
+                  : contexts.error
+                    ? "Contexts are unavailable"
+                    : "No contexts configured"
+              }
+              tone={contexts.error ? "danger" : "info"}
+            />
+          </div>
+        ) : (
+          <Switch>
+            <Route path="/">
+              <Overview contextName={selectedContext} />
+            </Route>
+            <Route path="/contexts">
+              <Deployments contexts={contexts.data} error={contexts.error} />
+            </Route>
+            <Route path="/deployments">
+              <Deployments contexts={contexts.data} error={contexts.error} />
+            </Route>
+            <Route path="/logs">
+              <Logs contextName={selectedContext} />
+            </Route>
+            <Route path="/metrics">
+              <Suspense fallback={<Skeleton className="h-48 w-full" />}>
+                <Metrics contextName={selectedContext} />
+              </Suspense>
+            </Route>
+            <Route path="/tools/:toolName">
+              {(params) => (
+                <ToolDetails
+                  contextName={selectedContext}
+                  toolName={params.toolName ?? ""}
+                />
+              )}
+            </Route>
+            <Route path="/tools">
+              <Tools contextName={selectedContext} />
+            </Route>
+            <Route path="/topology">
+              <Topology contextName={selectedContext} />
+            </Route>
+            <Route path="/plugins/:pluginName/:pluginVersion">
+              {(params) => (
+                <PluginDetails
+                  contextName={selectedContext}
+                  pluginName={params.pluginName ?? ""}
+                  pluginVersion={params.pluginVersion ?? ""}
+                />
+              )}
+            </Route>
+            <Route path="/plugins">
+              <Plugins contextName={selectedContext} />
+            </Route>
+            <Route path="/settings">
+              <Settings />
+            </Route>
+            <Route>
+              <Placeholder
+                title="Page not found"
+                message="The selected console page does not exist."
+              />
+            </Route>
+          </Switch>
+        )}
       </div>
     </AppShell>
   );

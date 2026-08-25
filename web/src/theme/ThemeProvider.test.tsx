@@ -20,7 +20,10 @@ test("persists an explicit theme choice", async () => {
     </ThemeProvider>,
   );
 
-  await user.click(screen.getByRole("button", { name: /theme: light/i }));
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: "Color theme" }),
+    "dark",
+  );
 
   expect(localStorage.getItem("erpbridge-console-theme")).toBe("dark");
   expect(document.documentElement.dataset.theme).toBe("dark");
@@ -33,9 +36,9 @@ test("defaults to light mode", () => {
     </ThemeProvider>,
   );
 
-  expect(
-    screen.getByRole("button", { name: "Theme: light" }),
-  ).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Color theme" })).toHaveValue(
+    "light",
+  );
 });
 
 test("exposes text labels for status", () => {
@@ -45,6 +48,6 @@ test("exposes text labels for status", () => {
     </ThemeProvider>,
   );
 
-  expect(screen.getByText("Read-only monitoring")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
   expect(screen.getByRole("navigation")).toBeInTheDocument();
 });
