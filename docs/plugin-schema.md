@@ -88,3 +88,12 @@ disable redirects, and do not retry.
 Bindings run only after a successful tool result and only on a cache miss. The
 cache stores the final transformed MCP result. Applying, updating, or deleting
 a plugin or binding flushes the affected tool cache entries.
+
+## CLI management
+
+Use `bridgectl plugin apply|get|delete|validate` for plugin resources. Plugin
+identities use `name@version`. Use `bridgectl plugin binding
+apply|get|delete|validate` for named bindings. Apply accepts JSON, YAML
+sequences, multi-document YAML, and directories of resource files. Validate
+accepts a JSON or YAML resource file. Use `--hard --yes` to skip the
+hard-delete confirmation.

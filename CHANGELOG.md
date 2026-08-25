@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Persist versioned plugin and binding resources with soft-delete and active-reference protection.
 - Add admin-only plugin and binding APIs with exact-reference admission, reconciliation, and cache invalidation.
 - Process successful tool responses through ordered external bindings while preserving MCP and direct-invoke envelopes.
+- Add `bridgectl plugin` and `bridgectl plugin binding` resource-management commands with typed JSON/YAML handling.
 - Add agent-integration guidance for Codex CLI, OpenCode, OpenClaw, and Hermes
   Agent, including scoped HTTP bearer authentication and stdio credential
   boundaries.

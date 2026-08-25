@@ -32,9 +32,13 @@ var (
 )
 
 const (
-	cliListUse   = "list"
-	cliNameField = "name"
-	cliMCPScope  = "mcp"
+	cliListUse           = "list"
+	cliNameField         = "name"
+	cliMCPScope          = "mcp"
+	cliApplyFileUse      = "apply -f [file]"
+	cliValidateFileUse   = "validate -f [file]"
+	cliContentTypeHeader = "Content-Type"
+	cliJSONContentType   = "application/json"
 )
 
 // RootCmd represents the base command when called without any subcommands.
