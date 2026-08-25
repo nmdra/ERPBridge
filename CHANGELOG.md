@@ -7,25 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.0-alpha.3] - 2026-08-25
+
 ### Added
 
 - Add agent-integration guidance for Codex CLI, OpenCode, OpenClaw, and Hermes
   Agent, including scoped HTTP bearer authentication and stdio credential
-  boundaries.
+  boundaries
 
 ### Changed
 
 - Pin the standalone MockERP image and versioned OpenAPI contract to `0.2.1`,
-  which includes the SQLite-backed SCP scenario and integration fixtures.
+  which includes the SQLite-backed SCP scenario and integration fixtures
 - Document the MockERP integration contract, credentials boundary, reset flow,
-  and supported fixture groups.
+  and supported fixture groups
 - Pass MockERP credential-source settings through Compose and persist its named
-  data volume configuration.
+  data volume configuration
 
 ### Fixed
 
 - Keep ERPBridge stdio stdout reserved for MCP JSON-RPC by routing the startup
-  banner to stderr.
+  banner to stderr
 
 ## [v0.3.0-alpha.2] - 2026-08-23
 
@@ -253,6 +255,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - chore: prepare for versioning and release
 - chore: rename middleware to erpbridge-server
 
-[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.2...HEAD
+[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.3...HEAD
+[v0.3.0-alpha.3]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.2...v0.3.0-alpha.3
 [v0.3.0-alpha.2]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.1...v0.3.0-alpha.2
 [v0.3.0-alpha.1]: https://github.com/nmdra/ERPBridge/compare/v0.2.0-alpha.5...v0.3.0-alpha.1
