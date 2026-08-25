@@ -15,6 +15,15 @@ import (
 	"github.com/nmdra/ERPBridge/internal/mcp"
 )
 
+const (
+	jsonRPCVersion        = "2.0"
+	jsonRPCField          = "jsonrpc"
+	jsonMethodField       = "method"
+	jsonParamsField       = "params"
+	jsonNameField         = "name"
+	integrationCredential = "ERP_PRIMARY_KEY" // #nosec G101 -- This is a non-secret environment-variable reference.
+)
+
 func TestPluginSystemBlackBox(t *testing.T) {
 	baseURL := strings.TrimRight(os.Getenv("ERPBRIDGE_TEST_BASE_URL"), "/")
 	if baseURL == "" {
@@ -54,31 +63,31 @@ func TestPluginSystemBlackBox(t *testing.T) {
 	assertFixture(t, directOrdinary, false)
 
 	sessionID, initResponse := mcpRequest(t, client, baseURL, "", map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "initialize",
-		"params": map[string]any{
+		jsonRPCField:    jsonRPCVersion,
+		"id":            1,
+		jsonMethodField: "initialize",
+		jsonParamsField: map[string]any{
 			"protocolVersion": "2025-03-26",
 			"capabilities":    map[string]any{},
-			"clientInfo":      map[string]string{"name": "plugin-integration", "version": "1.0"},
+			"clientInfo":      map[string]string{jsonNameField: "plugin-integration", "version": "1.0"},
 		},
 	})
 	if initResponse["result"] == nil {
 		t.Fatalf("initialize response has no result: %#v", initResponse)
 	}
 	_, listResponse := mcpRequest(t, client, baseURL, sessionID, map[string]any{
-		"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": map[string]any{},
+		jsonRPCField: jsonRPCVersion, "id": 2, jsonMethodField: "tools/list", jsonParamsField: map[string]any{},
 	})
 	assertToolListed(t, listResponse, boundTool.Metadata.Name)
 	assertToolListed(t, listResponse, ordinaryTool.Metadata.Name)
 
 	_, boundCall := mcpRequest(t, client, baseURL, sessionID, map[string]any{
-		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-		"params": map[string]any{"name": boundTool.Metadata.Name, "arguments": map[string]any{}},
+		jsonRPCField: jsonRPCVersion, "id": 3, jsonMethodField: "tools/call",
+		jsonParamsField: map[string]any{jsonNameField: boundTool.Metadata.Name, "arguments": map[string]any{}},
 	})
 	_, ordinaryCall := mcpRequest(t, client, baseURL, sessionID, map[string]any{
-		"jsonrpc": "2.0", "id": 4, "method": "tools/call",
-		"params": map[string]any{"name": ordinaryTool.Metadata.Name, "arguments": map[string]any{}},
+		jsonRPCField: jsonRPCVersion, "id": 4, jsonMethodField: "tools/call",
+		jsonParamsField: map[string]any{jsonNameField: ordinaryTool.Metadata.Name, "arguments": map[string]any{}},
 	})
 	assertFixture(t, mcpTextResult(t, boundCall), true)
 	assertFixture(t, mcpTextResult(t, ordinaryCall), false)
@@ -93,7 +102,7 @@ func integrationTool(name string) mcp.Tool {
 			Description: mcp.Description{Short: "Read the deterministic plugin fixture"},
 			InputSchema: mcp.InputSchema{Type: "object", Properties: map[string]mcp.Property{}},
 			Execution:   mcp.Execution{Type: "http", Method: http.MethodGet, Endpoint: "/api/resource/Plugin Fixture", ResponsePath: "data"},
-			Security:    mcp.Security{AuthType: "api-key", CredentialRef: "ERP_PRIMARY_KEY"},
+			Security:    mcp.Security{AuthType: "api-key", CredentialRef: integrationCredential},
 		},
 	}
 }
@@ -104,12 +113,12 @@ func applyJSON(t *testing.T, client *http.Client, endpoint string, resource any)
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	request, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body)) //nolint:gosec // The test endpoint is controlled by the integration harness.
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	response, err := client.Do(request)
+	response, err := client.Do(request) //nolint:gosec // The test endpoint is controlled by the integration harness.
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,12 +132,12 @@ func applyJSON(t *testing.T, client *http.Client, endpoint string, resource any)
 func invokeDirect(t *testing.T, client *http.Client, baseURL, name string) map[string]any {
 	t.Helper()
 	body := fmt.Sprintf(`{"name":%q,"arguments":{}}`, name)
-	request, err := http.NewRequest(http.MethodPost, baseURL+"/api/tools/invoke", strings.NewReader(body))
+	request, err := http.NewRequest(http.MethodPost, baseURL+"/api/tools/invoke", strings.NewReader(body)) //nolint:gosec // The test endpoint is controlled by the integration harness.
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	response, err := client.Do(request)
+	response, err := client.Do(request) //nolint:gosec // The test endpoint is controlled by the integration harness.
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +163,7 @@ func mcpRequest(t *testing.T, client *http.Client, baseURL, sessionID string, pa
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err := http.NewRequest(http.MethodPost, baseURL+"/mcp/", bytes.NewReader(body))
+	request, err := http.NewRequest(http.MethodPost, baseURL+"/mcp/", bytes.NewReader(body)) //nolint:gosec // The test endpoint is controlled by the integration harness.
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +172,7 @@ func mcpRequest(t *testing.T, client *http.Client, baseURL, sessionID string, pa
 	if sessionID != "" {
 		request.Header.Set("Mcp-Session-Id", sessionID)
 	}
-	response, err := client.Do(request)
+	response, err := client.Do(request) //nolint:gosec // The test endpoint is controlled by the integration harness.
 	if err != nil {
 		t.Fatal(err)
 	}
