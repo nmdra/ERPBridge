@@ -23,6 +23,8 @@ The server reads these variables directly from the environment. It does not load
 | `LOG_TO_STDERR` | (unset) | `true` writes logs to stderr. The server sets this automatically in stdio mode. |
 | `ERP_PRIMARY_KEY` | (unset) | Example environment credential for generated ERP tools. The local API registry stores only a `credentialRef`, never this value. |
 | `<ERP_CREDENTIAL_REF>` | (unset) | Any environment variable named by an API or tool `credentialRef`; resolved at request time and never persisted by `bridgectl`. |
+| `PLUGIN_<NAME>` | (unset) | Environment credential named by a plugin `credentialRef`; use only for bearer or API-key values. The resolved value is never persisted. |
+| `PLUGIN_ENDPOINT_ALLOWLIST` | (unset) | Exact normalized `host:port` values allowed for credentialed plugin endpoints. Empty or nonmatching values reject credentialed plugin admission. |
 | `INSECURE_AUTH_ALLOWED_HOSTS` | (unset) | Development-only comma-separated exact `host:port` allowlist for credentialed `http://` ERP or plugin calls. Credentialed calls otherwise require HTTPS. |
 | `API_AUTH_TOKEN` | (unset) | Enables HTTP bearer authentication when non-empty. This is the admin credential and is never returned by the server. |
 | `API_AUTH_ADMIN_ROLES` | (unset) | Comma-separated roles assigned to the admin identity. Roles must match `[a-z][a-z0-9_-]{0,63}` and the list may contain at most 32 unique roles. |
