@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.0-alpha.1] - 2026-08-26
+
+### Added
+
+- Add the generic external-plugin contract with exact-version bindings and
+  persisted plugin and binding resources
+- Add admin plugin and binding control-plane APIs with reconciliation, cache
+  invalidation, and typed `bridgectl plugin` management commands
+- Process successful tool responses through ordered external plugin bindings
+  while preserving MCP and direct-invoke envelopes
+- Add an isolated external-plugin integration fixture with authenticated
+  control-plane and runtime checks
+
+### Fixed
+
+- Create the `.bridgectl` configuration directory before saving a context
+
+### Security
+
+- Require secure transport for credentialed ERP and plugin calls except on
+  configured exact development hosts
+- Remove plaintext ERP registry credentials and redact ERP and plugin request
+  data from logs and process arguments
+
 ## [v0.3.0-alpha.4] - 2026-08-26
 
 ### Added
@@ -322,7 +346,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - chore: prepare for versioning and release
 - chore: rename middleware to erpbridge-server
 
-[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.4...HEAD
+[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.4.0-alpha.1...HEAD
+[v0.4.0-alpha.1]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.4...v0.4.0-alpha.1
 [v0.3.0-alpha.4]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.3...v0.3.0-alpha.4
 [v0.3.0-alpha.3]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.2...v0.3.0-alpha.3
 [v0.3.0-alpha.2]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.1...v0.3.0-alpha.2
