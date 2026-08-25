@@ -89,6 +89,9 @@ func saveConfig() error {
 	if err != nil {
 		return err
 	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return fmt.Errorf("create config directory: %w", err)
+	}
 	return os.WriteFile(path, data, 0600)
 }
 

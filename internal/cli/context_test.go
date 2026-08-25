@@ -41,6 +41,7 @@ func TestContextListCmd(t *testing.T) {
 }
 
 func TestContextSetCmd(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	setupTest()
 
 	err := contextSetCmd.RunE(contextSetCmd, []string{testContextName})
