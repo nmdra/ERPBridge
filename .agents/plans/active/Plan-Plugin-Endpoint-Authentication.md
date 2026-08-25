@@ -213,7 +213,7 @@ listed in-repository docs and `CHANGELOG.md` in that same commit.
   **Verify:** `go test ./internal/mcp -run 'TestPluginClient_Process'`;
   **Commit:** `feat: authenticate external plugin calls`.)
 
-- [ ] **Task 4: Enforce outbound transport policy.** Add a dependency-free
+- [x] **Task 4: Enforce outbound transport policy.** Add a dependency-free
   `internal/security` helper that validates an endpoint URL plus whether a
   credential is present; it must not import `mcp` or `connector`. Apply it to
   plugin and ERP requests before I/O. Credentialed HTTP is rejected unless the

@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nmdra/ERPBridge/internal/security"
 	"github.com/stretchr/testify/require"
 )
 
@@ -314,6 +316,7 @@ func TestPluginClient_Process_SendsAuthenticationHeaders(t *testing.T) {
 				_, _ = w.Write([]byte(`{"result":true}`))
 			}))
 			defer server.Close()
+			allowInsecurePluginAuthHost(t, server.URL)
 
 			plugin := validPluginForTest(server.URL)
 			plugin.Spec.Auth = test.auth
@@ -321,6 +324,77 @@ func TestPluginClient_Process_SendsAuthenticationHeaders(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestPluginClient_Process_RejectsCredentialedHTTPBeforeOutboundCall(t *testing.T) {
+	const credential = pluginClientTestValue
+	t.Setenv(pluginClientTestCredentialRef, credential)
+
+	calls := 0
+	client := NewPluginClient(&http.Client{Transport: pluginRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("outbound call must not occur")
+	})})
+	plugin := validPluginForTest("http://plugins.example.test")
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginClientTestCredentialRef}
+
+	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.EqualError(t, err, "credentialed plugin endpoint is not allowed")
+	require.Zero(t, calls)
+}
+
+func TestPluginClient_Process_RejectsNonmatchingCredentialedHTTPHost(t *testing.T) {
+	const credential = pluginClientTestValue
+	t.Setenv(pluginClientTestCredentialRef, credential)
+	t.Setenv(security.InsecureAuthAllowedHostsEnv, "other.example.test:80")
+
+	calls := 0
+	client := NewPluginClient(&http.Client{Transport: pluginRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("outbound call must not occur")
+	})})
+	plugin := validPluginForTest("http://plugins.example.test")
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginClientTestCredentialRef}
+
+	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.EqualError(t, err, "credentialed plugin endpoint is not allowed")
+	require.Zero(t, calls)
+}
+
+func TestPluginClient_Process_AllowsExactCredentialedHTTPHostWithWarning(t *testing.T) {
+	const credential = pluginClientTestValue
+	t.Setenv(pluginClientTestCredentialRef, credential)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "Bearer "+credential, r.Header.Get(pluginAuthorizationHeader))
+		_, _ = w.Write([]byte(`{"result":true}`))
+	}))
+	defer server.Close()
+	allowInsecurePluginAuthHost(t, server.URL)
+
+	var logs bytes.Buffer
+	plugin := validPluginForTest(server.URL)
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginClientTestCredentialRef}
+	_, err := NewPluginClientWithLogger(slog.New(slog.NewTextHandler(&logs, nil))).Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.NoError(t, err)
+	require.Contains(t, logs.String(), "credentialed outbound HTTP is allowed for development")
+	require.NotContains(t, logs.String(), credential)
+}
+
+func TestPluginClient_Process_AllowsCredentialedHTTPS(t *testing.T) {
+	const credential = pluginClientTestValue
+	t.Setenv(pluginClientTestCredentialRef, credential)
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "Bearer "+credential, r.Header.Get(pluginAuthorizationHeader))
+		_, _ = w.Write([]byte(`{"result":true}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: pluginClientTestCredentialRef}
+	_, err := NewPluginClient(server.Client()).Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.NoError(t, err)
 }
 
 func TestPluginClient_Process_MissingCredentialMakesZeroOutboundCalls(t *testing.T) {
@@ -371,6 +445,13 @@ func TestPluginClient_Process_RejectsInvalidAuthenticationBeforeOutboundCall(t *
 	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
 	require.Error(t, err)
 	require.Zero(t, calls)
+}
+
+func allowInsecurePluginAuthHost(t *testing.T, rawURL string) {
+	t.Helper()
+	endpoint, err := url.Parse(rawURL)
+	require.NoError(t, err)
+	t.Setenv(security.InsecureAuthAllowedHostsEnv, endpoint.Host)
 }
 
 func TestPluginClient_Process_UsesOnlyResultEnvelope(t *testing.T) {

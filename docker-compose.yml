@@ -46,6 +46,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - DATABASE_PATH=/app/data/erpbridge.db
       - ERP_PRIMARY_KEY=${ERP_PRIMARY_KEY:-}
+      # MockERP is HTTP only and is an explicit development-only exception.
+      - INSECURE_AUTH_ALLOWED_HOSTS=mock-erp:8081
       - RATE_LIMIT_RPS=10
       - RATE_LIMIT_BURST=20
     volumes:

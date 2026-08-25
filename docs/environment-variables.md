@@ -22,9 +22,15 @@ The server reads these variables directly from the environment. It does not load
 | `APP_ENV` | (unset) | `production` uses JSON log output. Any other value uses text output. |
 | `LOG_TO_STDERR` | (unset) | `true` writes logs to stderr. The server sets this automatically in stdio mode. |
 | `ERP_PRIMARY_KEY` | (unset) | Credential referenced by `credentialRef` in tool schemas. Resolved at tool-call time. |
+| `INSECURE_AUTH_ALLOWED_HOSTS` | (unset) | Development-only comma-separated exact `host:port` allowlist for credentialed `http://` ERP or plugin calls. Credentialed calls otherwise require HTTPS. |
 | `API_AUTH_TOKEN` | (unset) | Enables HTTP bearer authentication when non-empty. This is the admin credential and is never returned by the server. |
 | `API_AUTH_ADMIN_ROLES` | (unset) | Comma-separated roles assigned to the admin identity. Roles must match `[a-z][a-z0-9_-]{0,63}` and the list may contain at most 32 unique roles. |
 | `CORS_ALLOWED_ORIGINS` | wildcard in open mode; disabled in auth mode when unset | Comma-separated browser origins allowed for the MCP endpoint. CORS does not apply to management or metrics routes. |
+
+Credentialed outbound ERP and plugin calls require `https://`. For private local
+fixtures only, set `INSECURE_AUTH_ALLOWED_HOSTS` to the exact normalized
+`host:port`, for example `mock-erp:8081`. Do not use this exception in
+production. ERPBridge logs a warning for each allowed credentialed HTTP call.
 
 ## CLI Variables (`bridgectl`)
 

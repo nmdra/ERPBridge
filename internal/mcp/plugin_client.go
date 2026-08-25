@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/nmdra/ERPBridge/internal/security"
 )
 
 // PluginProcessor is the external-plugin invocation seam used by the server.
@@ -69,6 +71,15 @@ func (c *PluginClient) Process(ctx context.Context, plugin *Plugin, invocation P
 	authHeader, authValue, err := pluginAuthenticationHeader(plugin.Spec.Auth)
 	if err != nil {
 		return nil, err
+	}
+	endpointHostPort, insecureHTTPAllowed, err := security.ValidateOutboundTransport(endpoint, authValue != "")
+	if err != nil {
+		return nil, errors.New("credentialed plugin endpoint is not allowed")
+	}
+	if insecureHTTPAllowed {
+		c.log.Warn("credentialed outbound HTTP is allowed for development",
+			slog.String("endpoint", endpointHostPort),
+		)
 	}
 
 	if invocation.ProtocolVersion == "" {

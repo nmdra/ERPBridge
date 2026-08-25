@@ -11,6 +11,8 @@ services:
   erpbridge-server:
     environment:
       ERP_PRIMARY_KEY: ${ERP_PRIMARY_KEY:?the integration script must provide a test credential reference}
+      # Exact development-only exceptions for the isolated HTTP fixture.
+      INSECURE_AUTH_ALLOWED_HOSTS: mock-erp:8081,mock-plugin:8080
       API_AUTH_TOKEN: ""
     depends_on:
       mock-plugin:

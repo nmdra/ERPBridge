@@ -15,8 +15,11 @@ import (
 	"github.com/avast/retry-go/v4"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/metrics"
+	"github.com/nmdra/ERPBridge/internal/security"
 	"github.com/sony/gobreaker"
 )
+
+const authTypeBearer = "bearer"
 
 // AuthConfig defines the authentication credentials for an ERP request.
 type AuthConfig struct {
@@ -78,6 +81,18 @@ func endpointIdentity(target string) string {
 	return u.Host
 }
 
+func (c *Client) clientForRequest(credentialPresent bool) *http.Client {
+	if !credentialPresent {
+		return c.http
+	}
+
+	client := *c.http
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &client
+}
+
 func (c *Client) applyAuth(req *http.Request, ep EndpointConfig) {
 	if ep.Auth.Key == "" {
 		return
@@ -91,7 +106,7 @@ func (c *Client) applyAuth(req *http.Request, ep EndpointConfig) {
 	case "basic":
 		// Expects Key to be base64 encoded "user:pass"
 		req.Header.Set("Authorization", "Basic "+ep.Auth.Key)
-	case "bearer":
+	case authTypeBearer:
 		req.Header.Set("Authorization", "Bearer "+ep.Auth.Key)
 	}
 }
@@ -107,6 +122,21 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 	}
 
 	endpoint := endpointIdentity(target)
+	credentialPresent := ep.Auth.Key != ""
+	targetURL, parseErr := url.Parse(target)
+	if parseErr != nil {
+		return nil, fmt.Errorf("ERP endpoint is not allowed")
+	}
+	allowedHost, insecureHTTPAllowed, validateErr := security.ValidateOutboundTransport(targetURL, credentialPresent)
+	if validateErr != nil {
+		return nil, fmt.Errorf("ERP endpoint is not allowed")
+	}
+	if credentialPresent && insecureHTTPAllowed {
+		log.Warn("credentialed outbound HTTP is allowed for development",
+			slog.String("endpoint", allowedHost),
+		)
+	}
+	outboundClient := c.clientForRequest(credentialPresent)
 
 	var bodyBytes []byte
 	if body != nil {
@@ -135,7 +165,7 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 					slog.String("endpoint", endpoint),
 				)
 
-				resp, err := c.http.Do(req)
+				resp, err := outboundClient.Do(req)
 				if err != nil {
 					return err // Retry on network error
 				}
