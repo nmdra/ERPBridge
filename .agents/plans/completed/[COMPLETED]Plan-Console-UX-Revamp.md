@@ -1,5 +1,11 @@
 # Plan: ERPBridge Console Production UX Revamp
 
+> **Status: COMPLETED — VERIFIED 2026-08-26**
+>
+> The topology workspace now has shared filtering, node/edge selection,
+> relationship inspection, safe truncation reporting, responsive canvas behavior,
+> and scale regression coverage.
+
 ## Goal
 
 Make the read-only ERPBridge Console easier to investigate and safer to operate in
