@@ -8,8 +8,6 @@ constraints. Record the evidence and produce a finalized task order.
 
 Current candidates:
 
-- [`Plan-Generic-External-Plugins.md`](./Plan-Generic-External-Plugins.md) —
-  proposed generic external-plugin control-plane plan.
 - [`Plan-MCP-Upgrade.md`](./Plan-MCP-Upgrade.md) — deferred MCP specification
   evaluation and migration.
 

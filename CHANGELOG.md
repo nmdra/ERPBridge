@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add the versioned `raw_response` plugin invocation contract with bounded,
+  tagged JSON/base64 ERP response bodies while preserving legacy
+  `after_response` payloads
 - Add `bridgectl skill install` with embedded `bridgectl-ops` Agent Skill files,
   global, project-scoped, and explicit-directory destinations, and safe forced
   replacement.

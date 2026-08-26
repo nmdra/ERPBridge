@@ -8,6 +8,9 @@ starting implementation work.
 - [`Plan-Bridgectl-Ops-Plugin-Details.md`](./active/Plan-Bridgectl-Ops-Plugin-Details.md)
   — extend the `bridgectl-ops` skill with external plugin operations, secure
   lifecycle guidance, and trigger evaluations.
+- [`Plan-Raw-Response-Plugin-Phase.md`](./active/Plan-Raw-Response-Plugin-Phase.md)
+  — implement media-aware pre-normalization plugin processing and stable MCP
+  output contracts.
 
 ## Upcoming
 

@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"encoding/json"
+	"net/http"
 	"net/url"
 	"testing"
 
@@ -205,18 +207,20 @@ func TestPluginAuthRejectsReservedHeaders(t *testing.T) {
 
 func TestPluginBinding_Validate(t *testing.T) {
 	tests := map[string]struct {
-		mutate func(*PluginBinding)
+		mutate  func(*PluginBinding)
+		wantErr bool
 	}{
 		"accepts valid binding resource":     {},
-		"requires name":                      {mutate: func(binding *PluginBinding) { binding.Metadata.Name = "" }},
-		"requires plugin name":               {mutate: func(binding *PluginBinding) { binding.Spec.PluginRef.Name = "" }},
-		"requires plugin version":            {mutate: func(binding *PluginBinding) { binding.Spec.PluginRef.Version = "" }},
-		"requires tool name":                 {mutate: func(binding *PluginBinding) { binding.Spec.ToolRef.Name = "" }},
-		"requires tool version":              {mutate: func(binding *PluginBinding) { binding.Spec.ToolRef.Version = "" }},
-		"rejects unsupported phase":          {mutate: func(binding *PluginBinding) { binding.Spec.Phase = "before_request" }},
-		"rejects unsupported failure policy": {mutate: func(binding *PluginBinding) { binding.Spec.FailurePolicy = "retry" }},
-		"rejects negative priority":          {mutate: func(binding *PluginBinding) { binding.Spec.Priority = -1 }},
-		"rejects non-json config":            {mutate: func(binding *PluginBinding) { binding.Spec.Config = map[string]any{"bad": make(chan int)} }},
+		"requires name":                      {mutate: func(binding *PluginBinding) { binding.Metadata.Name = "" }, wantErr: true},
+		"requires plugin name":               {mutate: func(binding *PluginBinding) { binding.Spec.PluginRef.Name = "" }, wantErr: true},
+		"requires plugin version":            {mutate: func(binding *PluginBinding) { binding.Spec.PluginRef.Version = "" }, wantErr: true},
+		"requires tool name":                 {mutate: func(binding *PluginBinding) { binding.Spec.ToolRef.Name = "" }, wantErr: true},
+		"requires tool version":              {mutate: func(binding *PluginBinding) { binding.Spec.ToolRef.Version = "" }, wantErr: true},
+		"accepts raw response phase":         {mutate: func(binding *PluginBinding) { binding.Spec.Phase = PluginPhaseRawResponse }},
+		"rejects unsupported phase":          {mutate: func(binding *PluginBinding) { binding.Spec.Phase = "before_request" }, wantErr: true},
+		"rejects unsupported failure policy": {mutate: func(binding *PluginBinding) { binding.Spec.FailurePolicy = "retry" }, wantErr: true},
+		"rejects negative priority":          {mutate: func(binding *PluginBinding) { binding.Spec.Priority = -1 }, wantErr: true},
+		"rejects non-json config":            {mutate: func(binding *PluginBinding) { binding.Spec.Config = map[string]any{"bad": make(chan int)} }, wantErr: true},
 	}
 
 	for name, test := range tests {
@@ -226,11 +230,94 @@ func TestPluginBinding_Validate(t *testing.T) {
 				test.mutate(&binding)
 			}
 			err := binding.Validate()
-			if test.mutate == nil {
-				require.NoError(t, err)
+			if test.wantErr {
+				require.Error(t, err)
 				return
 			}
-			require.Error(t, err)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestPluginInvocation_MarshalPreservesLegacyResultNull(t *testing.T) {
+	invocation := validPluginInvocationForTest()
+	invocation.Result = nil
+
+	encoded, err := json.Marshal(invocation)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"protocolVersion":"v1","invocationId":"invocation-123","tool":{"name":"list-orders","version":"1.0.0"},"result":null,"config":{"mode":"safe"}}`, string(encoded))
+}
+
+func TestPluginInvocation_MarshalOmitsResultForRawResponse(t *testing.T) {
+	invocation := validPluginInvocationForTest()
+	invocation.Result = nil
+	invocation.RawResponse = &PluginRawResponse{
+		Status:      http.StatusOK,
+		ContentType: "image/png",
+		Body: PluginRawBody{
+			Encoding: PluginRawBodyEncodingBase64,
+			Value:    "aGVsbG8=",
+		},
+	}
+
+	encoded, err := json.Marshal(invocation)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &payload))
+	require.NotContains(t, payload, "result")
+	require.Contains(t, payload, "rawResponse")
+}
+
+func TestPluginInvocation_ValidateRawResponse(t *testing.T) {
+	valid := validPluginInvocationForTest()
+	valid.Result = nil
+	valid.RawResponse = &PluginRawResponse{
+		Status:      http.StatusOK,
+		ContentType: "application/json",
+		Body: PluginRawBody{
+			Encoding: PluginRawBodyEncodingJSON,
+			Value:    map[string]any{"ok": true},
+		},
+	}
+	require.NoError(t, valid.Validate())
+
+	tests := []struct {
+		name   string
+		mutate func(*PluginInvocation)
+	}{
+		{
+			name: "rejects result alongside raw response",
+			mutate: func(invocation *PluginInvocation) {
+				invocation.Result = map[string]any{"unexpected": true}
+				invocation.RawResponse = valid.RawResponse
+			},
+		},
+		{
+			name: "rejects invalid status",
+			mutate: func(invocation *PluginInvocation) {
+				invocation.RawResponse = &PluginRawResponse{Status: 99, ContentType: "application/json", Body: PluginRawBody{Encoding: PluginRawBodyEncodingJSON, Value: true}}
+			},
+		},
+		{
+			name: "rejects invalid encoding",
+			mutate: func(invocation *PluginInvocation) {
+				invocation.RawResponse = &PluginRawResponse{Status: http.StatusOK, ContentType: "application/json", Body: PluginRawBody{Encoding: "xml", Value: "body"}}
+			},
+		},
+		{
+			name: "rejects malformed base64",
+			mutate: func(invocation *PluginInvocation) {
+				invocation.RawResponse = &PluginRawResponse{Status: http.StatusOK, ContentType: "application/octet-stream", Body: PluginRawBody{Encoding: PluginRawBodyEncodingBase64, Value: "not base64"}}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			invocation := validPluginInvocationForTest()
+			invocation.Result = nil
+			test.mutate(&invocation)
+			require.Error(t, invocation.Validate())
 		})
 	}
 }

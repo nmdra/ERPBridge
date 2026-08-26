@@ -73,9 +73,10 @@ spec:
     mode: safe
 ```
 
-The only phase accepted by the control plane is `after_response`. The response
-pipeline uses active bindings in ascending priority order after a successful
-tool result has passed its output schema. The default failure policy is
+The control plane accepts `raw_response` and `after_response` phases. Raw
+bindings run before response normalization; after-response bindings run after a
+successful tool result has passed its output schema. Active bindings use
+ascending priority order within each phase. The default failure policy is
 `continue`; `fail` returns a generic tool error.
 Plugin resources are versioned declarative records. Bindings are named
 declarative records that reference exact plugin and tool versions. A soft delete
@@ -86,9 +87,9 @@ bindings remain retained until they are explicitly hard-deleted.
 ## Plugin HTTP contract
 
 The v1 plugin protocol defines a synchronous JSON `POST /v1/process` exchange.
-When the response pipeline processes an active binding, the request contains
-only the protocol version, an invocation ID, the exact tool identity, the
-normalized result, and binding configuration:
+When the response pipeline processes an active `after_response` binding, the
+request contains only the protocol version, an invocation ID, the exact tool
+identity, the normalized result, and binding configuration:
 
 ```json
 {
@@ -99,6 +100,29 @@ normalized result, and binding configuration:
   "config": {"mode": "safe"}
 }
 ```
+
+A `raw_response` binding instead receives the bounded ERP response before
+normalization. Its payload contains status, normalized content type, and a
+body tagged as either a decoded JSON value or base64 text:
+
+```json
+{
+  "protocolVersion": "v1",
+  "invocationId": "generated-id",
+  "tool": {"name": "read-invoice-text", "version": "1.0.0"},
+  "rawResponse": {
+    "status": 200,
+    "contentType": "image/png",
+    "body": {"encoding": "base64", "value": "..."}
+  },
+  "config": {"mode": "ocr"}
+}
+```
+
+Raw invocations omit `result`. Legacy after-response invocations retain an
+explicit `result: null` when their result is nil. A plugin response always
+contains a JSON object with a `result` member; that member replaces only the
+response body and cannot change HTTP status.
 
 The plugin must return a JSON object with a `result` member:
 
@@ -112,8 +136,10 @@ transport metadata and are not included in the JSON payload. Request and
 response JSON are limited to 1 MiB. Calls use the invocation context and
 resource timeout, disable redirects, and do not retry.
 
-Bindings run only after a successful tool result and only on a cache miss. The
-cache stores the final transformed MCP result. Applying, updating, or deleting
+Raw bindings can inspect terminal HTTP responses, but successful response
+normalization and after-response bindings apply only to 2xx responses. Raw and
+after-response bindings run only on a cache miss. The cache stores the final
+transformed MCP result. Applying, updating, or deleting
 a plugin or binding flushes the affected tool cache entries.
 
 ## CLI management

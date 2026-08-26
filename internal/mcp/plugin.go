@@ -1,8 +1,10 @@
 package mcp
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net"
 	"net/url"
 	"strings"
@@ -31,8 +33,15 @@ const (
 	// PluginProtocolVersion is the wire-protocol version sent to plugins.
 	PluginProtocolVersion = "v1"
 
+	// PluginPhaseRawResponse runs before response normalization and validation.
+	PluginPhaseRawResponse = "raw_response"
 	// PluginPhaseAfterResponse runs after successful tool response validation.
 	PluginPhaseAfterResponse = "after_response"
+
+	// PluginRawBodyEncodingJSON identifies a decoded JSON response body.
+	PluginRawBodyEncodingJSON = "json"
+	// PluginRawBodyEncodingBase64 identifies a base64-encoded response body.
+	PluginRawBodyEncodingBase64 = "base64"
 
 	// PluginFailurePolicyContinue preserves the original result on plugin failure.
 	PluginFailurePolicyContinue = "continue"
@@ -128,15 +137,98 @@ type ToolIdentity struct {
 	Version string `json:"version"`
 }
 
+// PluginRawBody is the tagged representation of an ERP response body.
+type PluginRawBody struct {
+	Encoding string `json:"encoding"`
+	Value    any    `json:"value"`
+}
+
+// PluginRawResponse contains the bounded ERP response made available to a raw
+// response plugin. It deliberately excludes ERP headers, URLs, and credentials.
+type PluginRawResponse struct {
+	Status      int           `json:"status"`
+	ContentType string        `json:"contentType"`
+	Body        PluginRawBody `json:"body"`
+}
+
 // PluginInvocation is the only request body sent to an external plugin.
 // It deliberately has no original arguments, inbound headers, credentials, or
 // caller identity fields.
 type PluginInvocation struct {
-	ProtocolVersion string         `json:"protocolVersion"`
-	InvocationID    string         `json:"invocationId"`
-	Tool            ToolIdentity   `json:"tool"`
-	Result          any            `json:"result"`
-	Config          map[string]any `json:"config,omitempty"`
+	ProtocolVersion string             `json:"protocolVersion"`
+	InvocationID    string             `json:"invocationId"`
+	Tool            ToolIdentity       `json:"tool"`
+	Result          any                `json:"result"`
+	RawResponse     *PluginRawResponse `json:"rawResponse,omitempty"`
+	Config          map[string]any     `json:"config,omitempty"`
+}
+
+// MarshalJSON keeps the legacy explicit null result while omitting result from
+// raw-response invocations, where the raw response is the input payload.
+func (i PluginInvocation) MarshalJSON() ([]byte, error) {
+	if i.RawResponse != nil {
+		type rawInvocation struct {
+			ProtocolVersion string             `json:"protocolVersion"`
+			InvocationID    string             `json:"invocationId"`
+			Tool            ToolIdentity       `json:"tool"`
+			RawResponse     *PluginRawResponse `json:"rawResponse"`
+			Config          map[string]any     `json:"config,omitempty"`
+		}
+		return json.Marshal(rawInvocation{
+			ProtocolVersion: i.ProtocolVersion,
+			InvocationID:    i.InvocationID,
+			Tool:            i.Tool,
+			RawResponse:     i.RawResponse,
+			Config:          i.Config,
+		})
+	}
+
+	type legacyInvocation struct {
+		ProtocolVersion string         `json:"protocolVersion"`
+		InvocationID    string         `json:"invocationId"`
+		Tool            ToolIdentity   `json:"tool"`
+		Result          any            `json:"result"`
+		Config          map[string]any `json:"config,omitempty"`
+	}
+	return json.Marshal(legacyInvocation{
+		ProtocolVersion: i.ProtocolVersion,
+		InvocationID:    i.InvocationID,
+		Tool:            i.Tool,
+		Result:          i.Result,
+		Config:          i.Config,
+	})
+}
+
+// Validate checks the raw response representation when present.
+func (r PluginRawResponse) Validate() error {
+	if r.Status < 100 || r.Status > 599 {
+		return fmt.Errorf("rawResponse.status must be a valid HTTP status")
+	}
+	contentType := strings.TrimSpace(r.ContentType)
+	if contentType == "" {
+		return fmt.Errorf("rawResponse.contentType is required")
+	}
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != contentType {
+		return fmt.Errorf("rawResponse.contentType must be a normalized media type")
+	}
+	switch r.Body.Encoding {
+	case PluginRawBodyEncodingJSON:
+		if _, err := json.Marshal(r.Body.Value); err != nil {
+			return fmt.Errorf("rawResponse.body.value must be valid JSON: %w", err)
+		}
+	case PluginRawBodyEncodingBase64:
+		value, ok := r.Body.Value.(string)
+		if !ok {
+			return fmt.Errorf("rawResponse.body.value must be base64 text")
+		}
+		if _, err := base64.StdEncoding.DecodeString(value); err != nil {
+			return fmt.Errorf("rawResponse.body.value must be valid base64")
+		}
+	default:
+		return fmt.Errorf("rawResponse.body.encoding must be %q or %q", PluginRawBodyEncodingJSON, PluginRawBodyEncodingBase64)
+	}
+	return nil
 }
 
 // PluginResponse is the generic response envelope accepted from a plugin.
@@ -154,6 +246,14 @@ func (i PluginInvocation) Validate() error {
 	}
 	if _, err := semver.NewVersion(i.Tool.Version); err != nil {
 		return fmt.Errorf("tool.version must be a valid semver version: %w", err)
+	}
+	if i.RawResponse != nil {
+		if i.Result != nil {
+			return fmt.Errorf("result must be omitted when rawResponse is present")
+		}
+		if err := i.RawResponse.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -299,8 +399,8 @@ func (b *PluginBinding) Validate() error {
 	if _, err := semver.NewVersion(b.Spec.ToolRef.Version); err != nil {
 		return fmt.Errorf("spec.toolRef.version must be a valid semver version: %w", err)
 	}
-	if b.Spec.Phase != PluginPhaseAfterResponse {
-		return fmt.Errorf("spec.phase must be %q", PluginPhaseAfterResponse)
+	if b.Spec.Phase != PluginPhaseRawResponse && b.Spec.Phase != PluginPhaseAfterResponse {
+		return fmt.Errorf("spec.phase must be %q or %q", PluginPhaseRawResponse, PluginPhaseAfterResponse)
 	}
 	if b.Spec.Priority < 0 {
 		return fmt.Errorf("spec.priority must not be negative")
