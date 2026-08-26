@@ -1,6 +1,6 @@
 import type { TopologyEdge, TopologyNode } from "../hooks/useTopology";
 
-export const compactTopologyNodeThreshold = 20;
+export const compactTopologyNodeThreshold = 24;
 export const compactTopologyEdgeThreshold = 30;
 export const compactTopologyComponentLimit = 24;
 
@@ -64,8 +64,9 @@ function relatedComponentNode(
 ) {
   return Boolean(
     node &&
-    node.id !== endpointID &&
-    (componentNodeKinds.has(node.kind) || node.kind === "unresolved-endpoint"),
+      node.id !== endpointID &&
+      (componentNodeKinds.has(node.kind) ||
+        node.kind === "unresolved-endpoint"),
   );
 }
 

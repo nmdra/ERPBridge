@@ -191,7 +191,7 @@ label, not a full upstream URL.
 The topology includes MCP transport, MCP tool, ERP API, plugin binding,
 external plugin, and unresolved endpoint nodes. Plugin relationships appear only
 when both plugin list routes are available. When a filtered graph has at least
-20 nodes or 30 edges, the canvas starts with a compact endpoint-component
+24 nodes or 30 edges, the canvas starts with a compact endpoint-component
 overview. Each component shows one safe ERP
 endpoint identity, its MCP tool count, and a match-state summary. Select a
 component to show its related MCP tools, endpoint, bindings, and plugins; use
