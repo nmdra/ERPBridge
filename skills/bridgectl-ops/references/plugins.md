@@ -14,8 +14,9 @@ Before a plugin change:
 
 1. Record `bridgectl version`, `bridgectl context list`, and the selected
    `--context`.
-2. Confirm that the caller has the required authenticated admin access when the
-   plugin has `spec.auth`.
+2. Confirm that the caller has the required authenticated admin access. A
+   `raw_response` binding always needs an authenticated admin control-plane
+   request, even when the plugin has no `spec.auth`.
 3. Confirm the separately operated plugin endpoint, exact plugin version, exact
    target tool version, timeout, failure policy, and expected cache impact.
 4. Keep credentials in environment variables. A manifest contains a
@@ -58,7 +59,13 @@ A binding connects one exact plugin version to one exact tool version:
 - `metadata.name` is the binding identity.
 - `spec.pluginRef.name` and `.version` must identify an active plugin release.
 - `spec.toolRef.name` and `.version` must identify an active tool release.
-- `spec.phase` is currently `after_response` only.
+- `spec.phase` is `raw_response` or `after_response`. Raw processing runs
+  before response normalization. After-response processing runs after a
+  successful normalized result passes its output schema.
+- A `raw_response` binding requires an active HTTP-backed tool with an explicit
+  object-shaped final `outputSchema`. Its plugin endpoint must be present in
+  `PLUGIN_ENDPOINT_ALLOWLIST`, even without plugin authentication. Missing
+  prerequisites keep the binding inactive during reconciliation.
 - `spec.priority` is non-negative. Active bindings run in ascending priority;
   the binding name breaks equal-priority ties.
 - `spec.failurePolicy` is `continue` or `fail`; the default is `continue`.
@@ -107,7 +114,8 @@ Credentialed plugin admission requires all of the following:
 - `API_AUTH_TOKEN` is configured on the ERPBridge server.
 - The control-plane request is authenticated as an admin.
 - The normalized plugin `host:port` is an exact member of the comma-separated
-  `PLUGIN_ENDPOINT_ALLOWLIST`.
+  `PLUGIN_ENDPOINT_ALLOWLIST`. This allowlist is also mandatory for every
+  `raw_response` binding when plugin authentication is absent.
 
 At invocation, a configured credential is resolved from its `PLUGIN_*` reference
 and sent as exactly one authentication header. A missing or empty reference
@@ -122,10 +130,29 @@ before sharing evidence.
 
 ## Runtime contract
 
-The v1 plugin exchange is a synchronous JSON `POST /v1/process`:
+The v1 plugin exchange is a synchronous JSON `POST /v1/process`.
+An `after_response` request contains `protocolVersion`, an invocation ID, exact
+tool identity, the normalized result, and binding configuration. A
+`raw_response` request instead contains a bounded `rawResponse` with status,
+normalized content type, and a tagged body:
+
+```json
+{
+  "status": 200,
+  "contentType": "image/png",
+  "body": {"encoding": "base64", "value": "..."}
+}
+```
+
+The `encoding` is `json` for one complete decoded JSON document, or `base64`
+for binary, empty, malformed, or non-JSON bodies. Raw invocations omit
+`result`; legacy after-response invocations retain `result: null` when needed.
+The response contains a JSON `result` value that replaces only the body. It
+cannot change the upstream status.
 
 - The request contains `protocolVersion`, an invocation ID, exact tool identity,
-  the normalized result, and binding configuration.
+  the normalized result for `after_response`, or `rawResponse` for
+  `raw_response`, and binding configuration.
 - It does not contain original tool arguments, inbound headers, caller
   identity, caller tokens, or ERP credentials.
 - The response must be a JSON object with a `result` member.
@@ -133,12 +160,20 @@ The v1 plugin exchange is a synchronous JSON `POST /v1/process`:
 - Calls use the invocation context and resource timeout, disable redirects, and
   do not retry.
 
-Bindings run after a successful tool result passes its output schema and only
-on a cache miss. Multiple bindings transform in priority order. The final
-transformed result is validated against the tool output schema again. With
-`continue`, a plugin failure restores the original result. With `fail`, the
-caller receives the generic plugin-processing error rather than the endpoint,
-payload, or plugin response body.
+Raw bindings run before `responsePath`, output-schema validation, and
+`after_response`; each phase uses priority order independently. Only successful
+2xx responses run success-only normalization and after-response processing. A
+raw-bound terminal non-2xx response retains error state, even when a raw plugin
+returns a replacement JSON value. A failed raw chain never exposes an
+unfiltered ERP body: `continue` uses the original captured response only when
+it can satisfy the final schema, otherwise it returns a safe error. Use
+`failurePolicy: fail` for image conversion unless a compatible fallback is
+known. All bindings run only on a cache miss. The final transformed result is
+validated against the developer-owned tool output schema again. Plugins never
+change MCP schemas dynamically; publish a new MCP-visible tool name and exact
+tool version when output meaning or type changes. With `fail`, the caller
+receives the generic plugin-processing error rather than the endpoint, payload,
+or plugin response body.
 
 Applying, updating, or deleting a plugin or binding flushes cache entries for
 affected tools. A credential rotation therefore needs the normal deployment

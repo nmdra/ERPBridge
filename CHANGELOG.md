@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Process bounded ERP JSON and binary responses through ordered
+  `raw_response` plugins before normalization, response-path selection, schema
+  validation, and legacy `after_response` processing
 - Require secure admission for `raw_response` bindings, including authenticated
   admin control-plane access, allowlisted plugin endpoints, HTTP-backed tools,
   and explicit object-shaped output schemas

@@ -455,7 +455,7 @@ func validatePluginEndpoint(endpoint *url.URL) error {
 	if endpoint == nil || endpoint.Scheme == "" || endpoint.Host == "" {
 		return fmt.Errorf("must be an absolute http or https URL")
 	}
-	if endpoint.Scheme != "http" && endpoint.Scheme != "https" {
+	if endpoint.Scheme != pluginSchemeHTTP && endpoint.Scheme != pluginSchemeHTTPS {
 		return fmt.Errorf("must use http or https")
 	}
 	if endpoint.User != nil {

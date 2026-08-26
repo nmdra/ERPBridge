@@ -8,11 +8,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/nmdra/ERPBridge/internal/cache"
+	"github.com/nmdra/ERPBridge/internal/connector"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -94,6 +96,191 @@ func textResult(t *testing.T, result *mcp.CallToolResult) map[string]any {
 	var value map[string]any
 	require.NoError(t, json.Unmarshal([]byte(text.Text), &value))
 	return value
+}
+
+func rawResponseTool(name string) *Tool {
+	schema := any(map[string]any{
+		pluginSchemaTypeField: "object",
+		"properties": map[string]any{
+			"text": map[string]any{pluginSchemaTypeField: schemaTypeString},
+		},
+		"required": []string{"text"},
+	})
+	return &Tool{
+		Metadata: Metadata{Name: name, Version: testVersion100, IsActive: true},
+		Spec: ToolSpec{
+			OutputSchema: &schema,
+			Execution:    Execution{Type: "http", Method: http.MethodGet, Endpoint: "/invoice"},
+		},
+	}
+}
+
+func TestServerPlugin_RawResponseAdaptsBinaryBody(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+	tool := rawResponseTool("raw-image-tool")
+	connector := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, options connector.CallOptions) (*http.Response, error) {
+		require.True(t, options.PreserveErrorResponses)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"image/png; charset=binary"}},
+			Body:       io.NopCloser(bytes.NewReader([]byte{0x89, 'P', 'N', 'G'})),
+		}, nil
+	}}
+	s := NewServer(connector, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	s.RegisterTool(tool)
+	binding := validPluginBindingForTest()
+	binding.Spec.ToolRef.Name = tool.Metadata.Name
+	binding.Spec.Phase = PluginPhaseRawResponse
+	binding.Spec.FailurePolicy = PluginFailurePolicyFail
+	installActivePluginBindings(s, tool, binding)
+	processor := &fakePluginProcessor{process: func(invocation PluginInvocation) (*PluginResponse, error) {
+		require.Nil(t, invocation.Result)
+		require.NotNil(t, invocation.RawResponse)
+		require.Equal(t, http.StatusOK, invocation.RawResponse.Status)
+		require.Equal(t, "image/png", invocation.RawResponse.ContentType)
+		require.Equal(t, PluginRawBodyEncodingBase64, invocation.RawResponse.Body.Encoding)
+		require.Equal(t, "iVBORw==", invocation.RawResponse.Body.Value)
+		return &PluginResponse{Result: map[string]any{"text": "invoice text"}}, nil
+	}}
+	s.pluginClient = processor
+
+	result := invokeMCPHandler(t, s.handleMCPToolCall(tool.Metadata.Name), tool.Metadata.Name)
+	require.Equal(t, map[string]any{"text": "invoice text"}, textResult(t, result))
+	require.False(t, result.IsError)
+}
+
+func TestServerPlugin_RawRunsBeforeNormalizationAndAfterResponse(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+	tool := rawResponseTool("mixed-phase-tool")
+	tool.Spec.Execution.ResponsePath = "data"
+	connector := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewBufferString(`{"image":"raw"}`))}, nil
+	}}
+	s := NewServer(connector, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	s.RegisterTool(tool)
+	raw := validPluginBindingForTest()
+	raw.Metadata.Name = "raw-phase"
+	raw.Spec.ToolRef.Name = tool.Metadata.Name
+	raw.Spec.Phase = PluginPhaseRawResponse
+	raw.Spec.Priority = 20
+	after := validPluginBindingForTest()
+	after.Metadata.Name = "after-phase"
+	after.Spec.ToolRef.Name = tool.Metadata.Name
+	after.Spec.Priority = 10
+	installActivePluginBindings(s, tool, raw, after)
+	processor := &fakePluginProcessor{process: func(invocation PluginInvocation) (*PluginResponse, error) {
+		if invocation.RawResponse != nil {
+			return &PluginResponse{Result: map[string]any{"data": map[string]any{"text": "converted"}}}, nil
+		}
+		return &PluginResponse{Result: map[string]any{"text": invocation.Result.(map[string]any)["text"].(string) + "-after"}}, nil
+	}}
+	s.pluginClient = processor
+
+	result := invokeMCPHandler(t, s.handleMCPToolCall(tool.Metadata.Name), tool.Metadata.Name)
+	require.Equal(t, map[string]any{"text": "converted-after"}, textResult(t, result))
+	calls := processor.Calls()
+	require.Len(t, calls, 2)
+	require.NotNil(t, calls[0].RawResponse)
+	require.Nil(t, calls[1].RawResponse)
+}
+
+func TestServerPlugin_RawTerminalErrorPreservesStatusAndSkipsAfterResponse(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+	tool := rawResponseTool("raw-error-tool")
+	connector := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewBufferString(`{"message":"not found"}`))}, nil
+	}}
+	s := NewServer(connector, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	s.RegisterTool(tool)
+	raw := validPluginBindingForTest()
+	raw.Metadata.Name = "raw-error-phase"
+	raw.Spec.ToolRef.Name = tool.Metadata.Name
+	raw.Spec.Phase = PluginPhaseRawResponse
+	after := validPluginBindingForTest()
+	after.Metadata.Name = "after-error-phase"
+	after.Spec.ToolRef.Name = tool.Metadata.Name
+	installActivePluginBindings(s, tool, raw, after)
+	processor := &fakePluginProcessor{process: func(invocation PluginInvocation) (*PluginResponse, error) {
+		if invocation.RawResponse != nil {
+			return &PluginResponse{Result: map[string]any{"text": "handled error"}}, nil
+		}
+		t.Fatal("after-response binding must not run for terminal errors")
+		return nil, nil
+	}}
+	s.pluginClient = processor
+
+	result, err := s.executeTool(context.Background(), tool, nil)
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Equal(t, map[string]any{"text": "handled error"}, result.Result)
+	require.Len(t, processor.Calls(), 1)
+}
+
+func TestServerPlugin_RawFailureUsesSafeFallbackPolicy(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+	for _, test := range []struct {
+		name    string
+		policy  string
+		wantErr bool
+	}{
+		{name: "continue", policy: PluginFailurePolicyContinue},
+		{name: "fail", policy: PluginFailurePolicyFail, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			tool := rawResponseTool("raw-failure-" + test.name)
+			connector := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(bytes.NewReader([]byte{0x89, 'P', 'N', 'G'}))}, nil
+			}}
+			s := NewServer(connector, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+			s.RegisterTool(tool)
+			binding := validPluginBindingForTest()
+			binding.Spec.ToolRef.Name = tool.Metadata.Name
+			binding.Spec.Phase = PluginPhaseRawResponse
+			binding.Spec.FailurePolicy = test.policy
+			installActivePluginBindings(s, tool, binding)
+			s.pluginClient = &fakePluginProcessor{process: func(PluginInvocation) (*PluginResponse, error) {
+				return nil, errors.New("private raw body")
+			}}
+
+			result, err := s.executeTool(context.Background(), tool, nil)
+			if test.wantErr {
+				require.ErrorIs(t, err, ErrPluginProcessingFailed)
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, result.IsError)
+			require.Equal(t, "ERP response could not be processed", result.Error)
+			require.Nil(t, result.Result)
+		})
+	}
+}
+
+func TestServerPlugin_RawContinueFallsBackToOriginalJSON(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+	tool := rawResponseTool("raw-json-fallback-tool")
+	connector := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewBufferString(`{"text":"original"}`))}, nil
+	}}
+	s := NewServer(connector, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	s.RegisterTool(tool)
+	binding := validPluginBindingForTest()
+	binding.Spec.ToolRef.Name = tool.Metadata.Name
+	binding.Spec.Phase = PluginPhaseRawResponse
+	binding.Spec.FailurePolicy = PluginFailurePolicyContinue
+	installActivePluginBindings(s, tool, binding)
+	s.pluginClient = &fakePluginProcessor{process: func(PluginInvocation) (*PluginResponse, error) {
+		return nil, errors.New("raw plugin unavailable")
+	}}
+
+	result, err := s.executeTool(context.Background(), tool, nil)
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+	require.Equal(t, map[string]any{"text": "original"}, result.Result)
 }
 
 func TestServerPlugin_OrdersBindingsAndTransformsResult(t *testing.T) {

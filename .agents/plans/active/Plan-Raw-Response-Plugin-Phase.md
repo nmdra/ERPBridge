@@ -260,7 +260,7 @@ version.
   `go test ./internal/mcp -run 'Test(PluginRegistry|PluginBindingAPI|PluginAPI)' -count=1`;
   **Commit:** `feat(plugin): add phase-aware binding admission`.)
 
-- [ ] **Task 4: Implement raw processing and mixed-phase execution.** Write
+- [x] **Task 4: Implement raw processing and mixed-phase execution.** Write
   failing pipeline tests first. Add a raw response adapter that converts JSON
   bodies to decoded values and binary bodies to bounded base64 values, invokes
   all raw bindings in priority order with immutable status, and wraps each

@@ -10,6 +10,7 @@ spec:
   toolRef:
     name: list-orders
     version: 1.0.0
+  # Use raw_response only with an HTTP tool that declares the final object schema.
   phase: after_response
   priority: 10
   failurePolicy: continue
