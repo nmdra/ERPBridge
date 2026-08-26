@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../lib/api";
 
@@ -21,36 +21,118 @@ export type AsyncState<T> = {
   stale?: boolean;
 };
 
-export function useContexts(): AsyncState<ContextProjection[]> {
-  const [state, setState] = useState<AsyncState<ContextProjection[]>>({
+export type RefreshableState<T> = AsyncState<T> & { refresh: () => void };
+
+function observedAt(value: unknown) {
+  if (!value || typeof value !== "object") return new Date().toISOString();
+  const timestamp = (value as { observedAt?: unknown }).observedAt;
+  return typeof timestamp === "string" && timestamp
+    ? timestamp
+    : new Date().toISOString();
+}
+
+function isUnavailable(value: unknown) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    (value as { state?: unknown }).state === "unavailable"
+  );
+}
+
+function responseIsStale(value: unknown) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    (value as { stale?: unknown }).stale === true
+  );
+}
+
+export function useAsyncResource<T>(
+  path: string,
+  unavailableMessage: string,
+  intervalMilliseconds = 15000,
+): RefreshableState<T> {
+  const [state, setState] = useState<AsyncState<T>>({
     data: null,
     error: null,
     loading: true,
   });
+  const [refreshToken, setRefreshToken] = useState(0);
+  const previousPath = useRef(path);
+  const refresh = useCallback(() => setRefreshToken((value) => value + 1), []);
+
   useEffect(() => {
     let active = true;
-    apiFetch<ContextResponse>("/api/console/v1/contexts")
-      .then((response) => {
-        if (active)
-          setState({ data: response.items, error: null, loading: false });
-      })
-      .catch((error: unknown) => {
-        if (active) {
+    let latestRequest = 0;
+    const pathChanged = previousPath.current !== path;
+    previousPath.current = path;
+    if (pathChanged) {
+      setState({ data: null, error: null, loading: true });
+    } else {
+      setState((current) => ({
+        ...current,
+        error: null,
+        loading: current.data === null,
+      }));
+    }
+    const requestPath = refreshToken
+      ? `${path}${path.includes("?") ? "&" : "?"}refresh=1`
+      : path;
+    const load = () => {
+      const requestNumber = ++latestRequest;
+      apiFetch<T>(requestPath)
+        .then((data) => {
+          if (!active || requestNumber !== latestRequest) return;
+          if (isUnavailable(data)) {
+            setState((current) => ({
+              ...current,
+              error: unavailableMessage,
+              loading: false,
+              stale: Boolean(current.data),
+            }));
+            return;
+          }
           setState({
-            data: null,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Contexts are unavailable",
+            data,
+            error: null,
             loading: false,
+            lastUpdated: observedAt(data),
+            stale: responseIsStale(data),
           });
-        }
-      });
+        })
+        .catch((error: unknown) => {
+          if (active && requestNumber === latestRequest) {
+            setState((current) => ({
+              ...current,
+              error:
+                error instanceof Error ? error.message : unavailableMessage,
+              loading: false,
+              stale: Boolean(current.data),
+            }));
+          }
+        });
+    };
+    load();
+    const interval = window.setInterval(load, intervalMilliseconds);
     return () => {
       active = false;
+      window.clearInterval(interval);
     };
-  }, []);
-  return state;
+  }, [intervalMilliseconds, path, refreshToken, unavailableMessage]);
+
+  const visibleState =
+    previousPath.current === path
+      ? state
+      : { data: null, error: null, loading: true };
+  return { ...visibleState, refresh };
+}
+
+export function useContexts(): RefreshableState<ContextProjection[]> {
+  const resource = useAsyncResource<ContextResponse>(
+    "/api/console/v1/contexts",
+    "Contexts are unavailable",
+  );
+  return { ...resource, data: resource.data?.items ?? null };
 }
 
 export type DeploymentResponse = {
@@ -71,6 +153,7 @@ export type ServerInfoResponse = {
 export type HealthResponse = {
   state: string;
   status?: string;
+  observedAt?: string;
 };
 
 export type CacheResponse = {
@@ -83,164 +166,36 @@ export type CacheResponse = {
 
 export function useServerInfo(
   contextName: string,
-): AsyncState<ServerInfoResponse> {
-  const [state, setState] = useState<AsyncState<ServerInfoResponse>>({
-    data: null,
-    error: null,
-    loading: true,
-  });
-  useEffect(() => {
-    let active = true;
-    apiFetch<ServerInfoResponse>(
-      `/api/console/v1/server-info?context=${encodeURIComponent(contextName)}`,
-    )
-      .then((data) => {
-        if (active) setState({ data, error: null, loading: false });
-      })
-      .catch((error: unknown) => {
-        if (active)
-          setState({
-            data: null,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Server metadata is unavailable",
-            loading: false,
-          });
-      });
-    return () => {
-      active = false;
-    };
-  }, [contextName]);
-  return state;
+): RefreshableState<ServerInfoResponse> {
+  return useAsyncResource(
+    `/api/console/v1/server-info?context=${encodeURIComponent(contextName)}`,
+    "Server metadata is unavailable",
+  );
 }
 
-export function useHealth(contextName: string): AsyncState<HealthResponse> {
-  const [state, setState] = useState<AsyncState<HealthResponse>>({
-    data: null,
-    error: null,
-    loading: true,
-  });
-  useEffect(() => {
-    let active = true;
-    const load = () => {
-      apiFetch<HealthResponse>(
-        `/api/console/v1/health?context=${encodeURIComponent(contextName)}`,
-      )
-        .then((data) => {
-          if (active) {
-            setState({
-              data,
-              error: null,
-              loading: false,
-              lastUpdated: new Date().toISOString(),
-              stale: false,
-            });
-          }
-        })
-        .catch((error: unknown) => {
-          if (active) {
-            setState((current) => ({
-              ...current,
-              error:
-                error instanceof Error
-                  ? error.message
-                  : "Health is unavailable",
-              loading: false,
-              stale: Boolean(current.data),
-            }));
-          }
-        });
-    };
-    load();
-    const interval = window.setInterval(load, 15000);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, [contextName]);
-  return state;
+export function useHealth(
+  contextName: string,
+): RefreshableState<HealthResponse> {
+  return useAsyncResource(
+    `/api/console/v1/health?context=${encodeURIComponent(contextName)}`,
+    "Health is unavailable",
+  );
 }
 
-export function useCache(contextName: string): AsyncState<CacheResponse> {
-  const [state, setState] = useState<AsyncState<CacheResponse>>({
-    data: null,
-    error: null,
-    loading: true,
-  });
-  useEffect(() => {
-    let active = true;
-    const load = () => {
-      apiFetch<CacheResponse>(
-        `/api/console/v1/cache?context=${encodeURIComponent(contextName)}`,
-      )
-        .then((data) => {
-          if (active) {
-            setState({
-              data,
-              error: null,
-              loading: false,
-              lastUpdated: new Date().toISOString(),
-              stale: false,
-            });
-          }
-        })
-        .catch((error: unknown) => {
-          if (active) {
-            setState((current) => ({
-              ...current,
-              error:
-                error instanceof Error
-                  ? error.message
-                  : "Cache data is unavailable",
-              loading: false,
-              stale: Boolean(current.data),
-            }));
-          }
-        });
-    };
-    load();
-    const interval = window.setInterval(load, 15000);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, [contextName]);
-  return state;
+export function useCache(
+  contextName: string,
+): RefreshableState<CacheResponse> {
+  return useAsyncResource(
+    `/api/console/v1/cache?context=${encodeURIComponent(contextName)}`,
+    "Cache data is unavailable",
+  );
 }
 
 export function useDeployment(
   contextName: string,
-): AsyncState<DeploymentResponse> {
-  const [state, setState] = useState<AsyncState<DeploymentResponse>>({
-    data: null,
-    error: null,
-    loading: true,
-  });
-  useEffect(() => {
-    let active = true;
-    setState({ data: null, error: null, loading: true });
-    apiFetch<DeploymentResponse>(
-      `/api/console/v1/deployment?context=${encodeURIComponent(contextName)}`,
-    )
-      .then((data) => {
-        if (active) setState({ data, error: null, loading: false });
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setState({
-            data: null,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Deployment is unavailable",
-            loading: false,
-          });
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [contextName]);
-  return state;
+): RefreshableState<DeploymentResponse> {
+  return useAsyncResource(
+    `/api/console/v1/deployment?context=${encodeURIComponent(contextName)}`,
+    "Deployment is unavailable",
+  );
 }

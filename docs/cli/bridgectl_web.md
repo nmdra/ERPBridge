@@ -7,7 +7,10 @@ Start the local ERPBridge Console
 Start a read-only local web console for monitoring configured ERPBridge contexts.
 
 The console binds to loopback by default, keeps upstream credentials in the CLI,
-and stops when this command receives an interrupt or termination signal.
+and stops when this command receives an interrupt or termination signal. It
+refreshes the context snapshot while running and retains the last valid snapshot
+when a later configuration read fails. Context selection is stored only in the
+browser session; it does not change the CLI configuration.
 
 ```
 bridgectl web [flags]

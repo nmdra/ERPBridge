@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Card, CardContent } from "../components/ui/card";
 import { EmptyState } from "../components/ui/empty-state";
+import { Freshness } from "../components/ui/freshness";
 import { FilterToolbar } from "../components/ui/filter-toolbar";
 import { Skeleton } from "../components/ui/skeleton";
 import { StatusBadge } from "../components/status/StatusBadge";
@@ -171,13 +172,22 @@ export function PluginDetails({
         <Link className="text-sm text-primary hover:underline" href="/plugins">
           ← Back to plugins
         </Link>
-        <EmptyState
-          title="Plugin details are unavailable"
-          message={
-            plugins.error ??
-            "The selected context has no readable plugin inventory."
-          }
-        />
+        <div className="space-y-3">
+          <EmptyState
+            title="Plugin details are unavailable"
+            message={
+              plugins.error ??
+              "The selected context has no readable plugin inventory."
+            }
+          />
+          <button
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            onClick={plugins.refresh}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -327,19 +337,47 @@ export function Plugins({ contextName }: { contextName: string }) {
     (bindings.data?.state !== "available" && !bindings.data?.items.length)
   ) {
     return (
-      <EmptyState
-        title="Plugin metadata is unavailable"
-        message="This deployment does not expose the read-only plugin control-plane API. Plugin UI requires the generic external-plugin contract."
-      />
+      <div className="space-y-3">
+        <EmptyState
+          title="Plugin metadata is unavailable"
+          message="This deployment does not expose the read-only plugin control-plane API. Plugin UI requires the generic external-plugin contract."
+        />
+        <button
+          className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+          onClick={() => {
+            plugins.refresh();
+            bindings.refresh();
+          }}
+          type="button"
+        >
+          Retry
+        </button>
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
+        actions={
+          <button
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            onClick={() => {
+              plugins.refresh();
+              bindings.refresh();
+            }}
+            type="button"
+          >
+            Refresh
+          </button>
+        }
         description="Read-only plugin and binding metadata. ERPBridge does not deploy plugin processes, expose their endpoints, or show their credentials."
         eyebrow="Inventory"
         title="Plugins"
+      />
+      <Freshness
+        lastUpdated={plugins.lastUpdated ?? bindings.lastUpdated}
+        stale={plugins.stale || bindings.stale}
       />
       <FilterToolbar
         summary={`${visiblePlugins.length} plugins and ${visibleBindings.length} bindings match the current search.`}

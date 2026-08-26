@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/nmdra/ERPBridge/internal/bridgeclient"
 	"github.com/nmdra/ERPBridge/internal/config"
@@ -22,11 +23,12 @@ const (
 
 // TopologyResponse is the bounded, safe API-to-MCP graph.
 type TopologyResponse struct {
-	State     string           `json:"state"`
-	Nodes     []TopologyNode   `json:"nodes"`
-	Edges     []TopologyEdge   `json:"edges"`
-	Truncated bool             `json:"truncated"`
-	Omitted   *TopologyOmitted `json:"omitted,omitempty"`
+	State      string           `json:"state"`
+	Nodes      []TopologyNode   `json:"nodes"`
+	Edges      []TopologyEdge   `json:"edges"`
+	Truncated  bool             `json:"truncated"`
+	Omitted    *TopologyOmitted `json:"omitted,omitempty"`
+	ObservedAt time.Time        `json:"observedAt"`
 }
 
 // TopologyOmitted reports safe counts omitted by the graph safety caps.
@@ -77,9 +79,8 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctxName := r.URL.Query().Get("context")
-	ctx, ok := h.context(ctxName)
+	ctx, ok := h.contextForRequest(w, r)
 	if !ok {
-		writeAPIError(w, http.StatusNotFound, "context_not_found", "the selected context is not configured")
 		return
 	}
 	response, err := h.upstreamRequest(r, ctx, targetMCPServer(), "/apis/erpbridge.io/v1/tools")
@@ -112,7 +113,7 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(apis, func(i, j int) bool { return apis[i].Name < apis[j].Name })
 	candidateNodes, candidateEdges := topologyCandidateCounts(tools, apis, plugins, bindings, pluginsAvailable, ctx.ERPBase)
 
-	graph := TopologyResponse{State: stateAvailable, Nodes: make([]TopologyNode, 0), Edges: make([]TopologyEdge, 0)}
+	graph := TopologyResponse{State: stateAvailable, Nodes: make([]TopologyNode, 0), Edges: make([]TopologyEdge, 0), ObservedAt: time.Now().UTC()}
 	transportID := "transport:" + ctxName
 	graph.Nodes = append(graph.Nodes, TopologyNode{ID: transportID, Kind: "mcp-transport", Label: "MCP transport"})
 	for _, api := range apis {

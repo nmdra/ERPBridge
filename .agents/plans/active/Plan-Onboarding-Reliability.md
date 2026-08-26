@@ -371,7 +371,7 @@ archived as completed before this plan is promoted.
     and redacted; `go test ./internal/bridgeclient ./internal/cli ./internal/mcp
     -run '(Error|HTTP|API|Tool|Plugin)' -count=1`.
 
-- [ ] **Task 6: Make Console context and data state reloadable and persistent.**
+- [x] **Task 6: Make Console context and data state reloadable and persistent.**
   - Add a config-provider/snapshot seam to the BFF, reload contexts safely on
     interval and manual refresh, preserve the last valid snapshot on parse
     failure, and use the same effective-context resolver as the CLI. Persist
@@ -383,12 +383,16 @@ archived as completed before this plan is promoted.
   - **Seam:** `HandlerOptions` config provider, BFF context lookup, React
     `ConsoleApp` selection state, and shared `apiFetch`/async hook behavior.
   - **Files:** `internal/web/context_api.go`, `internal/web/observability_api.go`,
-    `internal/web/safe_dto.go`, `internal/web/context_api_test.go`,
-    `internal/web/observability_api_test.go`, `internal/web/integration_test.go`,
-    `internal/cli/web.go`, `web/src/App.tsx`,
+    `internal/web/safe_dto.go`, `internal/web/metrics.go`,
+    `internal/web/plugin_api.go`, `internal/web/topology.go`,
+    `internal/web/context_api_test.go`, `internal/web/observability_api_test.go`,
+    `internal/web/integration_test.go`, `internal/cli/web.go`, `web/src/App.tsx`,
     `web/src/hooks/useConsole.ts`, `web/src/hooks/useObservability.ts`,
     `web/src/hooks/useTopology.ts`, `web/src/lib/api.ts`,
-    `web/src/components/layout/AppShell.tsx`, relevant route/tests,
+    `web/src/components/layout/AppShell.tsx`, `web/src/components/ui/freshness.tsx`,
+    `web/src/lib/api.test.ts`, `web/src/routes/Deployments.tsx`,
+    `web/src/routes/Overview.tsx`, `web/src/routes/Plugins.tsx`,
+    `web/src/routes/Tools.tsx`, `web/src/routes/Topology.tsx`, relevant route/tests,
     `docs/web-console.md`, `docs/cli/bridgectl_web.md`, `CHANGELOG.md`.
   - **Verify:** `go test ./internal/web ./internal/cli -run '(Context|Console|Web)' -count=1`;
     frontend tests cover reload persistence, invalid saved contexts, context

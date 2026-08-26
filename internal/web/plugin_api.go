@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/nmdra/ERPBridge/internal/bridgeclient"
 	"github.com/nmdra/ERPBridge/internal/mcp"
@@ -46,14 +47,16 @@ type ToolResourceRef struct {
 
 // PluginListResponse contains safe plugin projections and a feature state.
 type PluginListResponse struct {
-	State string             `json:"state"`
-	Items []PluginProjection `json:"items"`
+	State      string             `json:"state"`
+	Items      []PluginProjection `json:"items"`
+	ObservedAt time.Time          `json:"observedAt"`
 }
 
 // PluginBindingListResponse contains safe binding projections and a feature state.
 type PluginBindingListResponse struct {
-	State string                    `json:"state"`
-	Items []PluginBindingProjection `json:"items"`
+	State      string                    `json:"state"`
+	Items      []PluginBindingProjection `json:"items"`
+	ObservedAt time.Time                 `json:"observedAt"`
 }
 
 func (h *consoleHandler) plugins(w http.ResponseWriter, r *http.Request) {
@@ -66,24 +69,24 @@ func (h *consoleHandler) plugins(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := h.upstreamRequest(r, ctx, bridgeclient.TargetMCPServer, "/apis/erpbridge.io/v1/plugins")
 	if err != nil {
-		writeJSON(w, http.StatusOK, PluginListResponse{State: stateUnavailable, Items: []PluginProjection{}})
+		writeJSON(w, http.StatusOK, PluginListResponse{State: stateUnavailable, Items: []PluginProjection{}, ObservedAt: time.Now().UTC()})
 		return
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		writeJSON(w, http.StatusOK, PluginListResponse{State: upstreamState(response.StatusCode), Items: []PluginProjection{}})
+		writeJSON(w, http.StatusOK, PluginListResponse{State: upstreamState(response.StatusCode), Items: []PluginProjection{}, ObservedAt: time.Now().UTC()})
 		return
 	}
 	var plugins []mcp.Plugin
 	if err := json.NewDecoder(response.Body).Decode(&plugins); err != nil {
-		writeJSON(w, http.StatusOK, PluginListResponse{State: stateUnavailable, Items: []PluginProjection{}})
+		writeJSON(w, http.StatusOK, PluginListResponse{State: stateUnavailable, Items: []PluginProjection{}, ObservedAt: time.Now().UTC()})
 		return
 	}
 	items := make([]PluginProjection, 0, len(plugins))
 	for _, plugin := range plugins {
 		items = append(items, projectPlugin(plugin))
 	}
-	writeJSON(w, http.StatusOK, PluginListResponse{State: stateAvailable, Items: items})
+	writeJSON(w, http.StatusOK, PluginListResponse{State: stateAvailable, Items: items, ObservedAt: time.Now().UTC()})
 }
 
 func (h *consoleHandler) pluginBindings(w http.ResponseWriter, r *http.Request) {
@@ -96,24 +99,24 @@ func (h *consoleHandler) pluginBindings(w http.ResponseWriter, r *http.Request) 
 	}
 	response, err := h.upstreamRequest(r, ctx, bridgeclient.TargetMCPServer, "/apis/erpbridge.io/v1/pluginbindings")
 	if err != nil {
-		writeJSON(w, http.StatusOK, PluginBindingListResponse{State: stateUnavailable, Items: []PluginBindingProjection{}})
+		writeJSON(w, http.StatusOK, PluginBindingListResponse{State: stateUnavailable, Items: []PluginBindingProjection{}, ObservedAt: time.Now().UTC()})
 		return
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		writeJSON(w, http.StatusOK, PluginBindingListResponse{State: upstreamState(response.StatusCode), Items: []PluginBindingProjection{}})
+		writeJSON(w, http.StatusOK, PluginBindingListResponse{State: upstreamState(response.StatusCode), Items: []PluginBindingProjection{}, ObservedAt: time.Now().UTC()})
 		return
 	}
 	var bindings []mcp.PluginBinding
 	if err := json.NewDecoder(response.Body).Decode(&bindings); err != nil {
-		writeJSON(w, http.StatusOK, PluginBindingListResponse{State: stateUnavailable, Items: []PluginBindingProjection{}})
+		writeJSON(w, http.StatusOK, PluginBindingListResponse{State: stateUnavailable, Items: []PluginBindingProjection{}, ObservedAt: time.Now().UTC()})
 		return
 	}
 	items := make([]PluginBindingProjection, 0, len(bindings))
 	for _, binding := range bindings {
 		items = append(items, projectPluginBinding(binding))
 	}
-	writeJSON(w, http.StatusOK, PluginBindingListResponse{State: stateAvailable, Items: items})
+	writeJSON(w, http.StatusOK, PluginBindingListResponse{State: stateAvailable, Items: items, ObservedAt: time.Now().UTC()})
 }
 
 func projectPlugin(plugin mcp.Plugin) PluginProjection {

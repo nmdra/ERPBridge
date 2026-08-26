@@ -1,5 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  useAsyncResource,
+  type AsyncState,
+  type RefreshableState,
+} from "./useConsole";
 import { apiFetch, streamLogEvents } from "../lib/api";
 
 export type LogEvent = {
@@ -120,121 +125,47 @@ export type ToolProjection = {
   manifest?: ToolManifest;
 };
 
-type ToolResponse = { state: string; items: ToolProjection[] };
-type PluginResponse = { state: string; items: PluginProjection[] };
+type ToolResponse = {
+  state: string;
+  items: ToolProjection[];
+  observedAt?: string;
+};
+type PluginResponse = {
+  state: string;
+  items: PluginProjection[];
+  observedAt?: string;
+};
 type PluginBindingResponse = {
   state: string;
   items: PluginBindingProjection[];
+  observedAt?: string;
 };
 
-type AsyncState<T> = {
-  data: T | null;
-  error: string | null;
-  loading: boolean;
-  lastUpdated?: string;
-  stale?: boolean;
-};
-
-export function useTools(contextName: string): AsyncState<ToolResponse> {
-  const [state, setState] = useState<AsyncState<ToolResponse>>({
-    data: null,
-    error: null,
-    loading: true,
-  });
-  useEffect(() => {
-    let active = true;
-    setState({ data: null, error: null, loading: true });
-    apiFetch<ToolResponse>(
-      `/api/console/v1/tools?context=${encodeURIComponent(contextName)}`,
-    )
-      .then((data) => {
-        if (active) setState({ data, error: null, loading: false });
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setState({
-            data: null,
-            error:
-              error instanceof Error ? error.message : "Tools are unavailable",
-            loading: false,
-          });
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [contextName]);
-  return state;
+export function useTools(
+  contextName: string,
+): RefreshableState<ToolResponse> {
+  return useAsyncResource(
+    `/api/console/v1/tools?context=${encodeURIComponent(contextName)}`,
+    "Tools are unavailable",
+  );
 }
 
-export function usePlugins(contextName: string): AsyncState<PluginResponse> {
-  const [state, setState] = useState<AsyncState<PluginResponse>>({
-    data: null,
-    error: null,
-    loading: true,
-  });
-  useEffect(() => {
-    let active = true;
-    setState({ data: null, error: null, loading: true });
-    apiFetch<PluginResponse>(
-      `/api/console/v1/plugins?context=${encodeURIComponent(contextName)}`,
-    )
-      .then((data) => {
-        if (active) setState({ data, error: null, loading: false });
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setState({
-            data: null,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Plugins are unavailable",
-            loading: false,
-          });
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [contextName]);
-  return state;
+export function usePlugins(
+  contextName: string,
+): RefreshableState<PluginResponse> {
+  return useAsyncResource(
+    `/api/console/v1/plugins?context=${encodeURIComponent(contextName)}`,
+    "Plugins are unavailable",
+  );
 }
 
 export function usePluginBindings(
   contextName: string,
-): AsyncState<PluginBindingResponse> {
-  const [state, setState] = useState<AsyncState<PluginBindingResponse>>({
-    data: null,
-    error: null,
-    loading: true,
-  });
-  useEffect(() => {
-    let active = true;
-    setState({ data: null, error: null, loading: true });
-    apiFetch<PluginBindingResponse>(
-      `/api/console/v1/plugin-bindings?context=${encodeURIComponent(contextName)}`,
-    )
-      .then((data) => {
-        if (active) setState({ data, error: null, loading: false });
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setState({
-            data: null,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Plugin bindings are unavailable",
-            loading: false,
-          });
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [contextName]);
-  return state;
+): RefreshableState<PluginBindingResponse> {
+  return useAsyncResource(
+    `/api/console/v1/plugin-bindings?context=${encodeURIComponent(contextName)}`,
+    "Plugin bindings are unavailable",
+  );
 }
 
 export function useLogs(
@@ -301,6 +232,7 @@ export function useLogs(
 
 export function useMetrics(contextName: string): AsyncState<MetricsSnapshot> & {
   history: MetricsHistoryPoint[];
+  refresh: () => void;
 } {
   const [state, setState] = useState<AsyncState<MetricsSnapshot>>({
     data: null,
@@ -308,12 +240,13 @@ export function useMetrics(contextName: string): AsyncState<MetricsSnapshot> & {
     loading: true,
   });
   const [history, setHistory] = useState<MetricsHistoryPoint[]>([]);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const refresh = useCallback(() => setRefreshToken((value) => value + 1), []);
   useEffect(() => {
     let active = true;
     const load = () => {
-      apiFetch<MetricsSnapshot>(
-        `/api/console/v1/metrics?context=${encodeURIComponent(contextName)}`,
-      )
+      const path = `/api/console/v1/metrics?context=${encodeURIComponent(contextName)}${refreshToken ? "&refresh=1" : ""}`;
+      apiFetch<MetricsSnapshot>(path)
         .then((data) => {
           if (!active) return;
           const observedAt = data.observedAt ?? new Date().toISOString();
@@ -350,8 +283,8 @@ export function useMetrics(contextName: string): AsyncState<MetricsSnapshot> & {
       active = false;
       window.clearInterval(interval);
     };
-  }, [contextName]);
-  return { ...state, history };
+  }, [contextName, refreshToken]);
+  return { ...state, history, refresh };
 }
 
 export function useFilteredLogs(

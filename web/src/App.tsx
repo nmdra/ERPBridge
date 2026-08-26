@@ -1,4 +1,10 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import { Route, Switch } from "wouter";
 
 import { AppShell } from "./components/layout/AppShell";
@@ -16,13 +22,31 @@ import { Topology } from "./routes/Topology";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { ToolDetails, Tools } from "./routes/Tools";
 
+const selectedContextStorageKey = "erpbridge-console-selected-context";
+
+function readStoredContext() {
+  try {
+    return window.sessionStorage.getItem(selectedContextStorageKey) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function storeSelectedContext(name: string) {
+  try {
+    window.sessionStorage.setItem(selectedContextStorageKey, name);
+  } catch {
+    // Storage is optional; the in-memory selection remains usable.
+  }
+}
+
 const Metrics = lazy(() =>
   import("./routes/Metrics").then((module) => ({ default: module.Metrics })),
 );
 
 function ConsoleApp() {
   const contexts = useContexts();
-  const [selectedContext, setSelectedContext] = useState("");
+  const [selectedContext, setSelectedContext] = useState(readStoredContext);
 
   useEffect(() => {
     if (!contexts.data?.length) return;
@@ -31,14 +55,22 @@ function ConsoleApp() {
     );
     if (!selectedContext || !selectedStillExists) {
       const current = contexts.data.find((context) => context.current);
-      setSelectedContext(current?.name ?? contexts.data[0].name);
+      const nextContext = current?.name ?? contexts.data[0].name;
+      setSelectedContext(nextContext);
+      storeSelectedContext(nextContext);
     }
   }, [contexts.data, selectedContext]);
+
+  const handleContextChange = useCallback((name: string) => {
+    setSelectedContext(name);
+    storeSelectedContext(name);
+  }, []);
 
   return (
     <AppShell
       contexts={contexts.data}
-      onContextChange={setSelectedContext}
+      onContextChange={handleContextChange}
+      onRefresh={contexts.refresh}
       selectedContext={selectedContext}
     >
       <div className="mx-auto max-w-7xl space-y-6">
@@ -72,10 +104,22 @@ function ConsoleApp() {
               <Overview contextName={selectedContext} />
             </Route>
             <Route path="/contexts">
-              <Deployments contexts={contexts.data} error={contexts.error} />
+              <Deployments
+                contexts={contexts.data}
+                error={contexts.error}
+                lastUpdated={contexts.lastUpdated}
+                onRefresh={contexts.refresh}
+                stale={contexts.stale}
+              />
             </Route>
             <Route path="/deployments">
-              <Deployments contexts={contexts.data} error={contexts.error} />
+              <Deployments
+                contexts={contexts.data}
+                error={contexts.error}
+                lastUpdated={contexts.lastUpdated}
+                onRefresh={contexts.refresh}
+                stale={contexts.stale}
+              />
             </Route>
             <Route path="/logs">
               <Logs contextName={selectedContext} />

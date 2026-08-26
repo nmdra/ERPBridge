@@ -173,9 +173,8 @@ func (h *consoleHandler) metricsSnapshot(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	ctxName := r.URL.Query().Get("context")
-	ctx, ok := h.context(ctxName)
+	ctx, ok := h.contextForRequest(w, r)
 	if !ok {
-		writeAPIError(w, http.StatusNotFound, "context_not_found", "the selected context is not configured")
 		return
 	}
 	response, err := h.upstreamRequest(r, ctx, bridgeclient.TargetMCPServer, "/metrics")

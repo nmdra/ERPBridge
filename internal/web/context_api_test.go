@@ -2,10 +2,12 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nmdra/ERPBridge/internal/config"
 )
@@ -116,6 +118,52 @@ func TestContextAPIRejectsUnknownContextAndArbitraryProxy(t *testing.T) {
 	server.Handler().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("arbitrary proxy status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+}
+
+func TestContextProviderRetainsLastValidSnapshotOnReloadError(t *testing.T) {
+	first := &config.Config{CurrentContext: "local", Contexts: map[string]config.Context{
+		"local": {Server: "http://bridge.example:8082"},
+	}}
+	second := &config.Config{CurrentContext: "staging", Contexts: map[string]config.Context{
+		"staging": {Server: "http://staging.example:8082"},
+	}}
+	current := first
+	provider := func() (*config.Config, error) {
+		if current == nil {
+			return nil, fmt.Errorf("malformed config")
+		}
+		return current, nil
+	}
+	handler := NewConsoleHandler(HandlerOptions{
+		ConfigProvider:        provider,
+		ConfigRefreshInterval: time.Hour,
+	})
+	readContexts := func(query string) ContextListResponse {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/console/v1/contexts"+query, nil)
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+		}
+		var response ContextListResponse
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
+	if response := readContexts(""); len(response.Items) != 1 || response.Items[0].Name != "local" {
+		t.Fatalf("initial contexts = %+v", response.Items)
+	}
+	current = nil
+	response := readContexts("?refresh=1")
+	if len(response.Items) != 1 || response.Items[0].Name != "local" || !response.Stale {
+		t.Fatalf("stale contexts = %+v, stale=%v", response.Items, response.Stale)
+	}
+	current = second
+	response = readContexts("?refresh=1")
+	if len(response.Items) != 1 || response.Items[0].Name != "staging" || response.Stale {
+		t.Fatalf("reloaded contexts = %+v, stale=%v", response.Items, response.Stale)
 	}
 }
 

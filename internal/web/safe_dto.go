@@ -21,7 +21,9 @@ type ContextProjection struct {
 
 // ContextListResponse contains configured context projections.
 type ContextListResponse struct {
-	Items []ContextProjection `json:"items"`
+	Items      []ContextProjection `json:"items"`
+	ObservedAt time.Time           `json:"observedAt"`
+	Stale      bool                `json:"stale,omitempty"`
 }
 
 // ConsoleState describes the local console process.
@@ -31,8 +33,10 @@ type ConsoleState struct {
 
 // DeploymentResponse contains one safe deployment projection.
 type DeploymentResponse struct {
-	Context ContextProjection `json:"context"`
-	Console ConsoleState      `json:"console"`
+	Context    ContextProjection `json:"context"`
+	Console    ConsoleState      `json:"console"`
+	ObservedAt time.Time         `json:"observedAt"`
+	Stale      bool              `json:"stale,omitempty"`
 }
 
 // ServerInfoResponse contains safe optional server metadata.
@@ -54,8 +58,9 @@ type LogListResponse struct {
 
 // HealthResponse contains a safe health projection.
 type HealthResponse struct {
-	State  string `json:"state"`
-	Status string `json:"status,omitempty"`
+	State      string    `json:"state"`
+	Status     string    `json:"status,omitempty"`
+	ObservedAt time.Time `json:"observedAt"`
 }
 
 // CacheStatsProjection contains safe cache counters.
@@ -66,8 +71,9 @@ type CacheStatsProjection struct {
 
 // CacheResponse contains a safe cache projection.
 type CacheResponse struct {
-	State string                `json:"state"`
-	Stats *CacheStatsProjection `json:"stats,omitempty"`
+	State      string                `json:"state"`
+	Stats      *CacheStatsProjection `json:"stats,omitempty"`
+	ObservedAt time.Time             `json:"observedAt"`
 }
 
 // ToolProjection contains tool metadata without credentials or full URLs.
@@ -158,8 +164,9 @@ type LifecycleProjection struct {
 
 // ToolListResponse contains safe tool projections.
 type ToolListResponse struct {
-	State string           `json:"state"`
-	Items []ToolProjection `json:"items"`
+	State      string           `json:"state"`
+	Items      []ToolProjection `json:"items"`
+	ObservedAt time.Time        `json:"observedAt"`
 }
 
 // APIErrorResponse is the stable local error shape.

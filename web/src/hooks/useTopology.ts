@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-
-import { apiFetch } from "../lib/api";
+import { useAsyncResource, type RefreshableState } from "./useConsole";
 
 export const topologyNodeKinds = [
   "mcp-transport",
@@ -74,37 +72,14 @@ export type TopologyResponse = {
   edges: TopologyEdge[];
   truncated?: boolean;
   omitted?: { nodes: number; edges: number };
+  observedAt?: string;
 };
 
-export function useTopology(contextName: string) {
-  const [state, setState] = useState<{
-    data: TopologyResponse | null;
-    error: string | null;
-    loading: boolean;
-  }>({ data: null, error: null, loading: true });
-  useEffect(() => {
-    let active = true;
-    setState({ data: null, error: null, loading: true });
-    apiFetch<TopologyResponse>(
-      `/api/console/v1/topology?context=${encodeURIComponent(contextName)}`,
-    )
-      .then((data) => {
-        if (active) setState({ data, error: null, loading: false });
-      })
-      .catch((error: unknown) => {
-        if (active)
-          setState({
-            data: null,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Topology is unavailable",
-            loading: false,
-          });
-      });
-    return () => {
-      active = false;
-    };
-  }, [contextName]);
-  return state;
+export function useTopology(
+  contextName: string,
+): RefreshableState<TopologyResponse> {
+  return useAsyncResource(
+    `/api/console/v1/topology?context=${encodeURIComponent(contextName)}`,
+    "Topology is unavailable",
+  );
 }

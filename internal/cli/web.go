@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/web"
 	"github.com/spf13/cobra"
 )
@@ -35,15 +36,29 @@ and stops when this command receives an interrupt or termination signal.`,
 
 func runWeb(cmd *cobra.Command, _ []string) error {
 	assetOptions := web.AssetOptions{}
+	configProvider := func() (*config.Config, error) {
+		refreshed, err := config.Load()
+		if err != nil {
+			return nil, err
+		}
+		if ctxOverride != "" {
+			refreshed.CurrentContext = ctxOverride
+		}
+		if _, err := refreshed.EffectiveContext(); err != nil {
+			return nil, err
+		}
+		return refreshed, nil
+	}
 	if webDev {
 		assetOptions.DevServerURL = "http://127.0.0.1:5173"
 	}
 	server, err := web.NewServer(web.Options{
 		ListenAddress: webListen,
 		Handler: web.NewConsoleHandler(web.HandlerOptions{
-			Config:        cfg,
-			TokenOverride: tokenOverride,
-			Assets:        web.NewAssetHandler(assetOptions),
+			Config:         cfg,
+			ConfigProvider: configProvider,
+			TokenOverride:  tokenOverride,
+			Assets:         web.NewAssetHandler(assetOptions),
 		}),
 	})
 	if err != nil {

@@ -5,6 +5,7 @@ import { PageHeader } from "../components/layout/PageHeader";
 import { Card, CardContent } from "../components/ui/card";
 import { FilterToolbar } from "../components/ui/filter-toolbar";
 import { EmptyState } from "../components/ui/empty-state";
+import { Freshness } from "../components/ui/freshness";
 import { Skeleton } from "../components/ui/skeleton";
 import { StatusBadge } from "../components/status/StatusBadge";
 import {
@@ -297,13 +298,22 @@ export function Tools({ contextName }: { contextName: string }) {
           eyebrow="Inventory"
           title="Tools"
         />
-        <EmptyState
-          title="Tools are unavailable"
-          message={
-            tools.error ??
-            "The selected context has no readable tool inventory."
-          }
-        />
+        <div className="space-y-3">
+          <EmptyState
+            title="Tools are unavailable"
+            message={
+              tools.error ??
+              "The selected context has no readable tool inventory."
+            }
+          />
+          <button
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            onClick={tools.refresh}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -311,10 +321,20 @@ export function Tools({ contextName }: { contextName: string }) {
   return (
     <div className="space-y-6">
       <PageHeader
+        actions={
+          <button
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            onClick={tools.refresh}
+            type="button"
+          >
+            Refresh
+          </button>
+        }
         description="Inspect safe MCP tool projections and read-only manifests. Credentials and full upstream URLs remain hidden."
         eyebrow="Inventory"
         title="Tools"
       />
+      <Freshness lastUpdated={tools.lastUpdated} stale={tools.stale} />
       <FilterToolbar
         summary={`${visibleTools.length} of ${tools.data.items.length} tools match the current filter.`}
       >
@@ -409,12 +429,22 @@ export function ToolDetails({
   if (tools.loading) return <Skeleton className="h-48 w-full" />;
   if (tools.error || !tools.data || tools.data.state !== "available") {
     return (
-      <EmptyState
-        title="Tool manifest is unavailable"
-        message={
-          tools.error ?? "The selected context has no readable tool inventory."
-        }
-      />
+        <div className="space-y-3">
+          <EmptyState
+            title="Tool manifest is unavailable"
+            message={
+              tools.error ?? "The selected context has no readable tool inventory."
+            }
+          />
+          <button
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            onClick={tools.refresh}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
+
     );
   }
   if (!tool) {

@@ -27,26 +27,26 @@ func (h *consoleHandler) health(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := h.upstreamRequest(r, ctx, bridgeclient.TargetMCPServer, "/mcp/health")
 	if err != nil {
-		writeJSON(w, http.StatusOK, HealthResponse{State: stateUnavailable})
+		writeJSON(w, http.StatusOK, HealthResponse{State: stateUnavailable, ObservedAt: time.Now().UTC()})
 		return
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		writeJSON(w, http.StatusOK, HealthResponse{State: upstreamState(response.StatusCode)})
+		writeJSON(w, http.StatusOK, HealthResponse{State: upstreamState(response.StatusCode), ObservedAt: time.Now().UTC()})
 		return
 	}
 	var payload struct {
 		Status string `json:"status"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		writeJSON(w, http.StatusOK, HealthResponse{State: stateUnavailable})
+		writeJSON(w, http.StatusOK, HealthResponse{State: stateUnavailable, ObservedAt: time.Now().UTC()})
 		return
 	}
 	state := "degraded"
 	if strings.EqualFold(payload.Status, "ok") {
 		state = "healthy"
 	}
-	writeJSON(w, http.StatusOK, HealthResponse{State: state, Status: payload.Status})
+	writeJSON(w, http.StatusOK, HealthResponse{State: state, Status: payload.Status, ObservedAt: time.Now().UTC()})
 }
 
 func (h *consoleHandler) tools(w http.ResponseWriter, r *http.Request) {
@@ -59,24 +59,24 @@ func (h *consoleHandler) tools(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := h.upstreamRequest(r, ctx, bridgeclient.TargetMCPServer, "/apis/erpbridge.io/v1/tools")
 	if err != nil {
-		writeJSON(w, http.StatusOK, ToolListResponse{State: stateUnavailable, Items: []ToolProjection{}})
+		writeJSON(w, http.StatusOK, ToolListResponse{State: stateUnavailable, Items: []ToolProjection{}, ObservedAt: time.Now().UTC()})
 		return
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		writeJSON(w, http.StatusOK, ToolListResponse{State: upstreamState(response.StatusCode), Items: []ToolProjection{}})
+		writeJSON(w, http.StatusOK, ToolListResponse{State: upstreamState(response.StatusCode), Items: []ToolProjection{}, ObservedAt: time.Now().UTC()})
 		return
 	}
 	var tools []mcp.Tool
 	if err := json.NewDecoder(response.Body).Decode(&tools); err != nil {
-		writeJSON(w, http.StatusOK, ToolListResponse{State: stateUnavailable, Items: []ToolProjection{}})
+		writeJSON(w, http.StatusOK, ToolListResponse{State: stateUnavailable, Items: []ToolProjection{}, ObservedAt: time.Now().UTC()})
 		return
 	}
 	items := make([]ToolProjection, 0, len(tools))
 	for _, tool := range tools {
 		items = append(items, projectTool(tool))
 	}
-	writeJSON(w, http.StatusOK, ToolListResponse{State: stateAvailable, Items: items})
+	writeJSON(w, http.StatusOK, ToolListResponse{State: stateAvailable, Items: items, ObservedAt: time.Now().UTC()})
 }
 
 func (h *consoleHandler) serverInfo(w http.ResponseWriter, r *http.Request) {
@@ -89,20 +89,21 @@ func (h *consoleHandler) serverInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := h.upstreamRequest(r, ctx, bridgeclient.TargetMCPServer, "/api/info")
 	if err != nil {
-		writeJSON(w, http.StatusOK, ServerInfoResponse{State: stateUnavailable})
+		writeJSON(w, http.StatusOK, ServerInfoResponse{State: stateUnavailable, ObservedAt: time.Now().UTC()})
 		return
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		writeJSON(w, http.StatusOK, ServerInfoResponse{State: upstreamState(response.StatusCode)})
+		writeJSON(w, http.StatusOK, ServerInfoResponse{State: upstreamState(response.StatusCode), ObservedAt: time.Now().UTC()})
 		return
 	}
 	var info ServerInfoResponse
 	if err := json.NewDecoder(response.Body).Decode(&info); err != nil {
-		writeJSON(w, http.StatusOK, ServerInfoResponse{State: stateUnavailable})
+		writeJSON(w, http.StatusOK, ServerInfoResponse{State: stateUnavailable, ObservedAt: time.Now().UTC()})
 		return
 	}
 	info.State = stateAvailable
+	info.ObservedAt = time.Now().UTC()
 	writeJSON(w, http.StatusOK, info)
 }
 
@@ -116,31 +117,37 @@ func (h *consoleHandler) cache(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := h.upstreamRequest(r, ctx, bridgeclient.TargetServer, "/api/cache/stats")
 	if err != nil {
-		writeJSON(w, http.StatusOK, CacheResponse{State: stateUnavailable})
+		writeJSON(w, http.StatusOK, CacheResponse{State: stateUnavailable, ObservedAt: time.Now().UTC()})
 		return
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		writeJSON(w, http.StatusOK, CacheResponse{State: upstreamState(response.StatusCode)})
+		writeJSON(w, http.StatusOK, CacheResponse{State: upstreamState(response.StatusCode), ObservedAt: time.Now().UTC()})
 		return
 	}
 	var payload struct {
 		Stats cache.Stats `json:"stats"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		writeJSON(w, http.StatusOK, CacheResponse{State: stateUnavailable})
+		writeJSON(w, http.StatusOK, CacheResponse{State: stateUnavailable, ObservedAt: time.Now().UTC()})
 		return
 	}
 	writeJSON(w, http.StatusOK, CacheResponse{
-		State: stateAvailable,
-		Stats: &CacheStatsProjection{ExactKeys: payload.Stats.ExactKeys, RedisMemory: payload.Stats.RedisMemory},
+		State:      stateAvailable,
+		Stats:      &CacheStatsProjection{ExactKeys: payload.Stats.ExactKeys, RedisMemory: payload.Stats.RedisMemory},
+		ObservedAt: time.Now().UTC(),
 	})
 }
 
 func (h *consoleHandler) contextForRequest(w http.ResponseWriter, r *http.Request) (config.Context, bool) {
 	name := r.URL.Query().Get("context")
-	ctx, ok := h.context(name)
-	if !ok {
+	cfg, _, _, _ := h.configSnapshot(refreshRequested(r))
+	if cfg == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "config_unavailable", "configured contexts are temporarily unavailable")
+		return config.Context{}, false
+	}
+	ctx, err := cfg.ResolveContext(name)
+	if err != nil {
 		writeAPIError(w, http.StatusNotFound, "context_not_found", "the selected context is not configured")
 		return config.Context{}, false
 	}

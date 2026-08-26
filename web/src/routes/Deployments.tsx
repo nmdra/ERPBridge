@@ -26,22 +26,62 @@ function stateTone(
   return "neutral";
 }
 
+function formatUpdated(value?: string) {
+  if (!value) return "Not refreshed yet";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Refresh time unknown"
+    : `Updated ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
 export function Deployments({
   contexts,
   error,
+  lastUpdated,
+  onRefresh,
+  stale = false,
 }: {
   contexts: ContextProjection[] | null;
   error: string | null;
+  lastUpdated?: string;
+  onRefresh?: () => void;
+  stale?: boolean;
 }) {
   return (
     <div className="space-y-6">
       <PageHeader
+        actions={
+          onRefresh ? (
+            <button
+              className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={onRefresh}
+              type="button"
+            >
+              Refresh
+            </button>
+          ) : null
+        }
         description="Choose a configured bridgectl context to scope the read-only console. Context changes stay in this browser session."
         eyebrow="Inventory"
         title="Contexts"
       />
+      <p className="text-xs text-muted-foreground" role="status">
+        {stale ? "Showing the last valid context snapshot · " : ""}
+        {formatUpdated(lastUpdated)}
+      </p>
       {error ? (
-        <EmptyState title="Contexts are unavailable" message={error} />
+        <div className="space-y-3">
+          <EmptyState title="Contexts are unavailable" message={error} />
+          {onRefresh ? (
+            <button
+              className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              onClick={onRefresh}
+              type="button"
+            >
+              Retry
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {!error && !contexts?.length ? (
         <EmptyState

@@ -7,6 +7,7 @@ import { Card, CardContent } from "../components/ui/card";
 import { MetricCard } from "../components/ui/metric-card";
 import { Skeleton } from "../components/ui/skeleton";
 import { StateBanner } from "../components/ui/state-banner";
+import { Freshness } from "../components/ui/freshness";
 import {
   useCache,
   useDeployment,
@@ -58,7 +59,7 @@ export function Overview({ contextName }: { contextName: string }) {
     );
   }
 
-  if (deployment.error || !deployment.data) {
+  if (!deployment.data) {
     return (
       <div className="space-y-6">
         <PageHeader
@@ -85,17 +86,46 @@ export function Overview({ contextName }: { contextName: string }) {
   const toolRate = (metrics.data?.rates ?? [])
     .filter((sample) => sample.name === "mcp_tool_invocations_total")
     .reduce((total, sample) => total + sample.perSecond, 0);
-  const hasStaleData = Boolean(health.stale || cache.stale || metrics.stale);
+  const hasStaleData = Boolean(
+    deployment.stale ||
+      health.stale ||
+      cache.stale ||
+      metrics.stale ||
+      serverInfo.stale ||
+      tools.stale,
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
-        actions={<StatusBadge label="Read-only monitoring" tone="info" />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge label="Read-only monitoring" tone="info" />
+            <button
+              className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+              onClick={() => {
+                deployment.refresh();
+                health.refresh();
+                serverInfo.refresh();
+                cache.refresh();
+                tools.refresh();
+                metrics.refresh();
+              }}
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+        }
         description={`Monitor ${deployment.data.context.name} without changing its persistent bridgectl configuration.`}
         eyebrow="Monitor"
         title="Overview"
       />
 
+      <Freshness
+        lastUpdated={deployment.lastUpdated}
+        stale={deployment.stale}
+      />
       <StateBanner
         message={
           health.data?.status === "ok"

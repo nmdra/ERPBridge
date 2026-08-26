@@ -42,7 +42,8 @@ local changes without changing persistent CLI configuration.
 The Overview dashboard starts with context health and freshness, then shows
 active tools, cache keys, server version, current-session rates, and safe
 investigation links. Partial refresh failures retain the last safe observation
-and identify it as stale.
+and identify it as stale. Inventory and topology pages expose Refresh and Retry
+controls and show the last observation time for their bounded snapshots.
 
 The console uses green as its brand accent and keeps success, warning, danger,
 and information colors semantically distinct. It defaults to light mode and
@@ -152,7 +153,9 @@ URLs or credentials.
 
 The console returns stable JSON error states for missing contexts, unavailable
 endpoints, unauthorized reads, timeouts, malformed upstream data, and bounded
-response failures. It does not return an upstream error body. Logs, tools, and
+response failures. It does not return an upstream error body. Frontend requests
+preserve the safe BFF error code and message for retry guidance without displaying
+arbitrary response bodies. Logs, tools, and
 plugins use shared search/filter surfaces and distinguish empty results from
 filtered results. The Tools page renders the safe tool projection as a
 filterable table. Tool names link to a read-only manifest page with descriptive

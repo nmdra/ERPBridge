@@ -183,11 +183,13 @@ export function AppShell({
   contexts,
   selectedContext,
   onContextChange,
+  onRefresh,
 }: {
   children: ReactNode;
   contexts: ContextProjection[] | null;
   selectedContext: string;
   onContextChange: (context: string) => void;
+  onRefresh?: () => void;
 }) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
@@ -323,6 +325,15 @@ export function AppShell({
                   <option value="">Loading contexts…</option>
                 )}
               </select>
+              {onRefresh ? (
+                <Button
+                  aria-label="Refresh contexts"
+                  onClick={onRefresh}
+                  variant="secondary"
+                >
+                  Refresh
+                </Button>
+              ) : null}
               <ThemeToggle />
             </div>
           </header>

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Reload Console context and inventory snapshots with browser-session context
+  persistence, stale-data retention, and retry/refresh controls
 - Return bounded structured control-plane errors with stable codes and safe
   remediation messages across the server and CLI
 - Generate one reviewable YAML tool manifest with deterministic intent metadata,

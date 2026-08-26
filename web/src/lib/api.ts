@@ -37,6 +37,39 @@ function readCapability() {
   return capability;
 }
 
+export class ConsoleAPIError extends Error {
+  readonly code: string | null;
+  readonly status: number;
+
+  constructor(message: string, status: number, code: string | null = null) {
+    super(message);
+    this.name = "ConsoleAPIError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+async function responseError(
+  response: Response,
+  fallback: string,
+): Promise<ConsoleAPIError> {
+  let code: string | null = null;
+  let message = fallback;
+  try {
+    const body = (await response.json()) as {
+      error?: unknown;
+      message?: unknown;
+    };
+    if (typeof body.error === "string") code = body.error;
+    if (typeof body.message === "string" && body.message.trim()) {
+      message = body.message;
+    }
+  } catch {
+    // Do not surface arbitrary HTML or upstream response bodies.
+  }
+  return new ConsoleAPIError(message, response.status, code);
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
@@ -48,7 +81,10 @@ export async function apiFetch<T>(
   }
   const response = await fetch(path, { ...init, headers });
   if (!response.ok) {
-    throw new Error(`Console request failed with status ${response.status}`);
+    throw await responseError(
+      response,
+      `Console request failed with status ${response.status}`,
+    );
   }
   return (await response.json()) as T;
 }
@@ -69,7 +105,10 @@ export async function streamLogEvents(
   }
   const response = await fetch(path, { headers, signal });
   if (!response.ok) {
-    throw new Error(`Console stream failed with status ${response.status}`);
+    throw await responseError(
+      response,
+      `Console stream failed with status ${response.status}`,
+    );
   }
   if (!response.body) {
     throw new Error("Console stream has no body");

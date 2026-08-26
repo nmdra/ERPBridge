@@ -11,6 +11,7 @@ import { AlertTriangle, Filter, X } from "lucide-react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Card, CardContent } from "../components/ui/card";
 import { EmptyState } from "../components/ui/empty-state";
+import { Freshness } from "../components/ui/freshness";
 import { Skeleton } from "../components/ui/skeleton";
 import { TopologyList } from "../components/topology/TopologyList";
 import {
@@ -486,13 +487,22 @@ export function Topology({ contextName }: { contextName: string }) {
           eyebrow="Diagnose"
           title="Integration topology"
         />
-        <EmptyState
-          title="Topology is unavailable"
-          message={
-            topology.error ??
-            "The selected context has no readable tool inventory."
-          }
-        />
+        <div className="space-y-3">
+          <EmptyState
+            title="Topology is unavailable"
+            message={
+              topology.error ??
+              "The selected context has no readable tool inventory."
+            }
+          />
+          <button
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            onClick={topology.refresh}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -500,10 +510,20 @@ export function Topology({ contextName }: { contextName: string }) {
   return (
     <div className="space-y-6">
       <PageHeader
+        actions={
+          <button
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            onClick={topology.refresh}
+            type="button"
+          >
+            Refresh
+          </button>
+        }
         description="Investigate safe relationships across tools, APIs, bindings, plugins, and unresolved endpoints."
         eyebrow="Diagnose"
         title="Integration topology"
       />
+      <Freshness lastUpdated={topology.lastUpdated} stale={topology.stale} />
       <Card>
         <CardContent className="space-y-4">
           <div
