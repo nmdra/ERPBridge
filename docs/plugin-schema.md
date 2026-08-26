@@ -48,6 +48,11 @@ or raw credential field from changing the authentication behavior.
 A credentialed plugin requires `API_AUTH_TOKEN` and an authenticated admin
 request. Set `PLUGIN_ENDPOINT_ALLOWLIST` to comma-separated exact `host:port`
 values. The plugin endpoint must match one value before ERPBridge stores it.
+A `raw_response` binding always requires the same configured API token, an
+authenticated admin control-plane request, an active HTTP-backed tool, and an
+explicit object-shaped output schema. Its plugin endpoint must be allowlisted
+even when the plugin has no authentication. Reconciliation leaves a raw binding
+inactive when these requirements are missing.
 
 ## PluginBinding
 
@@ -76,7 +81,8 @@ spec:
 The control plane accepts `raw_response` and `after_response` phases. Raw
 bindings run before response normalization; after-response bindings run after a
 successful tool result has passed its output schema. Active bindings use
-ascending priority order within each phase. The default failure policy is
+ascending priority order within each phase. A raw binding must target an
+HTTP-backed tool with an explicit object-shaped final output schema. The default failure policy is
 `continue`; `fail` returns a generic tool error.
 Plugin resources are versioned declarative records. Bindings are named
 declarative records that reference exact plugin and tool versions. A soft delete

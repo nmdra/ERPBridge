@@ -190,6 +190,54 @@ func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func pluginEndpointAllowlisted(endpoint string) bool {
+	for _, allowed := range strings.Split(os.Getenv("PLUGIN_ENDPOINT_ALLOWLIST"), ",") {
+		if strings.EqualFold(strings.TrimSpace(allowed), endpoint) {
+			return true
+		}
+	}
+	return false
+}
+
+func rawBindingRuntimeAdmission(plugin *Plugin, tool *Tool) error {
+	if plugin == nil || tool == nil {
+		return errors.New("raw response binding references are unavailable")
+	}
+	if strings.TrimSpace(os.Getenv(authTokenEnv)) == "" {
+		return fmt.Errorf("raw response bindings require %s to be configured", authTokenEnv)
+	}
+	if tool.Handler != nil || tool.Spec.Execution.Type != "http" || strings.TrimSpace(tool.Spec.Execution.Endpoint) == "" {
+		return errors.New("raw response bindings require an active HTTP tool")
+	}
+	if !hasObjectOutputSchema(tool) {
+		return errors.New("raw response bindings require an object output schema")
+	}
+	endpoint, err := pluginEndpointHostPort(plugin.Spec.Endpoint)
+	if err != nil {
+		return fmt.Errorf("normalize plugin endpoint: %w", err)
+	}
+	if !pluginEndpointAllowlisted(endpoint) {
+		return fmt.Errorf("plugin endpoint %q is not in PLUGIN_ENDPOINT_ALLOWLIST", endpoint)
+	}
+	return nil
+}
+
+func hasObjectOutputSchema(tool *Tool) bool {
+	if tool == nil || tool.Spec.OutputSchema == nil {
+		return false
+	}
+	encoded, err := json.Marshal(*tool.Spec.OutputSchema)
+	if err != nil {
+		return false
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(encoded, &schema); err != nil {
+		return false
+	}
+	value, ok := schema["type"].(string)
+	return ok && value == schemaTypeObject
+}
+
 func credentialedPluginAdmission(ctx context.Context, plugin *Plugin) error {
 	if plugin.Spec.Auth == nil {
 		return nil
@@ -205,10 +253,8 @@ func credentialedPluginAdmission(ctx context.Context, plugin *Plugin) error {
 	if err != nil {
 		return fmt.Errorf("normalize plugin endpoint: %w", err)
 	}
-	for _, allowed := range strings.Split(os.Getenv("PLUGIN_ENDPOINT_ALLOWLIST"), ",") {
-		if strings.EqualFold(strings.TrimSpace(allowed), endpoint) {
-			return nil
-		}
+	if pluginEndpointAllowlisted(endpoint) {
+		return nil
 	}
 	return fmt.Errorf("plugin endpoint %q is not in PLUGIN_ENDPOINT_ALLOWLIST", endpoint)
 }
@@ -230,7 +276,7 @@ func (s *Server) handlePluginBindingApply(w http.ResponseWriter, r *http.Request
 	s.pluginLifecycleMu.Lock()
 	defer s.pluginLifecycleMu.Unlock()
 
-	if err := s.validatePluginBindingReferences(&binding); err != nil {
+	if err := s.validatePluginBindingReferences(r.Context(), &binding); err != nil {
 		http.Error(w, "invalid plugin binding: "+err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -336,7 +382,7 @@ func (s *Server) handlePluginBindingDelete(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) validatePluginBindingReferences(binding *PluginBinding) error {
+func (s *Server) validatePluginBindingReferences(ctx context.Context, binding *PluginBinding) error {
 	plugin, err := s.store.GetPlugin(binding.Spec.PluginRef.Name, binding.Spec.PluginRef.Version)
 	if err != nil {
 		return fmt.Errorf("plugin %s@%s is not active", binding.Spec.PluginRef.Name, binding.Spec.PluginRef.Version)
@@ -350,6 +396,15 @@ func (s *Server) validatePluginBindingReferences(binding *PluginBinding) error {
 	}
 	if !tool.Metadata.IsActive {
 		return fmt.Errorf("tool %s@%s is not active", binding.Spec.ToolRef.Name, binding.Spec.ToolRef.Version)
+	}
+	if binding.Spec.Phase == PluginPhaseRawResponse {
+		if err := rawBindingRuntimeAdmission(plugin, tool); err != nil {
+			return err
+		}
+		identity, ok := CallerIdentityFromContext(ctx)
+		if !ok || !identity.IsAdmin {
+			return errors.New("raw response bindings require an authenticated admin")
+		}
 	}
 	return nil
 }

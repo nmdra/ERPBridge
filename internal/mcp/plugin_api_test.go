@@ -280,6 +280,85 @@ func TestPluginAPI_ReconciliationFailureReturnsPending(t *testing.T) {
 	require.Empty(t, s.pluginRegistry.BindingsForTool(pluginTestToolName, testVersion100))
 }
 
+func TestPluginBindingAPI_RawAdmissionRequiresSecureHTTPContract(t *testing.T) {
+	newServer := func(t *testing.T) *Server {
+		t.Helper()
+		s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+		schema := any(map[string]any{"type": schemaTypeObject, "properties": map[string]any{"text": map[string]any{"type": schemaTypeString}}})
+		tool := &Tool{
+			Metadata: Metadata{Name: pluginTestToolName, Version: testVersion100, IsActive: true},
+			Spec:     ToolSpec{Execution: Execution{Type: "http", Method: http.MethodGet, Endpoint: "/invoice"}, OutputSchema: &schema},
+		}
+		require.NoError(t, s.store.Save(tool))
+		plugin := validPluginForTest("http://plugin.example.test")
+		require.NoError(t, s.store.SavePlugin(&plugin))
+		s.Reconcile(context.Background())
+		return s
+	}
+	newBinding := func() PluginBinding {
+		binding := validPluginBindingForTest()
+		binding.Spec.Phase = PluginPhaseRawResponse
+		return binding
+	}
+	apply := func(t *testing.T, s *Server, binding PluginBinding, admin bool) *httptest.ResponseRecorder {
+		t.Helper()
+		body, err := json.Marshal(binding)
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/apis/erpbridge.io/v1/pluginbindings", bytes.NewReader(body))
+		req = req.WithContext(WithCallerIdentity(req.Context(), CallerIdentity{IsAdmin: admin}))
+		recorder := httptest.NewRecorder()
+		s.handlePluginBindingAPI(recorder, req)
+		return recorder
+	}
+
+	t.Run("requires configured API token", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+		s := newServer(t)
+		require.Equal(t, http.StatusUnprocessableEntity, apply(t, s, newBinding(), true).Code)
+	})
+	t.Run("requires authenticated admin", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "admin-token")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+		s := newServer(t)
+		require.Equal(t, http.StatusUnprocessableEntity, apply(t, s, newBinding(), false).Code)
+	})
+	t.Run("requires endpoint allowlist", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "admin-token")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "")
+		s := newServer(t)
+		require.Equal(t, http.StatusUnprocessableEntity, apply(t, s, newBinding(), true).Code)
+	})
+	t.Run("accepts authenticated allowlisted raw binding", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "admin-token")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+		s := newServer(t)
+		response := apply(t, s, newBinding(), true)
+		require.Equal(t, http.StatusCreated, response.Code)
+		require.Len(t, s.pluginRegistry.RuntimeBindingsForToolPhase(pluginTestToolName, testVersion100, PluginPhaseRawResponse), 1)
+	})
+	t.Run("rejects non-http tool", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "admin-token")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+		s := newServer(t)
+		tool, err := s.store.Get(pluginTestToolName, testVersion100)
+		require.NoError(t, err)
+		tool.Spec.Execution.Type = "native"
+		require.NoError(t, s.store.Save(tool))
+		require.Equal(t, http.StatusUnprocessableEntity, apply(t, s, newBinding(), true).Code)
+	})
+	t.Run("rejects missing output schema", func(t *testing.T) {
+		t.Setenv(authTokenEnv, "admin-token")
+		t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+		s := newServer(t)
+		tool, err := s.store.Get(pluginTestToolName, testVersion100)
+		require.NoError(t, err)
+		tool.Spec.OutputSchema = nil
+		require.NoError(t, s.store.Save(tool))
+		require.Equal(t, http.StatusUnprocessableEntity, apply(t, s, newBinding(), true).Code)
+	})
+}
+
 func TestPluginAPI_HardDeleteConflictAndStoreErrors(t *testing.T) {
 	s := newPluginAPITestServer(t, nil)
 	plugin := validPluginForTest("http://plugin.example.test")

@@ -74,6 +74,19 @@ func (r *PluginRegistry) SnapshotBindings() []*PluginBinding {
 	return result
 }
 
+// RuntimeBindingsForToolPhase returns active bindings for one exact tool and
+// phase while preserving the registry's priority/name ordering.
+func (r *PluginRegistry) RuntimeBindingsForToolPhase(name, version, phase string) []*ActivePluginBinding {
+	values := r.RuntimeBindingsForTool(name, version)
+	filtered := make([]*ActivePluginBinding, 0, len(values))
+	for _, value := range values {
+		if value != nil && value.Binding != nil && value.Binding.Spec.Phase == phase {
+			filtered = append(filtered, value)
+		}
+	}
+	return filtered
+}
+
 // RuntimeBindingsForTool returns copies of active bindings and their resolved
 // plugin resources for an exact tool.
 func (r *PluginRegistry) RuntimeBindingsForTool(name, version string) []*ActivePluginBinding {
@@ -99,14 +112,6 @@ func buildPluginBindingSnapshot(plugins []*Plugin, bindings []*PluginBinding, to
 		}
 		activePlugins[plugin.Metadata.Name+"@"+plugin.Metadata.Version] = clonePlugin(plugin)
 	}
-	activeTools := make(map[string]struct{}, len(tools))
-	for _, tool := range tools {
-		if tool == nil || !tool.Metadata.IsActive {
-			continue
-		}
-		activeTools[tool.Metadata.Name+"@"+tool.Metadata.Version] = struct{}{}
-	}
-
 	snapshot := make(map[string][]*ActivePluginBinding)
 	for _, binding := range bindings {
 		if binding == nil || !binding.Metadata.IsActive {
@@ -118,7 +123,11 @@ func buildPluginBindingSnapshot(plugins []*Plugin, bindings []*PluginBinding, to
 			continue
 		}
 		toolKey := binding.ToolKey()
-		if _, ok := activeTools[toolKey]; !ok {
+		tool, ok := findActiveTool(tools, toolKey)
+		if !ok || tool == nil {
+			continue
+		}
+		if binding.Spec.Phase == PluginPhaseRawResponse && rawBindingRuntimeAdmission(plugin, tool) != nil {
 			continue
 		}
 		snapshot[toolKey] = append(snapshot[toolKey], &ActivePluginBinding{
@@ -136,6 +145,15 @@ func buildPluginBindingSnapshot(plugins []*Plugin, bindings []*PluginBinding, to
 		})
 	}
 	return snapshot
+}
+
+func findActiveTool(tools []*Tool, key string) (*Tool, bool) {
+	for _, tool := range tools {
+		if tool != nil && tool.Metadata.IsActive && tool.Metadata.Name+"@"+tool.Metadata.Version == key {
+			return tool, true
+		}
+	}
+	return nil, false
 }
 
 func cloneActivePluginBinding(value *ActivePluginBinding) *ActivePluginBinding {

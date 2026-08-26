@@ -240,7 +240,7 @@ version.
   tests fail, then run `go test ./internal/connector ./internal/mcp -run 'Test(Client|Tool|ERPResponse)' -count=1`;
   **Commit:** `refactor(mcp): separate ERP response capture from normalization`.)
 
-- [ ] **Task 3: Add phase-aware lookup and secure raw-binding admission.** Write
+- [x] **Task 3: Add phase-aware lookup and secure raw-binding admission.** Write
   failing registry and API tests first. Add
   `RuntimeBindingsForToolPhase(name, version, phase)`, preserve immutable
   priority/name ordering inside each phase, and keep existing all-phase
