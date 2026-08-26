@@ -206,7 +206,7 @@ func rawBindingRuntimeAdmission(plugin *Plugin, tool *Tool) error {
 	if strings.TrimSpace(os.Getenv(authTokenEnv)) == "" {
 		return fmt.Errorf("raw response bindings require %s to be configured", authTokenEnv)
 	}
-	if tool.Handler != nil || tool.Spec.Execution.Type != "http" || strings.TrimSpace(tool.Spec.Execution.Endpoint) == "" {
+	if tool.Handler != nil || tool.Spec.Execution.Type != pluginSchemeHTTP || strings.TrimSpace(tool.Spec.Execution.Endpoint) == "" {
 		return errors.New("raw response bindings require an active HTTP tool")
 	}
 	if !hasObjectOutputSchema(tool) {
