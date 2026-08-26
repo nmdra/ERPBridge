@@ -103,11 +103,23 @@ Convert the pinned MockERP OpenAPI spec into MCP tool schemas:
 make generate-tools
 ```
 
-The command prints one YAML sequence containing all generated tools to stdout. `bridgectl tool apply` accepts that file directly, so you can keep it as one manifest file.
+The target creates one bounded YAML draft stream, applies that stream once, and
+removes both temporary files when it exits. It does not create `schemas/`,
+per-tool JSON files, or another generated artifact. Set `MOCK_ERP_VERSION` and
+`MOCK_ERP_OPENAPI_URL` together when upgrading the pinned MockERP contract.
 
-> **Note:** `make generate-tools` fetches the OpenAPI file from the pinned
-> MockERP release. The `schemas/` directory is not tracked by git. Set
-> `MOCK_ERP_VERSION` and `MOCK_ERP_OPENAPI_URL` together when upgrading.
+For a review-only draft, write the explicit CLI output seam to a temporary file
+and remove it after review or apply:
+
+```bash
+manifest=$(mktemp "${TMPDIR:-/tmp}/erpbridge-draft.XXXXXX.yaml")
+trap 'rm -f "$manifest"' EXIT
+./bridgectl tool generate --api erp --openapi /path/to/openapi.yaml -o yaml > "$manifest"
+./bridgectl tool apply -f "$manifest"
+```
+
+Generated output is a draft. Complete and review its intent metadata, schema,
+security, and cache policy before applying it.
 
 ---
 
@@ -115,19 +127,19 @@ The command prints one YAML sequence containing all generated tools to stdout. `
 
 Upload your schemas to the ERPBridge server.
 
-**Apply a generated manifest or a single tool:**
+**Apply a reviewed manifest:**
+
+Keep reviewed, applied manifests as the single source of truth under
+`manifests/<module>/`. For example:
 
 ```bash
-./bridgectl tool apply -f schemas/erp/generated.yaml
+./bridgectl tool apply -f manifests/erp/tools.yaml
 ```
 
-The command also accepts one JSON/YAML tool or a directory of tool files. It applies each YAML sequence item and each YAML document separately.
-
-**Apply all tools in a directory (recursive):**
-
-```bash
-./bridgectl tool apply -f schemas/erp/
-```
+The command accepts one YAML sequence or multi-document YAML stream and applies
+each tool definition once. It also accepts one JSON/YAML tool or a directory
+of reviewed manifest files. Do not retain generated per-tool JSON files or use
+`schemas/` as a second artifact directory.
 
 ---
 
@@ -193,7 +205,7 @@ Completely removes the tool from the SQLite database.
 > **Note:** To restore a soft-deleted (hidden) tool, apply its schema again:
 >
 > ```bash
-> ./bridgectl tool apply -f schemas/erp/list_items.json
+> ./bridgectl tool apply -f manifests/erp/tools.yaml
 > ```
 
 ---
@@ -311,11 +323,11 @@ make build
 # Register API (make generate-tools also performs this step)
 ./bridgectl api register --name erp --url http://localhost:8081 --module erp --description "..."
 
-# Fetch the pinned OpenAPI contract and generate schemas
+# Generate one temporary draft, apply it once, and clean it up
 make generate-tools
 
-# Apply all tools
-./bridgectl tool apply -f schemas/erp/
+# Apply the reviewed source manifest
+./bridgectl tool apply -f manifests/erp/tools.yaml
 
 # Verify tools are READY
 ./bridgectl tool get

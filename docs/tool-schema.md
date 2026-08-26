@@ -29,32 +29,46 @@ spec:
 ## 🔑 Field Definitions
 
 ### `metadata`
+
 Identity and grouping information.
+
 - **`name`**: (String) Unique identifier. Use **intent-based names** (e.g., `list_employees`) instead of technical ones (e.g., `get_resource_employee`).
 - **`version`**: (String) SemVer version (e.g., `1.0.0`).
 - **`module`**: (String) Logical grouping for access control and organization.
 
 ### `spec.description`
+
 High-signal information to help the LLM select the correct tool.
+
 - **`short`**: (String) Concise summary of what the tool does.
 - **`whenToUse`**: (Array) List of scenarios where this tool is appropriate.
 - **`whenNotToUse`**: (Array) List of similar scenarios where you must not use this tool.
 - **`examples`**: (Array) Sample user queries that trigger this tool.
 
+`bridgectl tool generate` derives `whenToUse` and `examples` from the
+OpenAPI operation summary or description. Treat these values as draft evidence
+and review them before applying the manifest.
+
 ### `spec.inputSchema`
+
 Standard JSON Schema defining the arguments. **Strict typing is mandatory.**
+
 - Use `properties` to define fields and `required` to enforce them.
 - **Avoid "filters" strings**: Break down complex query requirements into individual typed properties.
 
 ### `spec.execution`
+
 Technical mapping to the ERP API.
+
 - **`method`**: (String) `GET`, `POST`, `PUT`, `DELETE`.
 - **`endpoint`**: (String) The ERP API URL path.
 - **`mapping`**: (Map) Optional. Maps LLM arg names to ERP parameter names.
 - **`responsePath`**: (String) JSON key to extract from the ERP response (e.g., `"data"` or `"message"`).
 
 ### `spec.security`
+
 Authentication strategy.
+
 - **`authType`**: `api-key`, `bearer`, or `basic`.
 - **`credentialRef`**: The name of the environment variable containing the secret. **Never embed raw secrets here.**
 - **`allowedRoles`**: (Optional array) Roles that may call this tool. Each role must match `[a-z][a-z0-9_-]{0,63}`; the list must contain unique values and no more than 32 roles.
@@ -112,10 +126,24 @@ spec:
     flushOn: ["list_purchase_invoices"] # Flush list cache when a new one is created
 ```
 
+Generated GET and HEAD tools default to a shared read-only cache with a
+five-minute TTL. Generated write methods default to `enabled: false`; review
+and change these values only when the operation is safe to cache.
+
+### Generated drafts and reviewed manifests
+
+Generation is pure: `bridgectl tool generate` writes the manifest only to its
+selected output stream. The generator has an explicit `Save` method for callers
+that intentionally persist a single JSON tool, but normal onboarding must not
+use that seam. Keep reviewed manifests under `manifests/<module>/`; do not
+create competing generated JSON files or use `schemas/` as a generated source.
+
 ---
 
 ## 🚀 Transitioning from V1
+
 If you have old schemas, use `bridgectl tool generate` to convert them, or manually update the following:
+
 1. Wrap the schema in `spec`.
 2. Move `name`, `version`, `module` to `metadata`.
 3. Separate `endpoint` into `execution` and `security`.

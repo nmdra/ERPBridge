@@ -46,12 +46,20 @@ No. The cache uses a bounded in-memory LRU when `REDIS_URL` is empty. Set `CACHE
 
 ### Where do tool schemas come from?
 
-The `schemas/` directory is not tracked by git. Generate the schemas from the OpenAPI spec of your ERP:
+`make generate-tools` creates one bounded YAML draft stream, applies it once,
+and removes its temporary files. It does not create per-tool JSON files or a
+second generated directory.
+
+Reviewed manifests are the single source of truth. Keep them under
+`manifests/<module>/` and apply the reviewed file:
 
 ```bash
 make generate-tools
-bridgectl tool apply -f schemas/erp/
+bridgectl tool apply -f manifests/erp/tools.yaml
 ```
+
+For a review-only draft, use `bridgectl tool generate --api <name> -o yaml`
+and save its stdout explicitly to a temporary file. Remove the file after use.
 
 ### How do I update a tool?
 
@@ -69,10 +77,10 @@ The tool stays in the database. It no longer appears in `tools/list`.
 
 ### How do I restore a soft-deleted tool?
 
-Apply the schema again:
+Apply the reviewed manifest again:
 
 ```bash
-bridgectl tool apply -f schemas/erp/<name>.json
+bridgectl tool apply -f manifests/erp/tools.yaml
 ```
 
 ### How do I permanently remove a tool?

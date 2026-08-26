@@ -322,7 +322,7 @@ archived as completed before this plan is promoted.
     not forward credentials; root, `/mcp/`, invalid-path, and unreachable
     control-plane cases return actionable errors.
 
-- [ ] **Task 4: Establish one generated-manifest source of truth.**
+- [x] **Task 4: Establish one generated-manifest source of truth.**
   - Remove implicit generator file writes and retain an explicit save/output
     seam. Change `make generate-tools` and onboarding to generate one bounded
     draft stream, apply that file once, and clean temporary artifacts. Add

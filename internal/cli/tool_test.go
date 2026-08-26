@@ -3,9 +3,12 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/nmdra/ERPBridge/internal/config"
@@ -100,6 +103,46 @@ func TestToolDeleteCmd(t *testing.T) {
 		err := toolDeleteCmd.RunE(toolDeleteCmd, []string{testToolName, testToolVersion})
 		require.NoError(t, err)
 	})
+}
+
+func TestToolApplyGeneratedYAMLFileExactlyOnce(t *testing.T) {
+	var requests atomic.Int32
+	var applied mcp.Tool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		require.Equal(t, http.MethodPost, r.Method)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&applied))
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer ts.Close()
+
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts:       map[string]config.Context{testContextName: {MCPServer: ts.URL}},
+	}
+	manifest := filepath.Join(t.TempDir(), "draft.yaml")
+	contents := `apiVersion: erpbridge.io/v1
+kind: MCPTool
+metadata:
+  name: list_orders
+  version: 1.0.0
+spec:
+  execution:
+    type: http
+    method: GET
+    endpoint: /orders
+`
+	require.NoError(t, os.WriteFile(manifest, []byte(contents), 0600))
+	require.NoError(t, toolApplyCmd.Flags().Set("file", manifest))
+	var output bytes.Buffer
+	toolApplyCmd.SetOut(&output)
+	toolApplyCmd.SetErr(&output)
+	defer toolApplyCmd.SetOut(nil)
+
+	require.NoError(t, toolApplyCmd.RunE(toolApplyCmd, nil))
+	require.Equal(t, int32(1), requests.Load())
+	require.Equal(t, "list_orders", applied.Metadata.Name)
+	require.Contains(t, output.String(), "list_orders@1.0.0 applied successfully")
 }
 
 func TestToolValidateCmd(t *testing.T) {

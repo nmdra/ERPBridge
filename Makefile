@@ -77,17 +77,19 @@ setup:
 	@echo "Setting up development environment..."
 	@go mod tidy
 
-# Generate and apply tools for the ERP module
+# Generate one temporary draft manifest and apply it once for the ERP module
 generate-tools: build
-	@echo "Fetching Mock ERP OpenAPI $(MOCK_ERP_VERSION)..."
-	@curl --fail --location --silent --show-error "$(MOCK_ERP_OPENAPI_URL)" -o "$(MOCK_ERP_OPENAPI_FILE)"
-	@echo "Generating and applying tools from Mock ERP OpenAPI..."
-	@# Ensure server is running or use a temporary one; this target assumes it is reachable.
-	@./$(BINARY_CLI) api register --name erp --url http://localhost:$(MOCK_ERP_PORT) --module erp --description "Mock ERP"
-	@mkdir -p schemas/erp
-	@./$(BINARY_CLI) tool generate --api erp --openapi $(MOCK_ERP_OPENAPI_FILE) -o yaml > schemas/erp/generated.yaml
-	@env BRIDGE_MCP_SERVER="$${BRIDGE_MCP_SERVER:-http://localhost:8080}" ./$(BINARY_CLI) tool apply -f schemas/erp/
-	@echo "Tools applied successfully."
+	@set -eu; \
+	openapi_file="$(MOCK_ERP_OPENAPI_FILE)"; \
+	manifest_file=$$(mktemp "$${TMPDIR:-/tmp}/erpbridge-generated.XXXXXX.yaml"); \
+	trap 'rm -f "$$openapi_file" "$$manifest_file"' EXIT HUP INT TERM; \
+	echo "Fetching Mock ERP OpenAPI $(MOCK_ERP_VERSION)..."; \
+	curl --fail --location --silent --show-error "$(MOCK_ERP_OPENAPI_URL)" -o "$$openapi_file"; \
+	echo "Generating and applying one draft manifest from Mock ERP OpenAPI..."; \
+	./$(BINARY_CLI) api register --name erp --url http://localhost:$(MOCK_ERP_PORT) --module erp --description "Mock ERP"; \
+	./$(BINARY_CLI) tool generate --api erp --openapi "$$openapi_file" -o yaml > "$$manifest_file"; \
+	env BRIDGE_MCP_SERVER="$${BRIDGE_MCP_SERVER:-http://localhost:8080}" ./$(BINARY_CLI) tool apply -f "$$manifest_file"; \
+	echo "Tools applied successfully."
 
 # Help
 help:

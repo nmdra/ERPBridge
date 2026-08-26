@@ -10,9 +10,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/mcp"
@@ -41,8 +44,9 @@ func (g *Generator) Generate(api API) (*mcp.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
+	method := strings.ToUpper(strings.TrimSpace(api.Method))
 	name := api.Name
-	// Simple intent-based naming heuristic if not already provided
+	// Simple intent-based naming heuristic if not already provided.
 	if after, ok := strings.CutPrefix(strings.ToLower(name), "get-"); ok {
 		name = "get_" + after
 	}
@@ -56,18 +60,17 @@ func (g *Generator) Generate(api API) (*mcp.Tool, error) {
 			Module:  api.Module,
 		},
 		Spec: mcp.ToolSpec{
-			Description: mcp.Description{
-				Short: api.Description,
-			},
+			Description: intentDescription(api.Description),
 			InputSchema: mcp.InputSchema{
 				Type:       "object",
 				Properties: make(map[string]mcp.Property),
 			},
 			Execution: mcp.Execution{
 				Type:     "http",
-				Method:   api.Method,
+				Method:   method,
 				Endpoint: api.URL,
 			},
+			Cache: defaultCache(method),
 			Security: mcp.Security{
 				AuthType:      api.AuthType,
 				CredentialRef: credentialRef,
@@ -75,7 +78,7 @@ func (g *Generator) Generate(api API) (*mcp.Tool, error) {
 		},
 	}
 
-	if api.Method == "GET" {
+	if method == http.MethodGet || method == http.MethodHead {
 		tool.Spec.InputSchema.Properties["page"] = mcp.Property{
 			Type:        "integer",
 			Description: "Page number for pagination",
@@ -84,7 +87,7 @@ func (g *Generator) Generate(api API) (*mcp.Tool, error) {
 	}
 
 	g.log.Info("tool generated", slog.String("tool_name", tool.Metadata.Name))
-	return tool, g.Save(tool)
+	return tool, nil
 }
 
 // GenerateFromOpenAPI parses an OpenAPI 3.0 specification from a URL or file path and generates MCP tools.
@@ -131,8 +134,33 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 	}
 
 	var tools []*mcp.Tool
-	for path, pathItem := range doc.Paths.Map() {
-		for method, op := range pathItem.Operations() {
+	seenNames := make(map[string]string)
+	paths := make([]string, 0, len(doc.Paths.Map()))
+	for path := range doc.Paths.Map() {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		pathItem := doc.Paths.Map()[path]
+		if pathItem == nil {
+			continue
+		}
+		methods := make([]string, 0, len(pathItem.Operations()))
+		for method := range pathItem.Operations() {
+			methods = append(methods, method)
+		}
+		sort.Slice(methods, func(i, j int) bool {
+			iRank, jRank := methodRank(methods[i]), methodRank(methods[j])
+			if iRank != jRank {
+				return iRank < jRank
+			}
+			return methods[i] < methods[j]
+		})
+		for _, method := range methods {
+			op := pathItem.Operations()[method]
+			if op == nil {
+				continue
+			}
 			toolName := op.OperationID
 			if toolName == "" {
 				// Sanitize path for tool name
@@ -183,18 +211,28 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 				toolName = prefix + "_" + safePath
 			}
 
-			// Clean up toolName: replace {name} with empty or identifier
-			toolName = strings.ReplaceAll(toolName, "_{name}", "")
-			toolName = strings.ReplaceAll(toolName, "{name}", "")
-			toolName = strings.ReplaceAll(toolName, " ", "_")
-			toolName = strings.TrimSuffix(toolName, "_")
-			toolName = strings.ToLower(toolName)
+			toolName = sanitizeOperationName(toolName)
+			if toolName == "" {
+				return nil, fmt.Errorf("generated tool name is empty for %s %s", strings.ToUpper(method), path)
+			}
+			source := fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+			if previous, exists := seenNames[toolName]; exists {
+				return nil, fmt.Errorf("generated tool name collision %q between %s and %s", toolName, previous, source)
+			}
+			seenNames[toolName] = source
 
 			baseURL := ""
 			if len(doc.Servers) > 0 {
 				baseURL = doc.Servers[0].URL
 			}
 
+			short := strings.TrimSpace(op.Summary)
+			if short == "" {
+				short = strings.TrimSpace(op.Description)
+			}
+			if short == "" {
+				short = fmt.Sprintf("%s %s", strings.ToUpper(method), path)
+			}
 			tool := &mcp.Tool{
 				APIVersion: "erpbridge.io/v1",
 				Kind:       "MCPTool",
@@ -204,19 +242,18 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 					Module:  api.Module,
 				},
 				Spec: mcp.ToolSpec{
-					Description: mcp.Description{
-						Short: op.Summary,
-					},
+					Description: intentDescription(short),
 					InputSchema: mcp.InputSchema{
 						Type:       "object",
 						Properties: make(map[string]mcp.Property),
 					},
 					Execution: mcp.Execution{
 						Type:         "http",
-						Method:       method,
+						Method:       strings.ToUpper(method),
 						Endpoint:     baseURL + path,
 						ResponsePath: "data",
 					},
+					Cache: defaultCache(method),
 					Security: mcp.Security{
 						AuthType:      api.AuthType,
 						CredentialRef: credentialRef,
@@ -224,14 +261,13 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 				},
 			}
 
-			if tool.Spec.Description.Short == "" {
-				tool.Spec.Description.Short = op.Description
-			}
-
 			// Map parameters
 			for _, paramRef := range op.Parameters {
+				if paramRef == nil || paramRef.Value == nil {
+					continue
+				}
 				param := paramRef.Value
-				if param == nil || param.Schema == nil {
+				if param.Schema == nil || param.Schema.Value == nil {
 					continue
 				}
 				p := mcp.Property{
@@ -250,9 +286,12 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 			// Map Request Body (for POST/PATCH)
 			if op.RequestBody != nil && op.RequestBody.Value != nil {
 				content := op.RequestBody.Value.Content.Get("application/json")
-				if content != nil && content.Schema != nil {
+				if content != nil && content.Schema != nil && content.Schema.Value != nil {
 					schema := content.Schema.Value
 					for propName, propRef := range schema.Properties {
+						if propRef == nil || propRef.Value == nil {
+							continue
+						}
 						prop := propRef.Value
 						p := mcp.Property{
 							Type:        "string",
@@ -283,15 +322,71 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 				}
 			}
 
-			if err := g.Save(tool); err != nil {
-				return nil, err
-			}
 			g.log.Info("tool generated from OpenAPI", slog.String("tool_name", toolName))
 			tools = append(tools, tool)
 		}
 	}
 
 	return tools, nil
+}
+
+const generatedReadCacheTTLSeconds = 300
+
+func defaultCache(method string) *cache.Config {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	if method == http.MethodGet || method == http.MethodHead {
+		return &cache.Config{Enabled: true, TTLSeconds: generatedReadCacheTTLSeconds, IsReadOnly: true, FlushOn: []string{}}
+	}
+	return &cache.Config{Enabled: false, TTLSeconds: 0, IsReadOnly: false, FlushOn: []string{}}
+}
+
+func intentDescription(short string) mcp.Description {
+	short = strings.TrimSpace(short)
+	description := mcp.Description{Short: short}
+	if short == "" {
+		return description
+	}
+	// These phrases are deliberately derived only from the operation summary or
+	// description. They give agents routing evidence without inventing domain
+	// details that are not present in the OpenAPI contract.
+	description.WhenToUse = []string{"Use when the user asks for: " + short}
+	description.Examples = []string{"I need help with: " + short}
+	return description
+}
+
+func methodRank(method string) int {
+	for rank, candidate := range []string{
+		http.MethodGet,
+		http.MethodHead,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodPatch,
+		http.MethodDelete,
+		http.MethodOptions,
+		http.MethodTrace,
+	} {
+		if strings.EqualFold(method, candidate) {
+			return rank
+		}
+	}
+	return 100
+}
+
+func sanitizeOperationName(name string) string {
+	var sanitized strings.Builder
+	lastUnderscore := false
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			sanitized.WriteRune(r)
+			lastUnderscore = false
+			continue
+		}
+		if !lastUnderscore && sanitized.Len() > 0 {
+			sanitized.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	return strings.Trim(sanitized.String(), "_")
 }
 
 func credentialRefForAPI(api API) (string, error) {

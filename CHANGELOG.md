@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Generate one reviewable YAML tool manifest with deterministic intent metadata,
+  method-aware cache defaults, and sanitized-name collision detection
 - Run `bridgectl api test` through an authenticated server-side probe by
   default, with bounded status summaries and an explicit `--local` legacy mode
 - Normalize MCP transport suffixes for unambiguous control-plane CLI calls and
@@ -44,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add read-only plugin and binding metadata views, clickable exact-version
   plugin detail pages, and plugin-aware topology nodes without exposing
   endpoints, credentials, or raw configuration
+
+### Changed
+
+- Keep generated tool manifests pure until explicitly written or applied; the
+  `generate-tools` workflow now applies one temporary YAML stream exactly once
+  and cleans up temporary artifacts
 
 ## [v0.4.0-alpha.1] - 2026-08-26
 

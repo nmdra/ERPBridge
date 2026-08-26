@@ -416,7 +416,7 @@ var toolGenerateCmd = &cobra.Command{
 			} else {
 				out, _ = json.MarshalIndent(tools, "", "  ")
 			}
-			fmt.Println(string(out))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 			return nil
 		}
 
@@ -432,7 +432,7 @@ var toolGenerateCmd = &cobra.Command{
 		} else {
 			out, _ = json.MarshalIndent(tool, "", "  ")
 		}
-		fmt.Println(string(out))
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 		return nil
 	},
 }
