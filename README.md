@@ -92,7 +92,14 @@ make generate-tools
    go install ./tools/bridgectl
    ```
 
-4. **Initialize Tools**:
+4. **Install the bundled agent skill** (global by default):
+
+   ```bash
+   bridgectl skill install
+   # Project-scoped: bridgectl skill install --project
+   ```
+
+5. **Initialize Tools**:
 
    ```bash
    make generate-tools

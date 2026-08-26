@@ -14,9 +14,10 @@
 ## Documentation source order
 
 The published documentation site is <https://blog.nimendra.xyz/erpbridge-docs/>.
-When published guidance may have changed, fetch its
-[`llms.txt`](https://blog.nimendra.xyz/erpbridge-docs/llms.txt) index and then
-only the focused Server, Bridgectl, or SDK pages. Use
+Its complete published documentation reference is the
+[`llms.txt`](https://blog.nimendra.xyz/erpbridge-docs/llms.txt) index. When
+published guidance may have changed, fetch that index and then only the
+focused Server, Bridgectl, or SDK pages. Use
 [`llms-full.txt`](https://blog.nimendra.xyz/erpbridge-docs/llms-full.txt) only
 when the focused pages do not answer the question.
 

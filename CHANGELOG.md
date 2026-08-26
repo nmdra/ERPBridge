@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `bridgectl skill install` with embedded `bridgectl-ops` Agent Skill files,
+  global, project-scoped, and explicit-directory destinations, and safe forced
+  replacement.
 - Add a green-accent operational console workspace with grouped navigation,
   responsive mobile navigation, context-aware overview dashboard, session-local
   metric trends, label-safe metric tables, and consistent stale/empty states

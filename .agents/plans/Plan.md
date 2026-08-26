@@ -1,1 +1,1 @@
-active/Plan-Bridgectl-Ops-Plugin-Details.md
+completed/[COMPLETED]Plan-Bridgectl-Skill-Install-and-Embed.md
