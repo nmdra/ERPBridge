@@ -11,8 +11,12 @@ Make sure that you have [Docker](https://docs.docker.com/get-docker/) and [Docke
 git clone https://github.com/nmdra/ERPBridge.git
 cd ERPBridge
 
-# Start the full stack
-docker compose up -d --build
+# Start the local development stack safely
+make dev-up
+
+# Direct Compose use requires MOCK_ERP_CREDENTIALS_JSON or
+# MOCK_ERP_CREDENTIALS_FILE to be set first.
+docker compose up --build --force-recreate -d
 ```
 
 The stack includes:
@@ -39,6 +43,7 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | `MOCK_ERP_CREDENTIALS_FILE` | Mounted JSON credential file path. | (required alternative) |
 | `REDIS_URL` | URL for the Redis cache. | `redis://redis:6379` |
 | `REDIS_HOST_PORT` | Host port for Redis. | `6379` |
+| `REDIS_INSIGHT_BIND_ADDRESS` | Address bound by RedisInsight. | `127.0.0.1` |
 | `REDIS_INSIGHT_HOST_PORT` | Host port for RedisInsight. | `8001` |
 | `DATABASE_PATH` | Path of the SQLite tool registry inside the container. | `/app/data/erpbridge.db` |
 | `RATE_LIMIT_RPS` | Per-session requests per second. | `10` |
@@ -52,9 +57,19 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 For the full list of server environment variables, see the [Environment Variables Reference](./environment-variables.md).
 
 MockERP fails closed when neither `MOCK_ERP_CREDENTIALS_JSON` nor
-`MOCK_ERP_CREDENTIALS_FILE` is configured. Use the JSON environment variable for
-local development, or mount a Docker secret and set the file path. Do not commit
-credential values to this repository.
+`MOCK_ERP_CREDENTIALS_FILE` is configured. `make dev-up` generates an ephemeral
+JSON credential pair only when neither source is set. It validates the rendered
+Compose configuration, force recreates the stack, and polls both service health
+endpoints without writing or printing the generated values. Use the JSON
+variable for local development, or mount a Docker secret and set the file path.
+Do not commit credential values to this repository.
+
+The bootstrap does not source `.env`; Compose reads that file and preserves its
+quoted values. Direct `docker compose` commands do not run the bootstrap
+preflight. Set a credential source first, then run `docker compose config
+--quiet` and `docker compose up --build --force-recreate -d`. RedisInsight binds
+to `127.0.0.1` by default. Change `REDIS_INSIGHT_BIND_ADDRESS` only when you
+explicitly need another interface.
 
 Credentialed ERP and plugin endpoints must use HTTPS. The bundled MockERP
 fixture is HTTP-only, so Compose explicitly sets

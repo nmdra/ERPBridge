@@ -5,12 +5,11 @@ starting implementation work.
 
 ## Active
 
-- [`Plan-Bridgectl-Ops-Plugin-Details.md`](./active/Plan-Bridgectl-Ops-Plugin-Details.md)
-  — extend the `bridgectl-ops` skill with external plugin operations, secure
-  lifecycle guidance, and trigger evaluations.
+- [`Plan-Onboarding-Reliability.md`](./active/Plan-Onboarding-Reliability.md)
+  — fix first-run Compose, context, registry, CLI/server, Console, security,
+  and agent-guidance failures.
 
 ## Upcoming
-
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
   specification evaluation and migration. It is not authorization to begin
   implementation.
@@ -49,6 +48,9 @@ promotion to `active/`.
 - [`[COMPLETED]Plan-Raw-Response-Plugin-Phase.md`](./completed/%5BCOMPLETED%5DPlan-Raw-Response-Plugin-Phase.md)
   — media-aware pre-normalization plugin processing, secure admission, and
   stable MCP output contracts.
+- [`[COMPLETED]Plan-Bridgectl-Ops-Plugin-Details.md`](./completed/%5BCOMPLETED%5DPlan-Bridgectl-Ops-Plugin-Details.md)
+  — external plugin operations, secure lifecycle guidance, and trigger
+  evaluations.
 - [`[COMPLETED]Plan-Plugin-Endpoint-Authentication.md`](./completed/[COMPLETED]Plan-Plugin-Endpoint-Authentication.md)
   — plugin authentication, secure credential transport, redaction, runtime
   invariants, fixture authentication, and legacy ERP credential migration.

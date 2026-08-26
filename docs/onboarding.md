@@ -11,17 +11,36 @@ Make sure that you have the following installed:
 | Requirement | Purpose |
 | --- | --- |
 | Docker & Docker Compose | Runs the ERPBridge server and pinned MockERP image |
+| `curl` | Checks service health after startup |
 | Go 1.26.2+ | Needed to build `bridgectl` (if not pre-built) |
 
 ---
 
 ## Step 1 — Start the ERPBridge Server
 
-Start all required services with Docker Compose:
+Use the non-interactive bootstrap for local development:
 
 ```bash
-docker compose up --build -d
+make dev-up
 ```
+
+The bootstrap generates an ephemeral MockERP credential pair only when neither
+`MOCK_ERP_CREDENTIALS_JSON` nor `MOCK_ERP_CREDENTIALS_FILE` is set. It keeps
+those values in memory, validates `docker compose config --quiet`, force
+recreates the stack, and waits for MockERP and ERPBridge health. It does not
+write credentials to `.env` or print them.
+
+Compose also reads quoted values from an env file. Do not source `.env` in your
+shell. If you provide credentials, use Compose's env-file handling or exported
+variables, for example:
+
+```bash
+docker compose --env-file .env config --quiet
+docker compose --env-file .env up --build --force-recreate -d
+```
+
+Direct Compose use requires one of the two MockERP credential sources. It does
+not run the bootstrap preflight; without credentials, MockERP fails closed.
 
 Confirm that everything is running:
 
@@ -29,7 +48,9 @@ Confirm that everything is running:
 docker compose ps
 ```
 
-The ERPBridge server is available at **`http://localhost:8080`**.
+The ERPBridge server is available at **`http://localhost:8080`**. The local
+health endpoints are `http://localhost:8081/health` and
+`http://localhost:8080/mcp/health`.
 
 ---
 
@@ -146,7 +167,6 @@ Completely removes the tool from the SQLite database.
 ```
 
 > CAUTION: `--hard` deletes the tool from the database. You cannot restore it.
-
 > **Note:** To restore a soft-deleted (hidden) tool, apply its schema again:
 >
 > ```bash
@@ -161,7 +181,7 @@ Completely removes the tool from the SQLite database.
 
 **Error:**
 
-```
+```text
 apply failed: Get "http://localhost:8080/...": dial tcp 127.0.0.1:8080: connect: connection refused
 ```
 
@@ -194,7 +214,7 @@ apply failed: Get "http://localhost:8080/...": dial tcp 127.0.0.1:8080: connect:
 
 **Error:**
 
-```
+```text
 required flag(s) "description" not set
 ```
 
@@ -214,7 +234,7 @@ required flag(s) "description" not set
 
 **Error:**
 
-```
+```text
 failed to load OpenAPI spec
 ```
 
@@ -256,8 +276,11 @@ docker compose restart redis
 ## Quick Reference
 
 ```bash
-# Start services
-docker compose up --build -d
+# Start services with ephemeral local credentials
+make dev-up
+
+# Or use direct Compose after setting a credential source
+docker compose up --build --force-recreate -d
 
 # Build CLI
 make build

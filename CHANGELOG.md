@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add a non-interactive `make dev-up` Compose bootstrap with ephemeral local
+  MockERP credentials, safe health polling, and loopback-only RedisInsight
+  exposure by default
 - Advertise developer-owned tool output schemas through MCP, return structured
   content with equivalent text, propagate tool execution errors with `isError`,
   and prevent error results from populating the cache

@@ -26,7 +26,7 @@ services:
     image: redis/redis-stack:7.2.0-v9
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
-      - "${REDIS_INSIGHT_HOST_PORT:-8001}:8001" # RedisInsight — remove in production
+      - "${REDIS_INSIGHT_BIND_ADDRESS:-127.0.0.1}:${REDIS_INSIGHT_HOST_PORT:-8001}:8001" # RedisInsight — local-only by default
     volumes:
       - redis-data:/data
     healthcheck:

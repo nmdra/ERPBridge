@@ -53,8 +53,14 @@ graph TD
 The fastest way to run the full stack is Docker Compose:
 
 ```bash
-docker compose up -d --build
+make dev-up
 ```
+
+This non-interactive bootstrap generates ephemeral MockERP credentials when no
+credential source is provided, validates Compose, force recreates the stack,
+and waits for both service health endpoints. Direct `docker compose` use
+requires `MOCK_ERP_CREDENTIALS_JSON` or `MOCK_ERP_CREDENTIALS_FILE`; Compose
+reads quoted `.env` values directly, so do not source that file.
 
 This launches:
 

@@ -12,6 +12,8 @@ The server reads these variables directly from the environment. It does not load
 | `MCP_TRANSPORT` | (unset) | `stdio` runs the server in stdio mode. Any other value runs the HTTP server. |
 | `DATABASE_PATH` | `data/erpbridge.db` | Path of the SQLite tool registry. The parent directory is created automatically. |
 | `REDIS_URL` | (empty) | Redis URL (for example `redis://localhost:6379`). If empty, the server uses the bounded in-memory cache. |
+| `REDIS_INSIGHT_BIND_ADDRESS` | `127.0.0.1` | Host address for the RedisInsight binding in Compose. |
+| `REDIS_INSIGHT_HOST_PORT` | `8001` | Host port for RedisInsight in Compose. |
 | `CACHE_MEMORY_MAX_ENTRIES` | `10000` | Maximum number of entries in the in-memory cache when `REDIS_URL` is empty. `0` disables memory-cache storage. Invalid or negative values use the default. |
 | `RATE_LIMIT_RPS` | `5.0` | Per-session requests per second (token bucket). |
 | `RATE_LIMIT_BURST` | `10` | Token bucket burst size. |
@@ -81,9 +83,15 @@ The CLI reads its defaults from `~/.bridgectl/config.yaml`. The default context 
 
 ## Mock ERP Variables
 
+`make dev-up` is the recommended local-stack entry point. It generates an
+in-memory, ephemeral credential pair only when both credential sources are
+empty. It does not source `.env`, write credentials, or print them. Direct
+Compose use requires one of the two credential sources below.
+
 | Variable | Purpose | Default |
 | :--- | :--- | :--- |
-| `MOCK_ERP_PORT` | Host port exposed for the MockERP container. | `8081` |
+| `MOCK_ERP_HOST_PORT` | Host port exposed for the MockERP container. | `8081` |
+| `MOCK_ERP_PORT` | Legacy host-port setting used by some local CLI commands. | `8081` |
 | `MOCK_ERP_IMAGE` | MockERP image used by Docker Compose. | `ghcr.io/nmdra/mockerp:0.2.1` |
 | `MOCK_ERP_VERSION` | MockERP release used for OpenAPI generation. | `0.2.1` |
 | `MOCK_ERP_OPENAPI_URL` | Versioned OpenAPI contract URL. | `https://raw.githubusercontent.com/nmdra/mockerp/v0.2.1/openapi.yaml` |
