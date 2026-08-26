@@ -191,3 +191,51 @@ func TestClientBoundsResponses(t *testing.T) {
 		t.Fatalf("read error = %v, want %v", err, ErrResponseTooLarge)
 	}
 }
+
+func TestDecodeRemoteErrorResponseUsesSafeEnvelope(t *testing.T) {
+	response := &http.Response{
+		StatusCode: http.StatusConflict,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":"REGISTRY_CONFLICT","message":"definition already exists","suggestion":"use --force","code":5}`)),
+	}
+	err := DecodeRemoteErrorResponse(response)
+	var remote *RemoteError
+	if !errors.As(err, &remote) {
+		t.Fatalf("error = %T %v, want RemoteError", err, err)
+	}
+	if remote.ErrorCode != "REGISTRY_CONFLICT" || remote.Message != "definition already exists" || remote.Code != 5 {
+		t.Fatalf("remote error = %+v", remote)
+	}
+}
+
+func TestDecodeRemoteErrorResponseDoesNotExposeMalformedHTMLSecrets(t *testing.T) {
+	body := strings.Repeat("<html>Authorization: Bearer super-secret token</html>", 1024)
+	response := &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Header:     http.Header{"Content-Type": []string{"text/html"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	err := DecodeRemoteErrorResponse(response)
+	if strings.Contains(err.Error(), "super-secret") || strings.Contains(err.Error(), "<html>") {
+		t.Fatalf("unsafe remote error: %v", err)
+	}
+	var remote *RemoteError
+	if !errors.As(err, &remote) {
+		t.Fatalf("error = %T %v, want RemoteError", err, err)
+	}
+	if remote.ErrorCode != "REMOTE_ERROR" || remote.Message == "" {
+		t.Fatalf("fallback remote error = %+v", remote)
+	}
+}
+
+func TestDecodeRemoteErrorResponseRedactsSecretBearingEnvelope(t *testing.T) {
+	response := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":"VALIDATION_FAILED","message":"https://erp.example/items?token=super-secret","suggestion":"Authorization: Bearer secret-value","code":400}`)),
+	}
+	err := DecodeRemoteErrorResponse(response)
+	if strings.Contains(err.Error(), "super-secret") || strings.Contains(err.Error(), "secret-value") {
+		t.Fatalf("unsafe remote error: %v", err)
+	}
+}

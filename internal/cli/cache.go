@@ -40,9 +40,7 @@ including total key counts and backend memory usage when available.`,
 		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
-			return NewError(CodeGeneralErr, "SERVER_ERROR",
-				fmt.Sprintf("server returned error: %s", resp.Status),
-				"Verify the middleware server is running and reachable.")
+			return bridgeResponseError(resp)
 		}
 
 		var result any
@@ -90,6 +88,9 @@ or clear the entire cache with --all.`,
 			return err
 		}
 		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode >= http.StatusBadRequest {
+			return bridgeResponseError(resp)
+		}
 
 		var result FlushResponse
 		return formatter.Print(output.NewRawResponse(resp.Body, &result))

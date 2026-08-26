@@ -3,13 +3,13 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/nmdra/ERPBridge/internal/config"
+	"github.com/nmdra/ERPBridge/internal/idp"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/output"
 	"github.com/spf13/cobra"
@@ -53,8 +53,10 @@ It provides tools to manage environments, register and test ERP APIs,
 generate and validate MCP tool schemas, and monitor the middleware's 
 health through real-time log streaming and cache analytics.
 
-The CLI interacts with the ERPBridge middleware via a REST API 
-and supports multiple output formats including Table, JSON, and YAML.`,
+The CLI interacts with the ERPBridge middleware via a REST API
+and supports multiple output formats including Table, JSON, and YAML.
+Control-plane failures use stable error codes, safe messages, and remediation
+suggestions without exposing upstream response bodies or credentials.`,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		// Initialize Logger for CLI
 		if verbose {
@@ -99,25 +101,34 @@ func Execute() {
 }
 
 func handleError(err error) {
+	err = mapKnownCLIError(err)
 	if aErr, ok := errors.AsType[*AgentActionableError](err); ok {
 		if outputFormat == "json" {
-			// In JSON mode, only the error object goes to Stdout
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
-			_ = enc.Encode(aErr)
+			_ = renderActionableError(os.Stdout, aErr, outputFormat)
 		} else {
-			// Human-readable error to Stderr
-			fmt.Fprintf(os.Stderr, "Error: [%s] %s\n", aErr.ErrorCode, aErr.Message)
-			if aErr.Suggestion != "" {
-				fmt.Fprintf(os.Stderr, "Suggestion: %s\n", aErr.Suggestion)
-			}
+			_ = renderActionableError(os.Stderr, aErr, outputFormat)
 		}
 		os.Exit(aErr.Code)
 	}
 
-	// General error
+	// General errors are local validation failures. Remote HTTP errors are
+	// converted before they reach this fallback, so response bodies are never
+	// printed here.
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(CodeGeneralErr)
+}
+
+func mapKnownCLIError(err error) error {
+	switch {
+	case errors.Is(err, config.ErrContextNotFound):
+		return NewError(CodeNotFound, "CONTEXT_NOT_FOUND", "the selected context was not found", "run 'bridgectl context list' or select a configured context")
+	case errors.Is(err, idp.ErrLegacyRegistry), errors.Is(err, idp.ErrLegacyCredentials):
+		return NewError(CodePrecondFail, "LEGACY_REGISTRY", "the registry requires an explicit credential-safe migration", "run 'bridgectl api scrub-credentials' or migrate the legacy registry")
+	case errors.Is(err, idp.ErrRegistryConflict):
+		return NewError(CodeConflict, "REGISTRY_CONFLICT", "an API with that name already exists", "use --force only when replacement is intentional")
+	default:
+		return err
+	}
 }
 
 func init() {

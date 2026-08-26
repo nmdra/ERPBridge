@@ -242,4 +242,23 @@ are added when an error is observed.
 
 ## Error Responses
 
-The server uses standard HTTP status codes. A configured Redis backend remains the selected backend when Redis is unreachable; the server does not silently fall back to memory in that case.
+The server uses standard HTTP status codes. Control-plane failures return a
+bounded JSON object with `error`, `message`, `suggestion`, and numeric `code`.
+The `error` value is stable for automation. Common values include
+`VALIDATION_FAILED`, `AUTHENTICATION_FAILED`, `AUTHORIZATION_DENIED`,
+`RESOURCE_NOT_FOUND`, `UPSTREAM_UNREACHABLE`, and `HEALTH_CHECK_FAILED`.
+Messages and suggestions never include upstream bodies, credentials, auth
+headers, or internal stack details.
+
+A configured Redis backend remains the selected backend when Redis is
+unreachable; the server does not silently fall back to memory in that case.
+MCP tool execution errors retain the MCP result envelope and set `isError: true`.
+
+### API probe
+
+`POST /api/apis/test` is an authenticated administrator endpoint. It accepts
+an API URL, method, authentication type, non-secret `credentialRef`, and
+optional auth-header name. The server resolves the credential and returns only
+HTTP status, normalized content type, latency, and success. It never returns
+an ERP response body or upstream headers. Use `bridgectl api test` to invoke
+this endpoint; use `--local` only for the explicit legacy host-side diagnostic.

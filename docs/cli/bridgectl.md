@@ -12,6 +12,9 @@ health through real-time log streaming and cache analytics.
 The CLI interacts with the ERPBridge middleware via a REST API 
 and supports multiple output formats including Table, JSON, and YAML.
 
+Control-plane failures use stable error codes, safe messages, and remediation
+suggestions. They do not expose upstream response bodies or credentials.
+
 ### Options
 
 ```

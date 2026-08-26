@@ -35,12 +35,14 @@ func (s *Server) AuthHandler(next http.Handler, scope string, adminOnly bool) ht
 					slog.Any("headers", logger.RedactHeaders(r.Header)),
 				)
 			}
-			http.Error(w, http.StatusText(status), status)
+			writeHTTPAuthError(w, status)
 			return
 		}
 		if err != nil {
-			s.log.Error("authentication configuration failed", slog.String("error", err.Error()))
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			if s.log != nil {
+				s.log.Error("authentication configuration failed")
+			}
+			writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check authentication configuration")
 			return
 		}
 		next.ServeHTTP(w, withAuthContext(ctx, r)) //nolint:contextcheck // authenticated context inherits the request context.
@@ -163,18 +165,20 @@ func contains(values []string, wanted string) bool {
 func (s *Server) handleTokenAPI(w http.ResponseWriter, r *http.Request) {
 	ctx, status, err := s.authenticateHTTP(r, "", true)
 	if status != 0 {
-		http.Error(w, http.StatusText(status), status)
+		writeHTTPAuthError(w, status)
 		return
 	}
 	if err != nil {
-		s.log.Error("authentication configuration failed", slog.String("error", err.Error()))
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		if s.log != nil {
+			s.log.Error("authentication configuration failed")
+		}
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check authentication configuration")
 		return
 	}
 	r = withAuthContext(ctx, r) //nolint:contextcheck // authenticated context inherits the request context.
 
 	if s.store == nil {
-		http.Error(w, "store not available", http.StatusServiceUnavailable)
+		writeControlPlaneInternalError(w, http.StatusServiceUnavailable, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/auth/tokens")
@@ -182,12 +186,12 @@ func (s *Server) handleTokenAPI(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && path == "":
 		var request TokenCreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+			writeControlPlaneError(w, http.StatusBadRequest, ErrorValidationFailed, "the token request is not valid JSON", "submit one valid token request")
 			return
 		}
 		record, raw, err := s.store.CreateToken(request)
 		if err != nil {
-			http.Error(w, "invalid token: "+err.Error(), http.StatusUnprocessableEntity)
+			writeControlPlaneError(w, http.StatusUnprocessableEntity, ErrorValidationFailed, "the token request failed validation", "review the token name, scopes, roles, and expiry")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -199,7 +203,7 @@ func (s *Server) handleTokenAPI(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path == "":
 		records, err := s.store.ListTokens()
 		if err != nil {
-			http.Error(w, "failed to list tokens: "+err.Error(), http.StatusInternalServerError)
+			writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check token storage and retry")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -207,16 +211,24 @@ func (s *Server) handleTokenAPI(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/") && len(path) > 1 && !strings.Contains(path[1:], "/"):
 		if err := s.store.RevokeToken(strings.TrimPrefix(path, "/")); err != nil {
 			if errors.Is(err, ErrTokenNotFound) {
-				http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+				writeControlPlaneError(w, http.StatusNotFound, ErrorResourceNotFound, "the requested token was not found", "check the token identifier")
 				return
 			}
-			http.Error(w, "failed to revoke token: "+err.Error(), http.StatusInternalServerError)
+			writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check token storage and retry")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 	default:
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		writeControlPlaneError(w, http.StatusMethodNotAllowed, ErrorMethodNotAllowed, "the requested token method is not supported", "use GET, POST, or DELETE for this resource")
 	}
+}
+
+func writeHTTPAuthError(w http.ResponseWriter, status int) {
+	if status == http.StatusForbidden {
+		writeControlPlaneError(w, status, ErrorAuthorizationDenied, "the caller is not authorized for this operation", "use a token with the required scope or administrator permission")
+		return
+	}
+	writeControlPlaneError(w, http.StatusUnauthorized, ErrorAuthenticationFailed, "the server rejected the authentication credentials", "set a valid Authorization bearer token")
 }
 
 func withAuthContext(ctx context.Context, r *http.Request) *http.Request {

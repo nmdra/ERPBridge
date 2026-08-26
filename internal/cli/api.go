@@ -273,7 +273,7 @@ Use --local only for an explicit legacy host-side diagnostic.`,
 		}
 		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode >= http.StatusBadRequest {
-			return fmt.Errorf("API probe failed (%d)", resp.StatusCode)
+			return bridgeResponseError(resp)
 		}
 		var probe mcp.APIProbeResponse
 		if err := json.NewDecoder(resp.Body).Decode(&probe); err != nil {

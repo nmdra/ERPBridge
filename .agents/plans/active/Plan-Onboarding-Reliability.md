@@ -342,7 +342,7 @@ archived as completed before this plan is promoted.
     cache/intent fields are deterministic, and a generated YAML file applies
     exactly once in an httptest control-plane flow.
 
-- [ ] **Task 5: Introduce safe structured errors across server and CLI.**
+- [x] **Task 5: Introduce safe structured errors across server and CLI.**
   - Add a bounded remote-error decoder in `internal/bridgeclient` and map
     server envelopes/statuses to `AgentActionableError` in the CLI. Replace
     control-plane `http.Error` responses with stable safe codes and suggestions,
@@ -357,8 +357,11 @@ archived as completed before this plan is promoted.
     `internal/bridgeclient/client_test.go`, `internal/cli/errors.go`,
     `internal/cli/http.go`, `internal/cli/errors_test.go`,
     `internal/cli/plugin.go`, `internal/cli/plugin_binding.go`,
-    `internal/cli/tool.go`, `internal/mcp/server.go`,
+    `internal/cli/cache.go`, `internal/cli/root.go`, `internal/cli/tool.go`,
+    `internal/mcp/errors.go`,
+    `internal/mcp/errors_test.go`, `internal/mcp/server.go`,
     `internal/mcp/plugin_api.go`, `internal/mcp/auth.go`,
+    `internal/mcp/info_api.go`, `internal/mcp/api.go`,
     `internal/mcp/api_test.go`, `internal/mcp/server_test.go`,
     `docs/cli/bridgectl.md`, `docs/faq.md`, `docs/api.md`,
     `CHANGELOG.md`.

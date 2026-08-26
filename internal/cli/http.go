@@ -35,11 +35,26 @@ func doBridgeRequestWithHeaders(cmd *cobra.Command, method, target string, body 
 			req.Header.Add(key, value)
 		}
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := cliHTTPClient.Do(req)
 	if err != nil {
 		return nil, unreachableControlPlaneError(err)
 	}
 	return resp, nil
+}
+
+var cliHTTPClient = &http.Client{
+	CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
+// bridgeResponseError consumes a bounded remote error envelope and maps it to
+// the CLI's stable exit-code contract. It must be called before closing resp.
+func bridgeResponseError(resp *http.Response) error {
+	if resp != nil && resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
+	return mapRemoteError(bridgeclient.DecodeRemoteErrorResponse(resp))
 }
 
 func bridgeAPIToken() string {

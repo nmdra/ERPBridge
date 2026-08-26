@@ -109,7 +109,7 @@ log level, or a specific request ID.`,
 		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("server error: %s", resp.Status)
+			return bridgeResponseError(resp)
 		}
 
 		out := cmd.OutOrStdout()

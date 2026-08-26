@@ -166,14 +166,10 @@ var pluginApplyCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("apply failed (%s): %w", path, err)
 				}
-				body, readErr := io.ReadAll(resp.Body)
-				_ = resp.Body.Close()
-				if readErr != nil {
-					return fmt.Errorf("read apply response (%s): %w", path, readErr)
-				}
 				if resp.StatusCode >= http.StatusBadRequest {
-					return fmt.Errorf("server error (%d) for %s: %s", resp.StatusCode, path, string(body))
+					return bridgeResponseError(resp)
 				}
+				_ = resp.Body.Close()
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "plugin %s@%s applied successfully\n", plugin.Metadata.Name, plugin.Metadata.Version)
 			}
 			return nil
@@ -206,8 +202,7 @@ var pluginGetCmd = &cobra.Command{
 		}
 		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode >= http.StatusBadRequest {
-			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("server error (%d): %s", resp.StatusCode, string(body))
+			return bridgeResponseError(resp)
 		}
 		var plugins []*mcp.Plugin
 		if err := json.NewDecoder(resp.Body).Decode(&plugins); err != nil {
@@ -292,8 +287,7 @@ var pluginDeleteCmd = &cobra.Command{
 		}
 		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode >= http.StatusBadRequest {
-			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("delete failed (%d): %s", resp.StatusCode, string(body))
+			return bridgeResponseError(resp)
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "plugin %s@%s deleted successfully\n", name, version)
 		return nil

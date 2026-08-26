@@ -23,6 +23,7 @@ func writeReconciliationPending(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		statusKey: "pending",
+		"code":    "RECONCILIATION_PENDING",
 		"message": "desired state is stored and awaits successful reconciliation",
 	})
 }
@@ -37,7 +38,7 @@ func (s *Server) handlePluginAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		s.handlePluginDelete(w, r)
 	default:
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		writeControlPlaneError(w, http.StatusMethodNotAllowed, ErrorMethodNotAllowed, "the requested control-plane method is not supported", "use GET, POST, or DELETE for this resource")
 	}
 }
 
@@ -51,7 +52,7 @@ func (s *Server) handlePluginBindingAPI(w http.ResponseWriter, r *http.Request) 
 	case http.MethodDelete:
 		s.handlePluginBindingDelete(w, r)
 	default:
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		writeControlPlaneError(w, http.StatusMethodNotAllowed, ErrorMethodNotAllowed, "the requested control-plane method is not supported", "use GET, POST, or DELETE for this resource")
 	}
 }
 
@@ -74,19 +75,19 @@ func decodeStrictJSON(r io.Reader, target any) error {
 func (s *Server) handlePluginApply(w http.ResponseWriter, r *http.Request) {
 	var plugin Plugin
 	if err := decodeStrictJSON(r.Body, &plugin); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		writeControlPlaneError(w, http.StatusBadRequest, ErrorValidationFailed, safeJSONValidationMessage("plugin", err), "submit one valid plugin resource")
 		return
 	}
 	if err := plugin.Validate(); err != nil {
-		http.Error(w, "invalid plugin: "+err.Error(), http.StatusUnprocessableEntity)
+		writeControlPlaneError(w, http.StatusUnprocessableEntity, ErrorValidationFailed, "the plugin resource failed validation", "review the plugin metadata and specification")
 		return
 	}
 	if err := credentialedPluginAdmission(r.Context(), &plugin); err != nil {
-		http.Error(w, "invalid plugin: "+err.Error(), http.StatusUnprocessableEntity)
+		writeControlPlaneError(w, http.StatusUnprocessableEntity, ErrorAuthorizationDenied, "the plugin resource is not authorized", "use an authenticated administrator and an allowed endpoint")
 		return
 	}
 	if s.store == nil {
-		http.Error(w, "store not available", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
 		return
 	}
 	s.pluginLifecycleMu.Lock()
@@ -94,16 +95,16 @@ func (s *Server) handlePluginApply(w http.ResponseWriter, r *http.Request) {
 
 	affected, err := s.bindingsReferencingPlugin(plugin.Metadata.Name, plugin.Metadata.Version)
 	if err != nil {
-		http.Error(w, "failed to inspect plugin bindings: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	if err := s.flushPluginBindingTargets(r.Context(), affected); err != nil {
-		http.Error(w, "plugin cache invalidation failed", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check cache health and retry")
 		return
 	}
 	plugin.Metadata.IsActive = true
 	if err := s.store.SavePlugin(&plugin); err != nil {
-		http.Error(w, "failed to save plugin: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	if err := s.reconcileLocked(r.Context()); err != nil {
@@ -121,12 +122,12 @@ func (s *Server) handlePluginApply(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePluginList(w http.ResponseWriter, r *http.Request) {
 	if s.store == nil {
-		http.Error(w, "store not available", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
 		return
 	}
 	plugins, err := s.store.ListPlugins()
 	if err != nil {
-		http.Error(w, "failed to list plugins: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	nameFilter := r.URL.Query().Get("name")
@@ -149,11 +150,11 @@ func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	version := r.URL.Query().Get("version")
 	if name == "" || version == "" {
-		http.Error(w, "missing name or version parameter", http.StatusBadRequest)
+		writeControlPlaneError(w, http.StatusBadRequest, ErrorValidationFailed, "plugin name and version are required", "provide both name and version")
 		return
 	}
 	if s.store == nil {
-		http.Error(w, "store not available", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
 		return
 	}
 	s.pluginLifecycleMu.Lock()
@@ -161,11 +162,11 @@ func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
 
 	affected, err := s.bindingsReferencingPlugin(name, version)
 	if err != nil {
-		http.Error(w, "failed to inspect plugin bindings: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	if err := s.flushPluginBindingTargets(r.Context(), affected); err != nil {
-		http.Error(w, "plugin cache invalidation failed", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check cache health and retry")
 		return
 	}
 
@@ -177,10 +178,10 @@ func (s *Server) handlePluginDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if deleteErr != nil {
 		if errors.Is(deleteErr, ErrPluginHasActiveBindings) {
-			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
+			writeControlPlaneError(w, http.StatusConflict, ErrorRegistryConflict, "the plugin still has active bindings", "remove the bindings before deleting the plugin")
 			return
 		}
-		http.Error(w, "failed to delete plugin: "+deleteErr.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	if err := s.reconcileLocked(r.Context()); err != nil {
@@ -262,22 +263,22 @@ func credentialedPluginAdmission(ctx context.Context, plugin *Plugin) error {
 func (s *Server) handlePluginBindingApply(w http.ResponseWriter, r *http.Request) {
 	var binding PluginBinding
 	if err := decodeStrictJSON(r.Body, &binding); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		writeControlPlaneError(w, http.StatusBadRequest, ErrorValidationFailed, safeJSONValidationMessage("plugin binding", err), "submit one valid plugin binding resource")
 		return
 	}
 	if err := binding.Validate(); err != nil {
-		http.Error(w, "invalid plugin binding: "+err.Error(), http.StatusUnprocessableEntity)
+		writeControlPlaneError(w, http.StatusUnprocessableEntity, ErrorValidationFailed, "the plugin binding resource failed validation", "review the binding metadata and references")
 		return
 	}
 	if s.store == nil {
-		http.Error(w, "store not available", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
 		return
 	}
 	s.pluginLifecycleMu.Lock()
 	defer s.pluginLifecycleMu.Unlock()
 
 	if err := s.validatePluginBindingReferences(r.Context(), &binding); err != nil {
-		http.Error(w, "invalid plugin binding: "+err.Error(), http.StatusUnprocessableEntity)
+		writeControlPlaneError(w, http.StatusUnprocessableEntity, ErrorValidationFailed, "the plugin binding references are invalid", "ensure the plugin and tool are active and compatible")
 		return
 	}
 
@@ -285,17 +286,17 @@ func (s *Server) handlePluginBindingApply(w http.ResponseWriter, r *http.Request
 	if existing, err := s.store.GetPluginBinding(binding.Metadata.Name); err == nil {
 		affected = append(affected, existing)
 	} else if !errors.Is(err, ErrPluginBindingNotFound) {
-		http.Error(w, "failed to inspect existing plugin binding: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	binding.Metadata.IsActive = true
 	affected = append(affected, &binding)
 	if err := s.flushPluginBindingTargets(r.Context(), affected); err != nil {
-		http.Error(w, "plugin cache invalidation failed", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check cache health and retry")
 		return
 	}
 	if err := s.store.SavePluginBinding(&binding); err != nil {
-		http.Error(w, "failed to save plugin binding: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	if err := s.reconcileLocked(r.Context()); err != nil {
@@ -312,12 +313,12 @@ func (s *Server) handlePluginBindingApply(w http.ResponseWriter, r *http.Request
 
 func (s *Server) handlePluginBindingList(w http.ResponseWriter, r *http.Request) {
 	if s.store == nil {
-		http.Error(w, "store not available", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
 		return
 	}
 	bindings, err := s.store.ListPluginBindings()
 	if err != nil {
-		http.Error(w, "failed to list plugin bindings: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	query := r.URL.Query()
@@ -347,11 +348,11 @@ func (s *Server) handlePluginBindingList(w http.ResponseWriter, r *http.Request)
 func (s *Server) handlePluginBindingDelete(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		http.Error(w, "missing name parameter", http.StatusBadRequest)
+		writeControlPlaneError(w, http.StatusBadRequest, ErrorValidationFailed, "plugin binding name is required", "provide a binding name")
 		return
 	}
 	if s.store == nil {
-		http.Error(w, "store not available", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
 		return
 	}
 	s.pluginLifecycleMu.Lock()
@@ -359,11 +360,11 @@ func (s *Server) handlePluginBindingDelete(w http.ResponseWriter, r *http.Reques
 
 	binding, err := s.store.GetPluginBinding(name)
 	if err != nil {
-		http.Error(w, "failed to get plugin binding: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneError(w, http.StatusNotFound, ErrorResourceNotFound, "the requested plugin binding was not found", "check the binding name")
 		return
 	}
 	if err := s.flushPluginBindingTargets(r.Context(), []*PluginBinding{binding}); err != nil {
-		http.Error(w, "plugin cache invalidation failed", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check cache health and retry")
 		return
 	}
 	if r.URL.Query().Get("hard") == queryTrueValue {
@@ -372,7 +373,7 @@ func (s *Server) handlePluginBindingDelete(w http.ResponseWriter, r *http.Reques
 		err = s.store.DeletePluginBinding(name)
 	}
 	if err != nil {
-		http.Error(w, "failed to delete plugin binding: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	if err := s.reconcileLocked(r.Context()); err != nil {

@@ -4,12 +4,14 @@ package bridgeclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/nmdra/ERPBridge/internal/config"
@@ -17,12 +19,117 @@ import (
 
 const defaultMaxResponseBytes int64 = 4 << 20
 
+// MaxRemoteErrorBytes bounds control-plane error responses before decoding.
+// Error responses must never become an unbounded diagnostics channel.
+const MaxRemoteErrorBytes int64 = 16 << 10
+
+var (
+	remoteURLPattern       = regexp.MustCompile(`(?i)https?://[^\s<>"']+`)
+	remoteBearerPattern    = regexp.MustCompile(`(?i)\bbearer\s+[^\s,;]+`)
+	remoteHeaderPattern    = regexp.MustCompile(`(?i)\b(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key)\s*[:=]\s*[^\s,;]+`)
+	remoteSecretPattern    = regexp.MustCompile(`(?i)(token|secret|password|credential|api[-_]?key)=([^&\s,;]+)`)
+	remoteErrorCodePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,63}$`)
+)
+
 var (
 	// ErrResponseTooLarge indicates that an upstream response exceeded its limit.
 	ErrResponseTooLarge = errors.New("upstream response exceeds size limit")
 	// ErrTargetUnavailable indicates that the selected context has no target URL.
 	ErrTargetUnavailable = errors.New("upstream target is unavailable")
 )
+
+// RemoteError is the bounded, safe representation of a non-success
+// control-plane response. Status is transport metadata and is not serialized.
+type RemoteError struct {
+	ErrorCode  string `json:"error"`
+	Message    string `json:"message"`
+	Suggestion string `json:"suggestion,omitempty"`
+	Code       int    `json:"code"`
+	Status     int    `json:"-"`
+}
+
+func (e *RemoteError) Error() string {
+	if e == nil {
+		return "remote control-plane request failed"
+	}
+	return e.Message
+}
+
+// DecodeRemoteErrorResponse decodes a failed HTTP response without exposing
+// malformed, HTML, oversized, or secret-bearing response bodies. The caller
+// retains ownership of the response body and should close it.
+func DecodeRemoteErrorResponse(response *http.Response) error {
+	if response == nil {
+		return &RemoteError{ErrorCode: "REMOTE_ERROR", Message: "the server returned no response", Code: http.StatusBadGateway, Status: http.StatusBadGateway}
+	}
+	if response.StatusCode < http.StatusBadRequest {
+		return nil
+	}
+	if response.Body == nil {
+		return fallbackRemoteError(response.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, MaxRemoteErrorBytes+1))
+	if err != nil || int64(len(body)) > MaxRemoteErrorBytes {
+		return fallbackRemoteError(response.StatusCode)
+	}
+
+	var envelope struct {
+		ErrorCode  string `json:"error"`
+		Message    string `json:"message"`
+		Suggestion string `json:"suggestion"`
+		Code       int    `json:"code"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(body)))
+	if err := decoder.Decode(&envelope); err != nil {
+		return fallbackRemoteError(response.StatusCode)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err == nil || !errors.Is(err, io.EOF) {
+		return fallbackRemoteError(response.StatusCode)
+	}
+	if !remoteErrorCodePattern.MatchString(envelope.ErrorCode) || strings.TrimSpace(envelope.Message) == "" {
+		return fallbackRemoteError(response.StatusCode)
+	}
+	code := envelope.Code
+	if code <= 0 {
+		code = response.StatusCode
+	}
+	return &RemoteError{
+		ErrorCode:  envelope.ErrorCode,
+		Message:    sanitizeRemoteText(envelope.Message),
+		Suggestion: sanitizeRemoteText(envelope.Suggestion),
+		Code:       code,
+		Status:     response.StatusCode,
+	}
+}
+
+func fallbackRemoteError(status int) *RemoteError {
+	message, suggestion := "the server rejected the request", "inspect the selected ERPBridge context and retry"
+	switch status {
+	case http.StatusUnauthorized:
+		message, suggestion = "the server rejected the authentication credentials", "set a valid --token, BRIDGE_API_TOKEN, or context api-token"
+	case http.StatusForbidden:
+		message, suggestion = "the server denied this operation", "use a token with the required scope or administrator permission"
+	case http.StatusNotFound:
+		message, suggestion = "the requested control-plane resource was not found", "check the control-plane root and resource name"
+	case http.StatusConflict:
+		message, suggestion = "the request conflicts with existing state", "inspect the existing resource before retrying"
+	case http.StatusUnprocessableEntity:
+		message, suggestion = "the request failed validation", "review the resource fields and retry"
+	case http.StatusBadGateway, http.StatusGatewayTimeout:
+		message, suggestion = "the upstream service could not be reached", "check ERPBridge connectivity and upstream health"
+	case http.StatusServiceUnavailable:
+		message, suggestion = "the control-plane service is unavailable", "check ERPBridge health and retry"
+	}
+	return &RemoteError{ErrorCode: "REMOTE_ERROR", Message: message, Suggestion: suggestion, Code: status, Status: status}
+}
+
+func sanitizeRemoteText(value string) string {
+	value = remoteURLPattern.ReplaceAllString(value, "[REDACTED_URL]")
+	value = remoteBearerPattern.ReplaceAllString(value, "Bearer [REDACTED]")
+	value = remoteHeaderPattern.ReplaceAllString(value, "$1: [REDACTED]")
+	return remoteSecretPattern.ReplaceAllString(value, "$1=[REDACTED]")
+}
 
 // Target selects one of the two configured ERPBridge endpoints.
 type Target string

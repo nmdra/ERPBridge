@@ -1,8 +1,13 @@
 package cli
 
 import (
+	"bytes"
+	"errors"
+	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/nmdra/ERPBridge/internal/bridgeclient"
 
 	"github.com/stretchr/testify/require"
 )
@@ -63,5 +68,35 @@ func TestNewError(t *testing.T) {
 	}
 	if err.Suggestion != "Try another ID" {
 		t.Errorf("Expected Suggestion 'Try another ID', got %v", err.Suggestion)
+	}
+}
+
+func TestMapRemoteErrorToAgentActionableError(t *testing.T) {
+	remote := &bridgeclient.RemoteError{ErrorCode: "AUTHORIZATION_DENIED", Message: "access denied", Suggestion: "use an authorized token", Code: http.StatusForbidden, Status: http.StatusForbidden}
+	err := mapRemoteError(remote)
+	var actionable *AgentActionableError
+	if !errors.As(err, &actionable) {
+		t.Fatalf("error = %T, want AgentActionableError", err)
+	}
+	if actionable.ErrorCode != remote.ErrorCode || actionable.Code != CodeAuthFail {
+		t.Fatalf("actionable error = %+v", actionable)
+	}
+}
+
+func TestRenderActionableErrorHumanAndJSON(t *testing.T) {
+	errorValue := NewError(CodeConflict, "REGISTRY_CONFLICT", "definition already exists", "use --force")
+	var human bytes.Buffer
+	if err := renderActionableError(&human, errorValue, "table"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(human.String(), "REGISTRY_CONFLICT") || !strings.Contains(human.String(), "Suggestion: use --force") {
+		t.Fatalf("human error = %q", human.String())
+	}
+	var machine bytes.Buffer
+	if err := renderActionableError(&machine, errorValue, "json"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(machine.String(), `"error": "REGISTRY_CONFLICT"`) || !strings.Contains(machine.String(), `"code": 5`) {
+		t.Fatalf("JSON error = %q", machine.String())
 	}
 }

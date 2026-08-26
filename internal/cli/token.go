@@ -76,12 +76,8 @@ var tokenCreateCmd = &cobra.Command{
 			return err
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return NewError(CodeAuthFail, "AUTH_FAILED", "the server rejected the API token request", "Set --token, BRIDGE_API_TOKEN, or the active context api-token.")
-		}
 		if resp.StatusCode >= 400 {
-			message, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("token creation failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(message)))
+			return bridgeResponseError(resp)
 		}
 		var result tokenCreateResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -108,11 +104,8 @@ var tokenListCmd = &cobra.Command{
 			return err
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return NewError(CodeAuthFail, "AUTH_FAILED", "the server rejected the API token request", "Set --token, BRIDGE_API_TOKEN, or the active context api-token.")
-		}
 		if resp.StatusCode >= 400 {
-			return fmt.Errorf("token listing failed: %s", resp.Status)
+			return bridgeResponseError(resp)
 		}
 		var result []TokenInfo
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -139,11 +132,8 @@ var tokenRevokeCmd = &cobra.Command{
 			return err
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return NewError(CodeAuthFail, "AUTH_FAILED", "the server rejected the API token request", "Set --token, BRIDGE_API_TOKEN, or the active context api-token.")
-		}
 		if resp.StatusCode >= 400 {
-			return fmt.Errorf("token revocation failed: %s", resp.Status)
+			return bridgeResponseError(resp)
 		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "API token revoked")
 		return nil

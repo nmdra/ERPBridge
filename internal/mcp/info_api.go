@@ -50,7 +50,7 @@ func (s *Server) CurrentServerInfo() ServerInfo {
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		writeControlPlaneError(w, http.StatusMethodNotAllowed, ErrorMethodNotAllowed, "the requested control-plane method is not supported", "use GET for this resource")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

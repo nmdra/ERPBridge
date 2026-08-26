@@ -1,9 +1,14 @@
 package cli
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"strings"
+
+	"github.com/nmdra/ERPBridge/internal/bridgeclient"
 )
 
 // Exit codes for agent compatibility.
@@ -36,11 +41,15 @@ type AgentActionableError struct {
 	// Suggestion provides a possible fix or next step.
 	Suggestion string `json:"suggestion,omitempty"`
 	// Code is the numeric exit code associated with this error.
-	Code int `json:"code"`
+	Code       int `json:"code"`
+	httpStatus int
 }
 
 // Error implements the error interface.
 func (e *AgentActionableError) Error() string {
+	if e.httpStatus != 0 {
+		return fmt.Sprintf("[%s] %s (HTTP %d, Exit Code: %d)", e.ErrorCode, e.Message, e.httpStatus, e.Code)
+	}
 	return fmt.Sprintf("[%s] %s (Exit Code: %d)", e.ErrorCode, e.Message, e.Code)
 }
 
@@ -64,7 +73,7 @@ func ValidateServerURL(url, serverType, contextName string) error {
 
 	if !hasProtocol(url) {
 		return NewError(CodeBadArgs, "INVALID_URL",
-			fmt.Sprintf("Invalid %s URL %q: missing protocol (http:// or https://)", serverType, url),
+			fmt.Sprintf("Invalid %s URL: missing protocol (http:// or https://)", serverType),
 			"Ensure the server URL starts with http:// or https://")
 	}
 
@@ -106,4 +115,63 @@ func unreachableControlPlaneError(_ error) error {
 	return NewError(CodeTimeout, "UPSTREAM_UNREACHABLE",
 		"the ERPBridge control plane could not be reached",
 		"Check the selected context's control-plane root and confirm ERPBridge is running.")
+}
+
+// mapRemoteError converts the transport-neutral bridgeclient error into the
+// CLI contract. The server's numeric HTTP code is intentionally not used as
+// the process exit code.
+func mapRemoteError(err error) error {
+	var remote *bridgeclient.RemoteError
+	if !errors.As(err, &remote) {
+		return err
+	}
+	code := CodeGeneralErr
+	switch remote.ErrorCode {
+	case "CONTEXT_NOT_FOUND", "RESOURCE_NOT_FOUND":
+		code = CodeNotFound
+	case "REGISTRY_CONFLICT":
+		code = CodeConflict
+	case "CONTROL_PLANE_URL_INVALID", "VALIDATION_FAILED", "INSECURE_TRANSPORT", "LEGACY_REGISTRY":
+		code = CodeBadArgs
+	case "AUTHENTICATION_FAILED", "AUTHORIZATION_DENIED":
+		code = CodeAuthFail
+	case "UPSTREAM_UNREACHABLE", "HEALTH_CHECK_FAILED":
+		code = CodeTimeout
+	case "RECONCILIATION_FAILED":
+		code = CodePrecondFail
+	default:
+		switch remote.Status {
+		case 401, 403:
+			code = CodeAuthFail
+		case 404:
+			code = CodeNotFound
+		case 409:
+			code = CodeConflict
+		case 408, 502, 503, 504:
+			code = CodeTimeout
+		case 400, 422:
+			code = CodeBadArgs
+		}
+	}
+	actionable := NewError(code, remote.ErrorCode, remote.Message, remote.Suggestion)
+	actionable.httpStatus = remote.Status
+	return actionable
+}
+
+// renderActionableError keeps human and machine output consistent and avoids
+// printing transport bodies or request metadata.
+func renderActionableError(w io.Writer, err *AgentActionableError, format string) error {
+	if format == "json" {
+		encoder := json.NewEncoder(w)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(err)
+	}
+	if _, writeErr := fmt.Fprintf(w, "Error: [%s] %s\n", err.ErrorCode, err.Message); writeErr != nil {
+		return writeErr
+	}
+	if err.Suggestion != "" {
+		_, writeErr := fmt.Fprintf(w, "Suggestion: %s\n", err.Suggestion)
+		return writeErr
+	}
+	return nil
 }

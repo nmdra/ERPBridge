@@ -724,25 +724,25 @@ func (s *Server) handleToolAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		s.handleToolDelete(w, r)
 	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeControlPlaneError(w, http.StatusMethodNotAllowed, ErrorMethodNotAllowed, "the requested control-plane method is not supported", "use GET, POST, or DELETE for this resource")
 	}
 }
 
 func (s *Server) handleToolApply(w http.ResponseWriter, r *http.Request) {
 	var t Tool
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		writeControlPlaneError(w, http.StatusBadRequest, ErrorValidationFailed, "the tool resource is not valid JSON", "submit one valid tool resource")
 		return
 	}
 
 	// Admission Controller
 	if err := s.validateTool(&t); err != nil {
-		http.Error(w, "invalid tool: "+err.Error(), http.StatusUnprocessableEntity)
+		writeControlPlaneError(w, http.StatusUnprocessableEntity, ErrorValidationFailed, "the tool resource failed validation", "review the tool metadata, execution, and security fields")
 		return
 	}
 
 	if s.store == nil {
-		http.Error(w, "store not available", http.StatusInternalServerError)
+		writeControlPlaneError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "store not available", "check ERPBridge storage configuration")
 		return
 	}
 	s.pluginLifecycleMu.Lock()
@@ -750,18 +750,18 @@ func (s *Server) handleToolApply(w http.ResponseWriter, r *http.Request) {
 
 	affected, err := s.store.ListPluginBindingsForTool(t.Metadata.Name, t.Metadata.Version)
 	if err != nil {
-		http.Error(w, "failed to inspect plugin bindings: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	if err := s.flushPluginBindingTargets(r.Context(), affected); err != nil {
-		http.Error(w, "plugin cache invalidation failed", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check cache health and retry")
 		return
 	}
 
 	t.Metadata.IsActive = true // Mark as active before saving
 
 	if err := s.store.Save(&t); err != nil {
-		http.Error(w, "failed to save tool: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 
@@ -782,9 +782,13 @@ func (s *Server) handleToolApply(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleToolList(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil {
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
+		return
+	}
 	tools, err := s.store.List()
 	if err != nil {
-		http.Error(w, "failed to list tools: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	nameFilter := r.URL.Query().Get(toolNameQueryParam)
@@ -816,16 +820,20 @@ func (s *Server) handleToolDelete(w http.ResponseWriter, r *http.Request) {
 	hard := r.URL.Query().Get("hard") == queryTrueValue
 
 	if name == "" || version == "" {
-		http.Error(w, "missing name or version parameter", http.StatusBadRequest)
+		writeControlPlaneError(w, http.StatusBadRequest, ErrorValidationFailed, "tool name and version are required", "provide both name and version")
+		return
+	}
+	if s.store == nil {
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
 		return
 	}
 	affected, err := s.store.ListPluginBindingsForTool(name, version)
 	if err != nil {
-		http.Error(w, "failed to inspect plugin bindings: "+err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 	if err := s.flushPluginBindingTargets(r.Context(), affected); err != nil {
-		http.Error(w, "plugin cache invalidation failed", http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check cache health and retry")
 		return
 	}
 
@@ -834,12 +842,12 @@ func (s *Server) handleToolDelete(w http.ResponseWriter, r *http.Request) {
 
 	if hard {
 		if err := s.store.HardDelete(name, version); err != nil {
-			http.Error(w, "failed to hard delete tool: "+err.Error(), http.StatusInternalServerError)
+			writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 			return
 		}
 	} else {
 		if err := s.store.Delete(name, version); err != nil {
-			http.Error(w, "failed to delete tool: "+err.Error(), http.StatusInternalServerError)
+			writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 			return
 		}
 	}
@@ -913,14 +921,16 @@ func schemaForMCP(t *Tool) (InputSchema, error) {
 
 func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeControlPlaneError(w, http.StatusMethodNotAllowed, ErrorMethodNotAllowed, "the requested control-plane method is not supported", "use POST to invoke a tool")
 		return
 	}
 
 	var req ToolCallRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.log.Error("bad request", slog.String("error", err.Error()))
-		http.Error(w, "bad request", http.StatusBadRequest)
+		if s.log != nil {
+			s.log.Warn("direct invoke request was invalid")
+		}
+		writeControlPlaneError(w, http.StatusBadRequest, ErrorValidationFailed, "the tool invocation is not valid JSON", "submit one valid invocation request")
 		return
 	}
 
@@ -930,7 +940,7 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 	s.mu.RUnlock()
 
 	if err != nil {
-		http.Error(w, "tool not found", http.StatusNotFound)
+		writeControlPlaneError(w, http.StatusNotFound, ErrorResourceNotFound, "the requested tool was not found", "check the tool name and version")
 		return
 	}
 
@@ -957,20 +967,22 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 	// Execute through the middleware chain
 	mcpResult, err := handler(directContext, mcpReq)
 	if err != nil {
+		// Keep the established direct-invoke compatibility response for plugin
+		// processing failures. It contains only a fixed safe message; MCP
+		// tools/call continues to use isError=true in its JSON-RPC result.
 		if errors.Is(err, ErrPluginProcessingFailed) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{pluginErrorField: ErrPluginProcessingFailed.Error()})
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check tool and plugin health, then retry")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if mcpResult.IsError {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]any{"error": mcpResult.Content})
+		writeControlPlaneError(w, http.StatusBadGateway, ErrorUpstreamUnreachable, "tool execution failed", "check the upstream ERP service and tool configuration")
 		return
 	}
 
@@ -995,12 +1007,12 @@ func writeRoleAuthorizationError(w http.ResponseWriter, err error) {
 	if errors.As(err, &roleErr) && roleErr.Status != 0 {
 		status = roleErr.Status
 	}
-	http.Error(w, err.Error(), status)
+	writeControlPlaneError(w, status, ErrorAuthorizationDenied, "the caller is not authorized to invoke this tool", "use a token with the required role")
 }
 
 func (s *Server) handleCacheFlush(w http.ResponseWriter, r *http.Request) {
 	if s.cache == nil {
-		http.Error(w, "cache not enabled", http.StatusServiceUnavailable)
+		writeControlPlaneError(w, http.StatusServiceUnavailable, ErrorHealthCheckFailed, "cache is not enabled", "check cache configuration before retrying")
 		return
 	}
 
@@ -1018,7 +1030,7 @@ func (s *Server) handleCacheFlush(w http.ResponseWriter, r *http.Request) {
 		count, err = s.cache.FlushTool(r.Context(), tool)
 	case module != "":
 		if s.store == nil {
-			http.Error(w, "store not available", http.StatusInternalServerError)
+			writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage configuration")
 			return
 		}
 		var tools []*Tool
@@ -1034,12 +1046,12 @@ func (s *Server) handleCacheFlush(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	default:
-		http.Error(w, "missing tool, module or all parameter", http.StatusBadRequest)
+		writeControlPlaneError(w, http.StatusBadRequest, ErrorValidationFailed, "one of tool, module, or all is required", "provide exactly one cache flush selector")
 		return
 	}
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check cache health and retry")
 		return
 	}
 
@@ -1052,13 +1064,13 @@ func (s *Server) handleCacheFlush(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCacheStats(w http.ResponseWriter, r *http.Request) {
 	if s.cache == nil {
-		http.Error(w, "cache not enabled", http.StatusServiceUnavailable)
+		writeControlPlaneError(w, http.StatusServiceUnavailable, ErrorHealthCheckFailed, "cache is not enabled", "check cache configuration before retrying")
 		return
 	}
 
 	stats, err := s.cache.Stats(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check cache health and retry")
 		return
 	}
 

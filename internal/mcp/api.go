@@ -7,10 +7,12 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/nmdra/ERPBridge/internal/connector"
+	"github.com/nmdra/ERPBridge/internal/security"
 )
 
 const (
@@ -59,6 +61,10 @@ func (s *Server) handleAPIProbe(w http.ResponseWriter, r *http.Request) {
 		writeAPIProbeError(w, http.StatusUnprocessableEntity, "invalid API probe request")
 		return
 	}
+	if insecureAPIProbeRequest(request) {
+		writeControlPlaneError(w, http.StatusUnprocessableEntity, ErrorInsecureTransport, "the API endpoint cannot receive credentials over this transport", "use HTTPS or explicitly allow the local development host")
+		return
+	}
 	if s.connector == nil {
 		writeAPIProbeError(w, http.StatusServiceUnavailable, "ERP connector is unavailable")
 		return
@@ -70,6 +76,10 @@ func (s *Server) handleAPIProbe(w http.ResponseWriter, r *http.Request) {
 	}}
 	ep, queryParams, body, err := tool.prepareERPCall(nil)
 	if err != nil {
+		if insecureAPIProbeRequest(request) {
+			writeControlPlaneError(w, http.StatusUnprocessableEntity, ErrorInsecureTransport, "the API endpoint cannot receive credentials over this transport", "use HTTPS or explicitly allow the local development host")
+			return
+		}
 		writeAPIProbeError(w, http.StatusUnprocessableEntity, "API credential or endpoint could not be prepared")
 		return
 	}
@@ -98,6 +108,18 @@ func (s *Server) handleAPIProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
+}
+
+func insecureAPIProbeRequest(request APIProbeRequest) bool {
+	if request.CredentialRef == "" || strings.TrimSpace(os.Getenv(request.CredentialRef)) == "" {
+		return false
+	}
+	parsed, err := url.Parse(request.URL)
+	if err != nil || parsed.Scheme != "http" {
+		return false
+	}
+	_, _, err = security.ValidateOutboundTransport(parsed, true)
+	return err != nil
 }
 
 func validateAPIProbeRequest(request APIProbeRequest) error {
@@ -129,10 +151,18 @@ func safeContentType(raw string) string {
 }
 
 func writeAPIProbeError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":   "API_PROBE_FAILED",
-		"message": message,
-	})
+	code := ErrorAPIProbeFailed
+	suggestion := "review the API definition and retry"
+	switch status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		code = ErrorValidationFailed
+		suggestion = "submit a bounded URL, method, and credential reference"
+	case http.StatusBadGateway, http.StatusGatewayTimeout:
+		code = ErrorUpstreamUnreachable
+		suggestion = "check the ERP endpoint and network connectivity"
+	case http.StatusServiceUnavailable:
+		code = ErrorHealthCheckFailed
+		suggestion = "check ERPBridge connector health and retry"
+	}
+	writeControlPlaneError(w, status, code, message, suggestion)
 }
