@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Run `bridgectl api test` through an authenticated server-side probe by
+  default, with bounded status summaries and an explicit `--local` legacy mode
+- Normalize MCP transport suffixes for unambiguous control-plane CLI calls and
+  reject other configured paths with actionable errors
 - Add a non-interactive `make dev-up` Compose bootstrap with ephemeral local
   MockERP credentials, safe health polling, and loopback-only RedisInsight
   exposure by default

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/idp"
 	"github.com/nmdra/ERPBridge/internal/security"
 	"github.com/stretchr/testify/require"
@@ -108,6 +110,8 @@ func TestApiListCmd(t *testing.T) {
 func TestApiTestCmd(t *testing.T) {
 	setupTest()
 	t.Setenv("HOME", t.TempDir())
+	require.NoError(t, apiTestCmd.Flags().Set("local", "true"))
+	t.Cleanup(func() { _ = apiTestCmd.Flags().Set("local", "false") })
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -136,6 +140,8 @@ func TestApiTestCmd(t *testing.T) {
 func TestAPITestResolvesCredentialReference(t *testing.T) {
 	setupTest()
 	t.Setenv("HOME", t.TempDir())
+	require.NoError(t, apiTestCmd.Flags().Set("local", "true"))
+	t.Cleanup(func() { _ = apiTestCmd.Flags().Set("local", "false") })
 	// #nosec G101 -- test-only sentinel for the resolved environment credential.
 	const credential = "api-test-secret"
 	t.Setenv("ERP_API_TEST_KEY", credential)
@@ -204,9 +210,43 @@ func TestApiRegisterCmd(t *testing.T) {
 	require.Equal(t, "", api.CredentialRef)
 }
 
+func TestAPITestServerSideSendsOnlyReference(t *testing.T) {
+	setupTest()
+	t.Setenv("HOME", t.TempDir())
+	const serverProbeValue = "server-probe-value" // #nosec G101 -- test-only credential sentinel.
+	t.Setenv("ERP_SERVER_SIDE_KEY", serverProbeValue)
+
+	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "/api/apis/test", r.URL.Path)
+		var request struct {
+			URL           string `json:"url"`
+			Method        string `json:"method"`
+			CredentialRef string `json:"credentialRef"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		require.Equal(t, "ERP_SERVER_SIDE_KEY", request.CredentialRef)
+		require.NotContains(t, r.Header.Get("Authorization"), serverProbeValue)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":200,"contentType":"application/json","latency":1,"success":true}`))
+	}))
+	defer controlPlane.Close()
+	cfg.Contexts[testContextName] = config.Context{MCPServer: controlPlane.URL}
+
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
+	require.NoError(t, err)
+	// #nosec G101 -- test-only environment reference, not a credential value.
+	require.NoError(t, reg.Register(&idp.API{Name: "server-test", URL: "https://erp.example.test/items", Method: http.MethodGet, AuthType: testBearerAuthType, CredentialRef: "ERP_SERVER_SIDE_KEY"}))
+	apiTestCmd.SetContext(context.Background())
+	require.NoError(t, apiTestCmd.Flags().Set("local", "false"))
+	require.NoError(t, apiTestCmd.RunE(apiTestCmd, []string{"server-test"}))
+}
+
 func TestAPITestRequiresCredentialReference(t *testing.T) {
 	setupTest()
 	t.Setenv("HOME", t.TempDir())
+	require.NoError(t, apiTestCmd.Flags().Set("local", "true"))
+	t.Cleanup(func() { _ = apiTestCmd.Flags().Set("local", "false") })
 	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
 	require.NoError(t, reg.Register(&idp.API{Name: "secured", URL: "https://example.invalid", Method: http.MethodGet, AuthType: testBearerAuthType}))

@@ -296,7 +296,7 @@ archived as completed before this plan is promoted.
     ordering, duplicate rejection/forced replacement, legacy migration, and
     secret-free scrub output; generated CLI docs compare cleanly.
 
-- [ ] **Task 3: Make API tests server-side and control-plane URLs unambiguous.**
+- [x] **Task 3: Make API tests server-side and control-plane URLs unambiguous.**
   - Add an authenticated admin-only API probe route and bounded request/response
     types in `internal/mcp`. Resolve `credentialRef` on the server, reuse ERP
     endpoint preparation and outbound transport/redirect rules, return only a
@@ -306,12 +306,14 @@ archived as completed before this plan is promoted.
     with a typed remediation message.
   - **Seam:** server API-probe handler, `Tool.prepareERPCall`/connector call
     options, and `internal/cli` request URL construction.
-  - **Files:** `internal/mcp/server.go`, `internal/mcp/tool.go`,
-    `internal/mcp/api_test.go`, `internal/mcp/server_test.go`,
-    `internal/connector/client.go`, `internal/connector/client_test.go`,
-    `internal/cli/api.go`, `internal/cli/api_test.go`, `internal/cli/tool.go`,
-    `internal/cli/plugin.go`, `internal/cli/plugin_binding.go`,
-    `internal/cli/http.go`, `internal/cli/errors.go`, relevant generated CLI
+  - **Files:** `internal/mcp/api.go`, `internal/mcp/server.go`,
+    `internal/mcp/tool.go`, `internal/mcp/api_test.go`,
+    `internal/mcp/server_test.go`, `internal/connector/client.go`,
+    `internal/connector/client_test.go`, `internal/cli/api.go`,
+    `internal/cli/api_test.go`, `internal/cli/errors.go`,
+    `internal/cli/errors_test.go`, `internal/cli/http.go`,
+    `internal/cli/http_test.go`, `internal/cli/tool.go`,
+    `internal/cli/plugin.go`, `internal/cli/plugin_binding.go`, relevant generated CLI
     pages, `docs/onboarding.md`, `docs/docker.md`, `CHANGELOG.md`.
   - **Verify:** `go test ./internal/connector ./internal/mcp ./internal/cli
     -run '(API|Tool|Server|Client)' -count=1`; httptest coverage proves the

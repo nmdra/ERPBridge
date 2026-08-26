@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 )
 
 // Exit codes for agent compatibility.
@@ -71,4 +73,37 @@ func ValidateServerURL(url, serverType, contextName string) error {
 
 func hasProtocol(url string) bool {
 	return (len(url) >= 7 && url[:7] == "http://") || (len(url) >= 8 && url[:8] == "https://")
+}
+
+// controlPlaneRoot returns the URL used for REST/control-plane requests. The
+// configured MCP URL may point at the streamable transport for compatibility,
+// but no other path is accepted because it is ambiguous which endpoint is
+// intended.
+func controlPlaneRoot(raw, contextName string) (string, error) {
+	if err := ValidateServerURL(raw, "MCP", contextName); err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", NewError(CodeBadArgs, "CONTROL_PLANE_URL_INVALID",
+			"the configured MCP URL is not a valid control-plane root",
+			"Set mcp-server to an http(s) host root, or use only the exact /mcp or /mcp/ suffix for the MCP transport.")
+	}
+
+	switch parsed.Path {
+	case "", "/", "/mcp", "/mcp/":
+		parsed.Path = ""
+		parsed.RawPath = ""
+	default:
+		return "", NewError(CodeBadArgs, "CONTROL_PLANE_URL_INVALID",
+			"the configured MCP URL has a non-transport path and cannot be used for control-plane requests",
+			"Set mcp-server to the host root, or use only the exact /mcp or /mcp/ suffix for the MCP transport.")
+	}
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func unreachableControlPlaneError(_ error) error {
+	return NewError(CodeTimeout, "UPSTREAM_UNREACHABLE",
+		"the ERPBridge control plane could not be reached",
+		"Check the selected context's control-plane root and confirm ERPBridge is running.")
 }

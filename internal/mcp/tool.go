@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -187,7 +188,7 @@ func (t *Tool) prepareERPCall(args map[string]any) (connector.EndpointConfig, ur
 		u, err := url.Parse(fullURL)
 		if err == nil {
 			if u.IsAbs() {
-				if strings.HasPrefix(u.Host, "localhost") || strings.HasPrefix(u.Host, "127.0.0.1") || strings.HasPrefix(u.Host, "[::1]") {
+				if isLocalEndpoint(u) {
 					base, err := url.Parse(envBaseURL)
 					if err == nil {
 						u.Scheme = base.Scheme
@@ -373,6 +374,18 @@ func parseResponsePath(responsePath string) ([]responsePathToken, error) {
 		}
 	}
 	return tokens, nil
+}
+
+func isLocalEndpoint(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	hostname := strings.ToLower(u.Hostname())
+	if hostname == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(hostname)
+	return ip != nil && ip.IsLoopback()
 }
 
 func resolveCredential(ref string) (string, error) {

@@ -74,6 +74,17 @@ func decodeToolDocuments(data []byte, filePath string) ([]mcp.Tool, error) {
 	return tools, nil
 }
 
+func toolServerBase() (string, error) {
+	if cfg == nil {
+		return "", fmt.Errorf("CLI configuration is not initialized")
+	}
+	ctx, err := cfg.EffectiveContext()
+	if err != nil {
+		return "", err
+	}
+	return controlPlaneRoot(ctx.MCPServer, cfg.CurrentContext)
+}
+
 var toolApplyCmd = &cobra.Command{
 	Use:   cliApplyFileUse,
 	Short: "Apply a tool schema to the registry (declarative)",
@@ -90,14 +101,11 @@ var toolApplyCmd = &cobra.Command{
 			return err
 		}
 
-		ctx, err := cfg.EffectiveContext()
+		baseURL, err := toolServerBase()
 		if err != nil {
 			return err
 		}
-		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
-			return err
-		}
-		url := ctx.MCPServer + "/apis/erpbridge.io/v1/tools"
+		url := baseURL + "/apis/erpbridge.io/v1/tools"
 
 		applyFile := func(path string) error {
 			if !strings.HasSuffix(path, ".json") && !strings.HasSuffix(path, ".yaml") && !strings.HasSuffix(path, ".yml") {
@@ -162,14 +170,11 @@ var toolGetCmd = &cobra.Command{
 		if len(args) != 0 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
-		ctx, err := cfg.EffectiveContext()
+		baseURL, err := toolServerBase()
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
-		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
-			return nil, cobra.ShellCompDirectiveError
-		}
-		url := ctx.MCPServer + "/apis/erpbridge.io/v1/tools"
+		url := baseURL + "/apis/erpbridge.io/v1/tools"
 
 		// #nosec G107 -- URL is dynamically constructed from configured server context
 		resp, err := doBridgeRequest(cmd, http.MethodGet, url)
@@ -192,14 +197,11 @@ var toolGetCmd = &cobra.Command{
 		return completions, cobra.ShellCompDirectiveNoFileComp
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx, err := cfg.EffectiveContext()
+		baseURL, err := toolServerBase()
 		if err != nil {
 			return err
 		}
-		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
-			return err
-		}
-		listURL := ctx.MCPServer + "/apis/erpbridge.io/v1/tools"
+		listURL := baseURL + "/apis/erpbridge.io/v1/tools"
 		name, version := "", ""
 		if len(args) > 0 {
 			name, version = mcp.ParseToolIdentifier(args[0])
@@ -286,16 +288,13 @@ var toolDescribeCmd = &cobra.Command{
 		return toolGetCmd.ValidArgsFunction(cmd, args, toComplete)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx, err := cfg.EffectiveContext()
+		baseURL, err := toolServerBase()
 		if err != nil {
-			return err
-		}
-		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
 			return err
 		}
 
 		name, version := mcp.ParseToolIdentifier(args[0])
-		listURL := fmt.Sprintf("%s/apis/erpbridge.io/v1/tools", ctx.MCPServer)
+		listURL := baseURL + "/apis/erpbridge.io/v1/tools"
 		query := url.Values{cliNameField: []string{name}}
 		if version != "" {
 			query.Set("version", version)
@@ -463,14 +462,11 @@ var toolDeleteCmd = &cobra.Command{
 			}
 		}
 
-		ctx, err := cfg.EffectiveContext()
+		baseURL, err := toolServerBase()
 		if err != nil {
 			return err
 		}
-		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
-			return err
-		}
-		url := fmt.Sprintf("%s/apis/erpbridge.io/v1/tools?name=%s&version=%s", ctx.MCPServer, name, version)
+		url := fmt.Sprintf("%s/apis/erpbridge.io/v1/tools?name=%s&version=%s", baseURL, name, version)
 		if hard {
 			url += "&hard=true"
 		}

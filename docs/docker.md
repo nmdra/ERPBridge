@@ -122,6 +122,21 @@ You can use the local `bridgectl` binary to interact with the server running in 
 
     The target fetches the matching tagged OpenAPI contract and applies the generated YAML.
 
+4. **Test an API through the server:**
+
+    ```bash
+    ./bridgectl api test erp
+    ```
+
+    This is the default mode. ERPBridge resolves the API `credentialRef` from
+    its environment and returns only a status summary. Use
+    `./bridgectl api test erp --local` only for a legacy host-side diagnostic.
+
+    CLI control-plane requests use the configured MCP host root. The exact
+    `/mcp` or `/mcp/` suffix is removed automatically. Other non-empty paths
+    fail with `CONTROL_PLANE_URL_INVALID`. `/mcp/` remains the MCP client
+    transport endpoint and must not be used as a REST path.
+
 ## 5. Logs & Monitoring
 
 - **View Container Logs:**

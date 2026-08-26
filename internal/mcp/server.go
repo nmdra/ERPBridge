@@ -706,6 +706,11 @@ func (s *Server) ServeHTTP(mux *http.ServeMux, _ string) {
 
 	// 4. Kubernetes-Style Tool API
 	mux.Handle("/apis/erpbridge.io/v1/tools", s.AuthHandler(http.HandlerFunc(s.handleToolAPI), "", true))
+	apiProbeHandler := s.AuthHandler(http.HandlerFunc(s.handleAPIProbe), "", true)
+	mux.Handle(apiProbePath, apiProbeHandler)
+	// Keep the versioned resource namespace available for clients that group
+	// all declarative control-plane operations below /apis/erpbridge.io/v1.
+	mux.Handle(apiProbeResourcePath, apiProbeHandler)
 	mux.Handle("/apis/erpbridge.io/v1/plugins", s.AuthHandler(http.HandlerFunc(s.handlePluginAPI), "", true))
 	mux.Handle("/apis/erpbridge.io/v1/pluginbindings", s.AuthHandler(http.HandlerFunc(s.handlePluginBindingAPI), "", true))
 }

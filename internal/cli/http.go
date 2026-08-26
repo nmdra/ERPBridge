@@ -35,7 +35,11 @@ func doBridgeRequestWithHeaders(cmd *cobra.Command, method, target string, body 
 			req.Header.Add(key, value)
 		}
 	}
-	return http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, unreachableControlPlaneError(err)
+	}
+	return resp, nil
 }
 
 func bridgeAPIToken() string {

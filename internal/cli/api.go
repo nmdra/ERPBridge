@@ -1,14 +1,17 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/nmdra/ERPBridge/internal/connector"
 	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/idp"
+	"github.com/nmdra/ERPBridge/internal/mcp"
 	"github.com/nmdra/ERPBridge/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -217,21 +220,19 @@ var apiMigrateRegistryCmd = &cobra.Command{
 var apiTestCmd = &cobra.Command{
 	Use:   "test [name]",
 	Short: "Send a test request to a registered API",
-	Long: `Verify connectivity to a registered ERP API endpoint. 
-This command performs a real HTTP request using the configured method, 
-URL, and authentication headers, and displays the response status and latency.`,
-	Example: `  bridgectl api test get-invoices`,
-	Args:    cobra.ExactArgs(1),
+	Long: `Verify connectivity to a registered ERP API endpoint through the ERPBridge server.
+Use --local only for an explicit legacy host-side diagnostic.`,
+	Example: `  bridgectl api test get-invoices
+  bridgectl api test get-invoices --local`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reg, err := contextRegistry()
 		if err != nil {
 			return err
 		}
-
 		if reg.HasLegacyCredentials() {
 			return idp.ErrLegacyCredentials
 		}
-
 		name := args[0]
 		api, ok := reg.Get(name)
 		if !ok {
@@ -240,55 +241,93 @@ URL, and authentication headers, and displays the response status and latency.`,
 				"Run 'bridgectl api list' to see available APIs.")
 		}
 
-		credential, err := resolveAPICredential(api)
+		local, err := cmd.Flags().GetBool("local")
 		if err != nil {
 			return err
 		}
-
-		client := connector.NewClient(RootLog)
-		ep := connector.EndpointConfig{
-			Method:  api.Method,
-			Path:    api.URL, // In this case, URL is absolute as per register
-			BaseURL: "",      // Empty because Path is the full URL
-			Auth: connector.AuthConfig{
-				Type: api.AuthType,
-				Key:  credential,
-			},
+		if local {
+			return runLocalAPITest(cmd, api)
 		}
 
-		start := time.Now()
-		resp, err := client.Call(cmd.Context(), ep, nil, nil)
-		latency := time.Since(start)
-
+		ctx, err := cfg.EffectiveContext()
 		if err != nil {
-			return fmt.Errorf("request failed: %w", err)
+			return err
+		}
+		baseURL, err := controlPlaneRoot(ctx.MCPServer, cfg.CurrentContext)
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(mcp.APIProbeRequest{
+			URL:           api.URL,
+			Method:        api.Method,
+			AuthType:      api.AuthType,
+			AuthHeader:    api.AuthHeader,
+			CredentialRef: api.CredentialRef,
+		})
+		if err != nil {
+			return fmt.Errorf("marshal API probe request: %w", err)
+		}
+		resp, err := doBridgeRequestWithHeaders(cmd, http.MethodPost, baseURL+mcpAPIProbePath, bytes.NewReader(payload), http.Header{cliContentTypeHeader: []string{cliJSONContentType}})
+		if err != nil {
+			return err
 		}
 		defer func() { _ = resp.Body.Close() }()
-
-		var body any
-		_ = json.NewDecoder(resp.Body).Decode(&body)
-
-		testResp := &APITestResponse{
-			API:       api,
-			Status:    resp.Status,
-			Code:      resp.StatusCode,
-			Latency:   latency,
-			Response:  body,
-			IsSuccess: resp.StatusCode >= 200 && resp.StatusCode < 300,
+		if resp.StatusCode >= http.StatusBadRequest {
+			return fmt.Errorf("API probe failed (%d)", resp.StatusCode)
 		}
-
-		return formatter.Print(testResp)
+		var probe mcp.APIProbeResponse
+		if err := json.NewDecoder(resp.Body).Decode(&probe); err != nil {
+			return fmt.Errorf("decode API probe response: %w", err)
+		}
+		return formatter.Print(&APITestResponse{
+			API:         api,
+			Status:      fmt.Sprintf("%d %s", probe.Status, http.StatusText(probe.Status)),
+			Code:        probe.Status,
+			ContentType: probe.ContentType,
+			Latency:     time.Duration(probe.Latency) * time.Millisecond,
+			IsSuccess:   probe.Success,
+		})
 	},
+}
+
+const mcpAPIProbePath = "/api/apis/test"
+
+func runLocalAPITest(cmd *cobra.Command, api idp.API) error {
+	credential, err := resolveAPICredential(api)
+	if err != nil {
+		return err
+	}
+	client := connector.NewClient(RootLog)
+	ep := connector.EndpointConfig{
+		Method: api.Method,
+		Path:   api.URL,
+		Auth:   connector.AuthConfig{Type: api.AuthType, Key: credential, Header: api.AuthHeader},
+	}
+	start := time.Now()
+	resp, err := client.Call(cmd.Context(), ep, nil, nil)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return formatter.Print(&APITestResponse{
+		API:         api,
+		Status:      resp.Status,
+		Code:        resp.StatusCode,
+		ContentType: resp.Header.Get("Content-Type"),
+		Latency:     latency,
+		IsSuccess:   resp.StatusCode >= 200 && resp.StatusCode < 300,
+	})
 }
 
 // APITestResponse contains the results of an API connectivity test.
 type APITestResponse struct {
-	API       idp.API       `json:"api"`
-	Status    string        `json:"status"`
-	Code      int           `json:"code"`
-	Latency   time.Duration `json:"latency"`
-	Response  any           `json:"response"`
-	IsSuccess bool          `json:"isSuccess"`
+	API         idp.API       `json:"api"`
+	Status      string        `json:"status"`
+	Code        int           `json:"code"`
+	Latency     time.Duration `json:"latency"`
+	ContentType string        `json:"contentType,omitempty"`
+	IsSuccess   bool          `json:"isSuccess"`
 }
 
 // RenderTable implements the output.TableRenderer interface.
@@ -297,6 +336,7 @@ func (r *APITestResponse) RenderTable(w io.Writer) error {
 	_, _ = fmt.Fprintf(w, "URL      %s %s\n", r.API.Method, r.API.URL)
 	_, _ = fmt.Fprintf(w, "Auth     %s (%s)\n\n", r.API.AuthType, r.API.AuthHeader)
 	_, _ = fmt.Fprintf(w, "Status   %s\n", r.Status)
+	_, _ = fmt.Fprintf(w, "Type     %s\n", r.ContentType)
 	_, _ = fmt.Fprintf(w, "Latency  %v\n\n", r.Latency)
 
 	if r.IsSuccess {
@@ -339,6 +379,7 @@ func init() {
 	apiScrubCredentialsCmd.Flags().Bool("yes", false, "Confirm destructive credential removal for all registry targets")
 	apiMigrateRegistryCmd.Flags().Bool("yes", false, "Confirm removal of the legacy global registry")
 	apiMigrateRegistryCmd.Flags().Bool("force", false, "Replace colliding APIs in the selected context")
+	apiTestCmd.Flags().Bool("local", false, "Run the legacy host-side test instead of the server-side probe")
 	_ = apiSetCredentialRefCmd.MarkFlagRequired("credential-ref")
 
 	_ = apiRegisterCmd.MarkFlagRequired("name")

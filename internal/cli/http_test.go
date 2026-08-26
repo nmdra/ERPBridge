@@ -6,8 +6,19 @@ import (
 	"testing"
 
 	"github.com/nmdra/ERPBridge/internal/config"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDoBridgeRequestReturnsActionableUnreachableError(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	_, err := doBridgeRequest(cmd, http.MethodGet, "http://127.0.0.1:1")
+	require.Error(t, err)
+	var actionable *AgentActionableError
+	require.ErrorAs(t, err, &actionable)
+	require.Equal(t, "UPSTREAM_UNREACHABLE", actionable.ErrorCode)
+}
 
 func TestNewBridgeRequestTokenPrecedence(t *testing.T) {
 	setupTest()

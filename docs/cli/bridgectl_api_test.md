@@ -4,9 +4,10 @@ Send a test request to a registered API
 
 ### Synopsis
 
-Verify connectivity to a registered ERP API endpoint. 
-This command performs a real HTTP request using the configured method, 
-URL, and authentication headers, and displays the response status and latency.
+Verify connectivity to a registered ERP API endpoint through the ERPBridge server.
+The server resolves credentialRef from its environment and returns only status,
+content type, latency, and success. Use --local only for an explicit legacy
+host-side diagnostic.
 
 ```
 bridgectl api test [name] [flags]
@@ -16,12 +17,14 @@ bridgectl api test [name] [flags]
 
 ```
   bridgectl api test get-invoices
+  bridgectl api test get-invoices --local
 ```
 
 ### Options
 
 ```
   -h, --help   help for test
+      --local  Run the legacy host-side test instead of the server-side probe
 ```
 
 ### Options inherited from parent commands

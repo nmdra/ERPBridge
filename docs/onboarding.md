@@ -131,7 +131,30 @@ The command also accepts one JSON/YAML tool or a directory of tool files. It app
 
 ---
 
-## Step 6 — Verify Everything Is Working
+## Step 6 — Test the ERP API through the server
+
+Run API probes through ERPBridge. The server resolves `credentialRef` from its
+own environment and returns only status, content type, latency, and success.
+The ERP response body and headers never cross the probe boundary.
+
+```bash
+./bridgectl api test erp
+```
+
+Use `--local` only for an explicit offline or legacy host-side diagnostic. It
+resolves the credential in the CLI process and is not the normal workflow:
+
+```bash
+./bridgectl api test erp --local
+```
+
+The `mcp-server` context value is used as a control-plane root by CLI commands.
+It may be a host root such as `http://localhost:8080`, or the exact MCP
+transport URL `http://localhost:8080/mcp/`; the CLI removes that exact suffix
+for control-plane calls. Other non-empty paths are rejected. Keep `/mcp/` for
+MCP clients; do not use it as the REST API path.
+
+## Step 7 — Verify Everything Is Working
 
 Confirm that your tools are registered:
 

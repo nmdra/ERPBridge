@@ -3,15 +3,21 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/nmdra/ERPBridge/internal/connector"
 	"github.com/nmdra/ERPBridge/internal/logger"
+	"github.com/nmdra/ERPBridge/internal/security"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestServer_ToolAPI(t *testing.T) {
@@ -116,7 +122,6 @@ func TestServer_Reconcile_And_Deregister(t *testing.T) {
 	log := logger.Init()
 	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 
-	// Add a tool to the store
 	tool := &Tool{
 		Metadata: Metadata{Name: "recon-tool", Version: testVersion100, IsActive: true},
 		Spec:     ToolSpec{Description: Description{Short: testDescShort}},
@@ -124,31 +129,18 @@ func TestServer_Reconcile_And_Deregister(t *testing.T) {
 	err := s.store.Save(tool)
 	assert.NoError(t, err)
 
-	// Call Reconcile
 	s.Reconcile(context.Background())
-
-	// Ensure tool is registered
 	regTool, err := s.registry.Resolve("recon-tool", testVersion100)
 	assert.NoError(t, err)
 	assert.NotNil(t, regTool)
 
-	// Call Reconcile again, should do nothing because hash matches
 	s.Reconcile(context.Background())
-
-	// Now delete from store and Reconcile, should deregister
 	err = s.store.Delete("recon-tool", testVersion100)
 	assert.NoError(t, err)
-
-	// Force hash change by waiting a bit
 	time.Sleep(100 * time.Millisecond)
-
 	s.Reconcile(context.Background())
-
-	// Ensure tool is deregistered
 	_, err = s.registry.Resolve("recon-tool", testVersion100)
 	assert.Error(t, err)
-
-	// Call Deregister explicitly
 	s.DeregisterTool("nonexistent", testVersion100)
 }
 
@@ -157,21 +149,16 @@ func TestServer_StartController(_ *testing.T) {
 	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// Run controller in background
 	go s.StartController(ctx)
-
-	// Sleep briefly to let it loop once if possible, or just cancel
 	time.Sleep(50 * time.Millisecond)
 	cancel()
-	time.Sleep(50 * time.Millisecond) // wait for goroutine to exit
+	time.Sleep(50 * time.Millisecond)
 }
 
 func TestServer_HandleMCPToolCall(t *testing.T) {
 	log := logger.Init()
 	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 
-	// Register a tool directly via registry to simulate
 	tool := &Tool{
 		Metadata: Metadata{Name: "mcp-tool", Version: testVersion100},
 		Spec:     ToolSpec{Description: Description{Short: testDescShort}},
@@ -182,7 +169,6 @@ func TestServer_HandleMCPToolCall(t *testing.T) {
 	s.RegisterTool(tool)
 
 	handler := s.handleMCPToolCall("mcp-tool")
-
 	req := mcp.CallToolRequest{}
 	req.Params.Name = "mcp-tool"
 	req.Params.Arguments = map[string]any{"arg1": "val1"}
@@ -192,16 +178,13 @@ func TestServer_HandleMCPToolCall(t *testing.T) {
 	assert.NotNil(t, res)
 	assert.False(t, res.IsError)
 	assert.Len(t, res.Content, 1)
-
 	textRes := res.Content[0].(mcp.TextContent)
 	assert.Contains(t, textRes.Text, `"status":"ok"`)
 
-	// Invalid arguments format
 	req.Params.Arguments = "invalid string instead of map"
 	_, err = handler(context.Background(), req)
 	assert.Error(t, err)
 
-	// Tool not found
 	handlerNotFound := s.handleMCPToolCall("nonexistent-tool")
 	req.Params.Name = "nonexistent-tool"
 	req.Params.Arguments = map[string]any{}
@@ -228,7 +211,7 @@ func TestServer_HandleMCPToolCall_ExecuteError(t *testing.T) {
 	req.Params.Arguments = map[string]any{}
 
 	res, err := handler(context.Background(), req)
-	assert.NoError(t, err) // mcp handler returns nil error, but result has error
+	assert.NoError(t, err)
 	assert.True(t, res.IsError)
 	assert.Len(t, res.Content, 1)
 	textRes := res.Content[0].(mcp.TextContent)
@@ -238,7 +221,7 @@ func TestServer_HandleMCPToolCall_ExecuteError(t *testing.T) {
 func TestServer_ToolAPINoStore(t *testing.T) {
 	log := logger.Init()
 	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, "/invalid/path/db")
-	s.store = nil // forcibly set nil to test nil store conditions
+	s.store = nil
 
 	t.Run("Apply Tool - No Store", func(t *testing.T) {
 		toolJSON := testToolJSON
@@ -250,7 +233,6 @@ func TestServer_ToolAPINoStore(t *testing.T) {
 	})
 
 	t.Run("Reconcile - No Store", func(_ *testing.T) {
-		// Should not panic
 		s.Reconcile(context.Background())
 	})
 }
@@ -258,8 +240,6 @@ func TestServer_ToolAPINoStore(t *testing.T) {
 func TestServer_StoreErrors(t *testing.T) {
 	log := logger.Init()
 	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
-
-	// close store to induce errors
 	_ = s.store.Close()
 
 	t.Run("Apply Tool - DB Error", func(t *testing.T) {
@@ -285,7 +265,130 @@ func TestServer_StoreErrors(t *testing.T) {
 	})
 
 	t.Run("Reconcile - DB Error", func(_ *testing.T) {
-		// Should return early due to GetStateHash error
 		s.Reconcile(context.Background())
 	})
+}
+
+func TestServerAPIProbeResolvesCredentialAndReturnsBoundedSummary(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	const probeValue = "probe-value" // #nosec G101 -- test-only credential sentinel.
+	t.Setenv("ERP_PROBE_KEY", probeValue)
+
+	erp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "Bearer "+probeValue, r.Header.Get("X-Probe-Token"))
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("X-Upstream-Secret", "do-not-forward")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"secret":"erp-body"}`))
+	}))
+	defer erp.Close()
+	setProbeInsecureHost(t, erp.URL)
+
+	s := NewServer(connector.NewClient(logger.Init()), nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	mux := http.NewServeMux()
+	s.ServeHTTP(mux, "")
+
+	// #nosec G101 -- test-only environment reference, not a credential value.
+	payload, err := json.Marshal(APIProbeRequest{
+		URL:           erp.URL,
+		Method:        http.MethodGet,
+		AuthType:      "bearer",
+		AuthHeader:    "X-Probe-Token",
+		CredentialRef: "ERP_PROBE_KEY",
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, apiProbePath, bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer admin-token")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	require.NotContains(t, body, probeValue)
+	require.NotContains(t, body, "erp-body")
+	require.NotContains(t, body, "do-not-forward")
+	var response APIProbeResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Equal(t, http.StatusCreated, response.Status)
+	require.Equal(t, "application/json", response.ContentType)
+	require.GreaterOrEqual(t, response.Latency, int64(0))
+	require.True(t, response.Success)
+}
+
+func TestServerAPIProbeIsAdminOnly(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	mux := http.NewServeMux()
+	s.ServeHTTP(mux, "")
+
+	req := httptest.NewRequest(http.MethodPost, apiProbePath, strings.NewReader(`{"url":"http://127.0.0.1:1","method":"GET"}`))
+	req.Header.Set("Authorization", "Bearer not-admin")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestToolPrepareERPCallRewritesOnlyExactLocalhost(t *testing.T) {
+	t.Setenv("ERP_BASE_URL", "https://configured.erp.test")
+	for _, test := range []struct {
+		name string
+		url  string
+		want string
+	}{
+		{name: "localhost", url: "http://localhost:8081/invoices", want: "https://configured.erp.test/invoices"},
+		{name: "localhost with suffix", url: "http://localhost.example/invoices", want: "http://localhost.example/invoices"},
+		{name: "loopback", url: "http://127.0.0.1:8081/invoices", want: "https://configured.erp.test/invoices"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			tool := &Tool{Spec: ToolSpec{Execution: Execution{Method: http.MethodGet, Endpoint: test.url}}}
+			ep, _, _, err := tool.prepareERPCall(nil)
+			require.NoError(t, err)
+			require.Equal(t, test.want, ep.Path)
+		})
+	}
+}
+
+func TestServerAPIProbeDoesNotFollowCredentialedRedirect(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	t.Setenv("ERP_PROBE_KEY", "redirect-value")
+	finalCalls := 0
+	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		finalCalls++
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("redirect target received authorization")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer final.Close()
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, final.URL, http.StatusTemporaryRedirect)
+	}))
+	defer redirect.Close()
+	setProbeInsecureHost(t, redirect.URL)
+
+	s := NewServer(connector.NewClient(logger.Init()), nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	mux := http.NewServeMux()
+	s.ServeHTTP(mux, "")
+	// #nosec G101 -- test-only environment reference, not a credential value.
+	payload, err := json.Marshal(APIProbeRequest{URL: redirect.URL, Method: http.MethodGet, AuthType: "bearer", CredentialRef: "ERP_PROBE_KEY"})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, apiProbePath, bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer admin-token")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response APIProbeResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Equal(t, http.StatusTemporaryRedirect, response.Status)
+	require.False(t, response.Success)
+	require.Equal(t, 0, finalCalls)
+}
+
+func setProbeInsecureHost(t *testing.T, rawURL string) {
+	t.Helper()
+	u, err := url.Parse(rawURL)
+	require.NoError(t, err)
+	t.Setenv(security.InsecureAuthAllowedHostsEnv, u.Host)
 }

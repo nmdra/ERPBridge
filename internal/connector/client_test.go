@@ -143,6 +143,35 @@ func TestClient_Call_APIKey(t *testing.T) {
 	}
 }
 
+func TestClient_Call_APIKeyUsesConfiguredHeader(t *testing.T) {
+	sawHeader := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != "test-key" {
+			t.Errorf("expected X-API-Key header, got %s", r.Header.Get("X-API-Key"))
+		}
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("unexpected Authorization header: %s", r.Header.Get("Authorization"))
+		}
+		sawHeader = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+	allowInsecureAuthHost(t, ts.URL)
+
+	_, err := NewClient(slog.Default()).Call(context.Background(), EndpointConfig{
+		Method:  http.MethodGet,
+		Path:    "/test",
+		BaseURL: ts.URL,
+		Auth:    AuthConfig{Type: "api-key", Key: "test-key", Header: "X-API-Key"},
+	}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawHeader {
+		t.Fatal("request was not observed")
+	}
+}
+
 func TestClient_Call_RejectsCredentialedHTTPBeforeOutbound(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

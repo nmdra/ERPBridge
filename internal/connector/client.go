@@ -28,6 +28,8 @@ type AuthConfig struct {
 	Type string
 	// Key is the resolved secret value.
 	Key string
+	// Header overrides the default Authorization header for this request.
+	Header string
 }
 
 // EndpointConfig describes the target ERP API endpoint and its requirements.
@@ -99,17 +101,22 @@ func (c *Client) applyAuth(req *http.Request, ep EndpointConfig) {
 		return
 	}
 
+	header := ep.Auth.Header
+	if header == "" {
+		header = "Authorization"
+	}
+	value := ep.Auth.Key
 	switch ep.Auth.Type {
 	case "api-key":
 		// For Frappe/ERPNext, this is typically "token {key}:{secret}"
-		// We expect the resolved Key to contain the full header value.
-		req.Header.Set("Authorization", ep.Auth.Key)
+		// and the resolved Key contains the full header value.
 	case "basic":
-		// Expects Key to be base64 encoded "user:pass"
-		req.Header.Set("Authorization", "Basic "+ep.Auth.Key)
+		// Expects Key to be base64 encoded "user:pass".
+		value = "Basic " + ep.Auth.Key
 	case authTypeBearer:
-		req.Header.Set("Authorization", "Bearer "+ep.Auth.Key)
+		value = "Bearer " + ep.Auth.Key
 	}
+	req.Header.Set(header, value)
 }
 
 // CallOptions controls optional response handling without changing the

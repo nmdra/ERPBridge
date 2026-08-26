@@ -134,10 +134,7 @@ func pluginServerBase() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
-		return "", err
-	}
-	return ctx.MCPServer, nil
+	return controlPlaneRoot(ctx.MCPServer, cfg.CurrentContext)
 }
 
 var pluginApplyCmd = &cobra.Command{
