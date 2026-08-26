@@ -46,6 +46,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - DATABASE_PATH=/app/data/erpbridge.db
       - ERP_PRIMARY_KEY=${ERP_PRIMARY_KEY:-}
+      # make dev-up opts in; direct and production-like Compose runs default off.
+      - MCP_ENABLE_TEST_TOOLS=${MCP_ENABLE_TEST_TOOLS:-false}
       # MockERP is HTTP only and is an explicit development-only exception.
       - INSECURE_AUTH_ALLOWED_HOSTS=mock-erp:8081
       - RATE_LIMIT_RPS=10

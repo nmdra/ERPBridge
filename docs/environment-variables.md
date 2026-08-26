@@ -10,6 +10,7 @@ The server reads these variables directly from the environment. It does not load
 | :--- | :--- | :--- |
 | `MCP_PORT` | `8080` | HTTP listen port. |
 | `MCP_TRANSPORT` | (unset) | `stdio` runs the server in stdio mode. Any other value runs the HTTP server. |
+| `MCP_ENABLE_TEST_TOOLS` | `false` | Development-only opt-in for `system.*_test` demo tools. `make dev-up` sets it; do not enable it in production. |
 | `DATABASE_PATH` | `data/erpbridge.db` | Path of the SQLite tool registry. The parent directory is created automatically. |
 | `REDIS_URL` | (empty) | Redis URL (for example `redis://localhost:6379`). If empty, the server uses the bounded in-memory cache. |
 | `REDIS_INSIGHT_BIND_ADDRESS` | `127.0.0.1` | Host address for the RedisInsight binding in Compose. |

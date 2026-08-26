@@ -82,6 +82,19 @@ selected role as `arguments.role`; direct callers use `X-ERPBridge-Role`.
 The selected role must be present in both the token identity and the tool
 allow-list. The server removes the MCP selector before the ERP call.
 
+Classify sensitive tools with `spec.security.dataClass: pii` or `restricted`.
+These classes require one or more opaque, verified role names. Use names such
+as `role_alpha`, not employee names, email addresses, or other personal data.
+Authorization runs before cache lookup and ERP work. A missing or unauthorized
+role cannot read a cached result. `dataClass` is optional for older manifests;
+when present it must be `public`, `internal`, `pii`, or `restricted`. ERPBridge
+does not infer sensitivity from arbitrary ERP response payloads.
+
+The bundled `system.progress_test` and `system.sensitive_log_test` tools are
+development demonstrations. They are absent from discovery unless
+`MCP_ENABLE_TEST_TOOLS=true`; only the development Compose stack sets this
+flag. Do not enable it for a production server.
+
 Open tools do not reserve `role`, so existing business arguments remain
 unchanged. Guarded tools deny calls without a verified identity, including
 calls over stdio. Denied calls run before cache lookup and downstream ERP

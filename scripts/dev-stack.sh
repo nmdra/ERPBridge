@@ -14,6 +14,9 @@ HEALTH_ATTEMPTS=${HEALTH_ATTEMPTS:-60}
 HEALTH_INTERVAL=${HEALTH_INTERVAL:-2}
 DRY_RUN=false
 
+# This bootstrap is the only non-Compose path that enables development demo tools.
+export MCP_ENABLE_TEST_TOOLS=true
+
 usage() {
   cat <<'EOF'
 Usage: scripts/dev-stack.sh [--dry-run]

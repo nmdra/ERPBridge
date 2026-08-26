@@ -49,9 +49,14 @@ type Server struct {
 }
 
 const (
-	statusKey          = "status"
-	textContentType    = "text"
-	toolNameQueryParam = "name"
+	statusKey           = "status"
+	textContentType     = "text"
+	toolNameQueryParam  = "name"
+	testToolsEnv        = "MCP_ENABLE_TEST_TOOLS"
+	dataClassPublic     = "public"
+	dataClassInternal   = "internal"
+	dataClassPII        = "pii"
+	dataClassRestricted = "restricted"
 )
 
 // RateLimitConfig defines the configuration for the tool rate limiter.
@@ -125,6 +130,10 @@ func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Lo
 
 // RegisterBuiltinTools registers internal system tools using structured handlers.
 func (s *Server) RegisterBuiltinTools() {
+	if !testToolsEnabled() {
+		return
+	}
+
 	// system.progress_test
 	type ProgressTestInput struct {
 		Steps int `json:"steps" jsonschema:"description=Number of steps to simulate (max 100),default=10"`
@@ -503,6 +512,13 @@ func (s *Server) FilterToolsList(tools []mcp.Tool) []mcp.Tool {
 
 // RegisterTool adds a tool to the server's registry and active MCP server.
 func (s *Server) RegisterTool(t *Tool) {
+	if err := s.validateTool(t); err != nil {
+		if s.log != nil {
+			s.log.Error("rejected invalid tool", slog.String("tool_name", t.Metadata.Name), slog.String("error", err.Error()))
+		}
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -859,6 +875,10 @@ func (s *Server) handleToolDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func testToolsEnabled() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv(testToolsEnv)), "true")
+}
+
 // Admission Controller
 func (s *Server) validateTool(t *Tool) error {
 	if t.Metadata.Name == "" {
@@ -876,6 +896,16 @@ func (s *Server) validateTool(t *Tool) error {
 	if strings.Contains(t.Spec.Execution.Endpoint, "token ") ||
 		strings.Contains(t.Spec.Execution.Endpoint, "key=") {
 		return fmt.Errorf("endpoint should not contain raw secrets, use credentialRef instead")
+	}
+
+	switch t.Spec.Security.DataClass {
+	case "", dataClassPublic, dataClassInternal:
+	case dataClassPII, dataClassRestricted:
+		if len(t.Spec.Security.AllowedRoles) == 0 {
+			return fmt.Errorf("security.allowedRoles is required for dataClass %q", t.Spec.Security.DataClass)
+		}
+	default:
+		return fmt.Errorf("invalid security.dataClass %q: must be one of public, internal, pii, or restricted", t.Spec.Security.DataClass)
 	}
 
 	roles, err := NormalizeRoles(t.Spec.Security.AllowedRoles)

@@ -71,7 +71,8 @@ Authentication strategy.
 
 - **`authType`**: `api-key`, `bearer`, or `basic`.
 - **`credentialRef`**: The name of the environment variable containing the secret. **Never embed raw secrets here.**
-- **`allowedRoles`**: (Optional array) Roles that may call this tool. Each role must match `[a-z][a-z0-9_-]{0,63}`; the list must contain unique values and no more than 32 roles.
+- **`dataClass`**: (Optional string) Declared sensitivity: `public`, `internal`, `pii`, or `restricted`. The field is optional for compatibility with older schemas.
+- **`allowedRoles`**: (Optional array) Roles that may call this tool. Each role must match `[a-z][a-z0-9_-]{0,63}`; the list must contain unique values and no more than 32 roles. `pii` and `restricted` tools must provide at least one role.
 
 When `allowedRoles` is present, the tool is guarded. MCP clients select one of
 the advertised roles with `arguments.role`. Direct API callers select a role

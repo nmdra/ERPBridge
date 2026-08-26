@@ -25,7 +25,8 @@ spec:
   security:
     authType: api-key
     credentialRef: <ERP_CREDENTIAL_ENV_VAR>
-    allowedRoles: [] # Omit for an open tool; use verified role names for a guarded tool.
+    dataClass: internal # public, internal, pii, or restricted
+    allowedRoles: [] # Required for pii/restricted; use opaque verified role names.
   cache:
     enabled: false
     flushOn: []

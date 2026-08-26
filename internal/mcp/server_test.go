@@ -212,11 +212,61 @@ func TestServer_RegisterToolInitializesMetrics(t *testing.T) {
 }
 
 func TestServer_NewServerInitializesBuiltinMetrics(t *testing.T) {
+	t.Setenv("MCP_ENABLE_TEST_TOOLS", "true")
 	log := logger.Init()
 	NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 
 	assertToolMetricSeriesInitialized(t, "system.progress_test", false)
 	assertToolMetricSeriesInitialized(t, "system.sensitive_log_test", false)
+}
+
+func TestServer_BuiltinDemoToolsAreDisabledByDefault(t *testing.T) {
+	t.Setenv(testToolsEnv, "")
+	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+
+	tools := s.mcpServer.ListTools()
+	assert.NotContains(t, tools, "system.progress_test")
+	assert.NotContains(t, tools, "system.sensitive_log_test")
+}
+
+func TestServer_BuiltinDemoToolsEnabledExplicitly(t *testing.T) {
+	t.Setenv(testToolsEnv, "true")
+	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+
+	tools := s.mcpServer.ListTools()
+	assert.Contains(t, tools, "system.progress_test")
+	assert.Contains(t, tools, "system.sensitive_log_test")
+}
+
+func TestServer_PIIEmployeeToolDeniesBeforeCacheOrERP(t *testing.T) {
+	t.Setenv(testToolsEnv, "false")
+	cacheManager := cache.NewMemoryManager(10, logger.Init())
+	s := NewServer(nil, cacheManager, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	calls := 0
+	tool := &Tool{
+		Metadata: Metadata{Name: "list-employees", Version: testVersion100},
+		Spec: ToolSpec{
+			InputSchema: InputSchema{Type: schemaTypeObject},
+			Security:    Security{DataClass: dataClassPII, AllowedRoles: []string{testRoleAlpha}},
+			Cache:       &cache.Config{Enabled: true, IsReadOnly: true},
+		},
+		Handler: func(context.Context, map[string]any) (*ToolResult, error) {
+			calls++
+			return &ToolResult{Result: map[string]any{"employees": []any{}}}, nil
+		},
+	}
+	assert.NoError(t, s.validateTool(tool))
+	s.RegisterTool(tool)
+	registered := s.mcpServer.ListTools()[tool.Metadata.Name]
+
+	request := mcp.CallToolRequest{}
+	request.Params.Name = tool.Metadata.Name
+	request.Params.Arguments = map[string]any{roleSelectorField: testRoleOperator}
+	deniedContext := WithCallerIdentity(context.Background(), CallerIdentity{PrincipalID: testClientOne, Roles: []string{testRoleOperator}})
+	result, err := registered.Handler(deniedContext, request)
+	assert.NoError(t, err)
+	assert.True(t, result.IsError)
+	assert.Zero(t, calls)
 }
 
 func assertToolMetricSeriesInitialized(t *testing.T, toolName string, assertZero bool) {

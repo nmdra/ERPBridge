@@ -2,15 +2,23 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 DEV_STACK="$SCRIPT_DIR/dev-stack.sh"
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
+
+# The published RedisInsight port must remain loopback-bound by default.
+if ! grep -Fq 'REDIS_INSIGHT_BIND_ADDRESS:-127.0.0.1' "$PROJECT_ROOT/docker-compose.yml" 2>/dev/null; then
+  printf 'RedisInsight must be loopback-bound by default\n' >&2
+  exit 1
+fi
 
 FAKE_DOCKER="$TEST_DIR/docker"
 LOG="$TEST_DIR/compose.log"
 cat >"$FAKE_DOCKER" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+[[ "${MCP_ENABLE_TEST_TOOLS:-}" == true ]] || exit 1
 printf 'args=%s\n' "$*" >>"$FAKE_LOG"
 case "${EXPECT_MODE:-}" in
   generated)
@@ -54,8 +62,8 @@ fi
 
 # Values containing spaces and shell metacharacters are inherited unchanged;
 # the bootstrap must not source or rewrite caller-provided values.
-quoted_json='{"credentials":[{"api_key":"quoted key","api_secret":"quoted secret","role":"admin"}]}'
-quoted_primary='token quoted key:quoted secret'
+quoted_json='{"credentials":[{"api_key":"sample key","api_secret":"sample value","role":"admin"}]}'
+quoted_primary='token sample key:sample value'
 : >"$LOG"
 FAKE_LOG="$LOG" DOCKER_BIN="$FAKE_DOCKER" EXPECT_MODE=provided \
   EXPECTED_JSON="$quoted_json" EXPECTED_PRIMARY="$quoted_primary" \

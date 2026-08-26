@@ -400,7 +400,7 @@ archived as completed before this plan is promoted.
     errors; `npm run typecheck --prefix web`, `npm test --prefix web -- --run`,
     and `npm run lint --prefix web`.
 
-- [ ] **Task 7: Gate demo tools and sensitive data access.**
+- [x] **Task 7: Gate demo tools and sensitive data access.**
   - Gate `system.*_test` registration behind `MCP_ENABLE_TEST_TOOLS=false` by
     default and enable it only in the development Compose/bootstrap path. Add
     `security.dataClass` validation with `pii`/`restricted` requiring
@@ -414,7 +414,8 @@ archived as completed before this plan is promoted.
   - **Files:** `internal/mcp/tool.go`, `internal/mcp/server.go`,
     `internal/mcp/authz.go`, `internal/mcp/authz_schema_test.go`,
     `internal/mcp/server_test.go`, `internal/mcp/api_test.go`,
-    `docker-compose.yml`, `.env.example`,
+    `docker-compose.yml`, `.env.example`, `scripts/dev-stack.sh`,
+    `scripts/test-dev-stack.sh`,
     `skills/bridgectl-ops/assets/mcp-tool.yaml`, `docs/tool-schema.md`,
     `docs/tokens.md`, `docs/docker.md`, `docs/environment-variables.md`,
     `CHANGELOG.md`.

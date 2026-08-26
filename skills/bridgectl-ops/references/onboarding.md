@@ -20,10 +20,13 @@ the selected ERPBridge context.
    `--openapi <path-or-url>` when an OpenAPI document should produce multiple
    operations. Treat generated output as a draft.
 5. Complete the intent metadata, input schema, execution path, `credentialRef`,
-   cache policy, and optional `allowedRoles`. Use `assets/mcp-tool.yaml` from
-   the skill root only as a field guide.
-   A write operation normally disables cache and lists affected read tools in
-   `flushOn` when cache invalidation is needed.
+   cache policy, `security.dataClass`, and optional `allowedRoles`. Use
+   `assets/mcp-tool.yaml` from the skill root only as a field guide.
+   `dataClass` must be `public`, `internal`, `pii`, or `restricted` when set;
+   `pii` and `restricted` require one or more opaque role names. Do not put
+   employee names, email addresses, or other personal data in role names or
+   examples. A write operation normally disables cache and lists affected read
+   tools in `flushOn` when cache invalidation is needed.
 6. Run `bridgectl tool validate -f <manifest>`. Correct validation failures
    before applying. Confirm the target context and manifest before
    `bridgectl tool apply -f <manifest>`.

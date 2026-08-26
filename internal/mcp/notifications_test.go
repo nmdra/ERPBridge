@@ -58,6 +58,7 @@ func TestCustomNotifier(t *testing.T) {
 }
 
 func TestServer_NotificationsAndLogs(t *testing.T) {
+	t.Setenv("MCP_ENABLE_TEST_TOOLS", "true")
 	// 1. Setup Logger
 	rootLog := logger.Init()
 

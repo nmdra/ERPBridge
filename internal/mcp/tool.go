@@ -94,6 +94,7 @@ type Execution struct {
 type Security struct {
 	AuthType      string   `json:"authType"`      // api-key, basic, bearer
 	CredentialRef string   `json:"credentialRef"` // Env var name or vault key
+	DataClass     string   `json:"dataClass,omitempty"`
 	AllowedRoles  []string `json:"allowedRoles,omitempty"`
 }
 

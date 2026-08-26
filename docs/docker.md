@@ -21,9 +21,14 @@ docker compose up --build --force-recreate -d
 
 The stack includes:
 
-- **ERPBridge Server** (`:8080`): The core MCP middleware.
+- **ERPBridge Server** (`:8080`): The core MCP middleware. This development
+  Compose path enables the two `system.*_test` demonstration tools; production
+  deployments must leave `MCP_ENABLE_TEST_TOOLS` unset or false.
 - **Mock ERP** (`:8081`): Simulates legacy ERP endpoints.
 - **Redis** (`:6379`): Provides the exact-match cache.
+
+RedisInsight binds to `127.0.0.1` by default. Keep this setting unless you
+explicitly need local-network access, and never expose RedisInsight publicly.
 
 ## 2. Configuration
 
@@ -49,6 +54,7 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | `RATE_LIMIT_RPS` | Per-session requests per second. | `10` |
 | `RATE_LIMIT_BURST` | Token bucket burst size. | `20` |
 | `INSECURE_AUTH_ALLOWED_HOSTS` | Development-only exact `host:port` exceptions for credentialed HTTP calls. | `mock-erp:8081` |
+| `MCP_ENABLE_TEST_TOOLS` | Development-only registration of `system.*_test` demo tools. | `true` in this Compose path |
 | `API_AUTH_TOKEN` | Bearer token for protected admin, MCP, and direct-invoke routes. | unset |
 | `PLUGIN_ENDPOINT_ALLOWLIST` | Exact `host:port` values allowed for credentialed plugin resources. | unset |
 | `PLUGIN_MOCK_API_KEY` | Environment-backed API key reference used by the plugin integration fixture. | unset |

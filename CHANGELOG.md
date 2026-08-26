@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Gate development-only `system.*_test` tools, validate tool data classes, and
+  require roles for `pii` and `restricted` tools
 - Reload Console context and inventory snapshots with browser-session context
   persistence, stale-data retention, and retry/refresh controls
 - Return bounded structured control-plane errors with stable codes and safe
@@ -22,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a non-interactive `make dev-up` Compose bootstrap with ephemeral local
   MockERP credentials, safe health polling, and loopback-only RedisInsight
   exposure by default
+- Gate development-only MCP demo tools behind `MCP_ENABLE_TEST_TOOLS`, classify
+  tool data with optional `security.dataClass`, and require roles for PII and
+  restricted tools
 - Advertise developer-owned tool output schemas through MCP, return structured
   content with equivalent text, propagate tool execution errors with `isError`,
   and prevent error results from populating the cache

@@ -18,6 +18,41 @@ const (
 	testClientOne    = "client-1"
 )
 
+func TestValidateToolDataClassRequiresRoles(t *testing.T) {
+	s := &Server{}
+	base := func(dataClass string, roles ...string) *Tool {
+		return &Tool{
+			Metadata: Metadata{Name: "employee-tool", Version: testVersion100},
+			Spec: ToolSpec{
+				InputSchema: InputSchema{Type: schemaTypeObject, Properties: map[string]Property{}},
+				Security:    Security{DataClass: dataClass, AllowedRoles: roles},
+			},
+		}
+	}
+
+	for _, dataClass := range []string{"", "public", "internal", "pii", "restricted"} {
+		t.Run("accepts_"+dataClass, func(t *testing.T) {
+			roles := []string(nil)
+			if dataClass == "pii" || dataClass == "restricted" {
+				roles = []string{testRoleAlpha}
+			}
+			require.NoError(t, s.validateTool(base(dataClass, roles...)))
+		})
+	}
+
+	for _, dataClass := range []string{"pii", "restricted"} {
+		t.Run("rejects_"+dataClass+"_without_roles", func(t *testing.T) {
+			err := s.validateTool(base(dataClass))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "allowedRoles")
+		})
+	}
+
+	err := s.validateTool(base("secret"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dataClass")
+}
+
 func TestValidateToolAllowedRoles(t *testing.T) {
 	s := &Server{}
 	tool := &Tool{
