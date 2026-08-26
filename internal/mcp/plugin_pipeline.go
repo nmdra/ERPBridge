@@ -90,7 +90,7 @@ func (s *Server) executeRawTool(ctx context.Context, tool *Tool, args map[string
 	if tool.Handler != nil || tool.Spec.Execution.Type != pluginSchemeHTTP || !hasObjectOutputSchema(tool) {
 		return s.rawProcessingFailure(ctx, tool, first, nil, afterBindings, errors.New("raw response binding is not valid for this tool"))
 	}
-	captured, err := tool.CallERP(ctx, args, s.connector, connector.CallOptions{PreserveErrorResponses: true})
+	captured, err := tool.CallERP(ctx, args, s.connector, connector.CallOptions{PreserveErrorResponses: true, DisableRedirects: true})
 	if err != nil {
 		return s.rawProcessingFailure(ctx, tool, first, nil, afterBindings, err)
 	}

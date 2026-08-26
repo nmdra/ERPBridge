@@ -40,6 +40,34 @@ func TestClient_Call_Retry(t *testing.T) {
 	assert.Equal(t, int32(3), attempts.Load())
 }
 
+func TestClient_CallWithOptions_PreservesResponseAndTripsCircuitBreaker(t *testing.T) {
+	log := logger.Init()
+	client := NewClient(log)
+	client.cb = gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "RawResponseCB",
+		MaxRequests: 1,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.TotalFailures >= 1
+		},
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"retry"}`))
+	}))
+	defer server.Close()
+
+	ep := EndpointConfig{Method: http.MethodGet, BaseURL: server.URL}
+	resp, err := client.CallWithOptions(context.Background(), ep, nil, nil, CallOptions{PreserveErrorResponses: true})
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+	assert.NoError(t, resp.Body.Close())
+
+	_, err = client.CallWithOptions(context.Background(), ep, nil, nil, CallOptions{PreserveErrorResponses: true})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "circuit breaker is open")
+}
+
 func TestClient_Call_CircuitBreaker(t *testing.T) {
 	log := logger.Init()
 	client := NewClient(log)

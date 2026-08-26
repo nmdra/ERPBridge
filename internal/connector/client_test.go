@@ -82,6 +82,35 @@ func TestClient_CallWithOptions_PreservesFinalTransientResponse(t *testing.T) {
 	}
 }
 
+func TestClient_CallWithOptions_DisablesRedirectsForRawCapture(t *testing.T) {
+	finalCalls := 0
+	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		finalCalls++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer final.Close()
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, final.URL, http.StatusFound)
+	}))
+	defer redirect.Close()
+
+	resp, err := NewClient(slog.Default()).CallWithOptions(context.Background(), EndpointConfig{
+		Method:  http.MethodGet,
+		BaseURL: redirect.URL,
+	}, nil, nil, CallOptions{PreserveErrorResponses: true, DisableRedirects: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+	if finalCalls != 0 {
+		t.Fatalf("redirect target calls = %d, want 0", finalCalls)
+	}
+}
+
 func TestClient_Call_APIKey(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "test-key" {

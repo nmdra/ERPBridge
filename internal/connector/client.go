@@ -118,6 +118,8 @@ type CallOptions struct {
 	// PreserveErrorResponses retains the final 429 or 5xx response after the
 	// normal retry budget while still recording the failure in the circuit breaker.
 	PreserveErrorResponses bool
+	// DisableRedirects returns the first redirect response instead of following it.
+	DisableRedirects bool
 }
 
 // preservedResponseError keeps a terminal response available to callers while
@@ -164,7 +166,7 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 			slog.String("endpoint", allowedHost),
 		)
 	}
-	outboundClient := c.clientForRequest(credentialPresent)
+	outboundClient := c.clientForRequest(credentialPresent || options.DisableRedirects)
 
 	var bodyBytes []byte
 	if body != nil {
