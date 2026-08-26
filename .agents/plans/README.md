@@ -8,9 +8,6 @@ starting implementation work.
 - [`Plan-Bridgectl-Ops-Plugin-Details.md`](./active/Plan-Bridgectl-Ops-Plugin-Details.md)
   — extend the `bridgectl-ops` skill with external plugin operations, secure
   lifecycle guidance, and trigger evaluations.
-- [`Plan-Raw-Response-Plugin-Phase.md`](./active/Plan-Raw-Response-Plugin-Phase.md)
-  — implement media-aware pre-normalization plugin processing and stable MCP
-  output contracts.
 
 ## Upcoming
 
@@ -49,6 +46,9 @@ promotion to `active/`.
 - [`[COMPLETED]Plan-Generic-External-Plugins.md`](./completed/[COMPLETED]Plan-Generic-External-Plugins.md)
   — generic external-plugin control plane, response processing, CLI, and
   black-box integration fixture.
+- [`[COMPLETED]Plan-Raw-Response-Plugin-Phase.md`](./completed/%5BCOMPLETED%5DPlan-Raw-Response-Plugin-Phase.md)
+  — media-aware pre-normalization plugin processing, secure admission, and
+  stable MCP output contracts.
 - [`[COMPLETED]Plan-Plugin-Endpoint-Authentication.md`](./completed/[COMPLETED]Plan-Plugin-Endpoint-Authentication.md)
   — plugin authentication, secure credential transport, redaction, runtime
   invariants, fixture authentication, and legacy ERP credential migration.
