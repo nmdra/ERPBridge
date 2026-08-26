@@ -337,7 +337,7 @@ version.
   `test(plugin): cover raw media adaptation` and
   plugin repository `test: extend mock plugin for raw responses`.)
 
-- [ ] **Task 7: Publish the finalized contract and synchronize public guidance.**
+- [x] **Task 7: Publish the finalized contract and synchronize public guidance.**
   Reconcile cross-links after the local schema, API, architecture, plugin
   operations, and Unreleased documentation fragments were updated in their
   owning behavior commits. In `../erpbridge-docs`, create or update the
