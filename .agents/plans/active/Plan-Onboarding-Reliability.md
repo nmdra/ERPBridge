@@ -270,7 +270,7 @@ archived as completed before this plan is promoted.
     that reaches `/mcp/health`; assert RedisInsight is not bound beyond
     loopback; `git diff --check`.
 
-- [ ] **Task 2: Normalize contexts and isolate the local API registry.**
+- [x] **Task 2: Normalize contexts and isolate the local API registry.**
   - Make `config.Load` distinguish a missing file from a parse error, validate
     the effective current context after `--context`/`BRIDGE_CONTEXT` selection,
     and expose one error-producing resolver used by CLI and Console. Sort
@@ -283,7 +283,9 @@ archived as completed before this plan is promoted.
   - **Files:** `internal/config/config.go`, `internal/config/config_test.go`,
     `internal/cli/root.go`, `internal/cli/context.go`,
     `internal/cli/context_test.go`, `internal/cli/api.go`,
-    `internal/cli/api_test.go`, `internal/idp/registry.go`,
+    `internal/cli/api_test.go`, `internal/cli/http.go`, `internal/cli/log.go`,
+    `internal/cli/plugin.go`, `internal/cli/token.go`, `internal/cli/tool.go`,
+    `internal/idp/registry.go`,
     `internal/idp/registry_test.go`, `docs/cli/bridgectl_context.md`,
     `docs/cli/bridgectl_api_register.md`,
     `docs/cli/bridgectl_api_scrub-credentials.md`, `docs/environment-variables.md`,

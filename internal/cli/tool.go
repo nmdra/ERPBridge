@@ -90,7 +90,10 @@ var toolApplyCmd = &cobra.Command{
 			return err
 		}
 
-		ctx := cfg.ActiveContext()
+		ctx, err := cfg.EffectiveContext()
+		if err != nil {
+			return err
+		}
 		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
 			return err
 		}
@@ -159,7 +162,10 @@ var toolGetCmd = &cobra.Command{
 		if len(args) != 0 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
-		ctx := cfg.ActiveContext()
+		ctx, err := cfg.EffectiveContext()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
 		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
@@ -186,7 +192,10 @@ var toolGetCmd = &cobra.Command{
 		return completions, cobra.ShellCompDirectiveNoFileComp
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cfg.ActiveContext()
+		ctx, err := cfg.EffectiveContext()
+		if err != nil {
+			return err
+		}
 		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
 			return err
 		}
@@ -277,7 +286,10 @@ var toolDescribeCmd = &cobra.Command{
 		return toolGetCmd.ValidArgsFunction(cmd, args, toComplete)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cfg.ActiveContext()
+		ctx, err := cfg.EffectiveContext()
+		if err != nil {
+			return err
+		}
 		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
 			return err
 		}
@@ -451,7 +463,10 @@ var toolDeleteCmd = &cobra.Command{
 			}
 		}
 
-		ctx := cfg.ActiveContext()
+		ctx, err := cfg.EffectiveContext()
+		if err != nil {
+			return err
+		}
 		if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
 			return err
 		}

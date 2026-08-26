@@ -48,7 +48,10 @@ var tokenCreateCmd = &cobra.Command{
 	Short: "Create an API token",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		ctx := cfg.ActiveContext()
+		ctx, err := cfg.EffectiveContext()
+		if err != nil {
+			return err
+		}
 		if err := ValidateServerURL(ctx.Server, "BRIDGE", cfg.CurrentContext); err != nil {
 			return err
 		}
@@ -93,7 +96,10 @@ var tokenListCmd = &cobra.Command{
 	Short: "List API token metadata",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		ctx := cfg.ActiveContext()
+		ctx, err := cfg.EffectiveContext()
+		if err != nil {
+			return err
+		}
 		if err := ValidateServerURL(ctx.Server, "BRIDGE", cfg.CurrentContext); err != nil {
 			return err
 		}
@@ -121,7 +127,10 @@ var tokenRevokeCmd = &cobra.Command{
 	Short: "Revoke an API token",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cfg.ActiveContext()
+		ctx, err := cfg.EffectiveContext()
+		if err != nil {
+			return err
+		}
 		if err := ValidateServerURL(ctx.Server, "BRIDGE", cfg.CurrentContext); err != nil {
 			return err
 		}

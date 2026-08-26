@@ -21,6 +21,16 @@ You can register new endpoints, list existing ones, and test connectivity
 and authentication to ensure the middleware can correctly proxy requests to the legacy ERP.`,
 }
 
+func contextRegistry() (*idp.Registry, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("CLI configuration is not initialized")
+	}
+	if _, err := cfg.EffectiveContext(); err != nil {
+		return nil, err
+	}
+	return idp.NewRegistryForContext(cfg.CurrentContext, RootLog)
+}
+
 var apiRegisterCmd = &cobra.Command{
 	Use:   "register",
 	Short: "Register a new ERP API endpoint",
@@ -36,7 +46,11 @@ Once registered, you can generate an MCP tool schema from this API definition.`,
     --auth-type api-key \
     --credential-ref ERP_API_KEY`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		reg, err := idp.NewRegistry("", RootLog)
+		reg, err := contextRegistry()
+		if err != nil {
+			return err
+		}
+		force, err := cmd.Flags().GetBool("force")
 		if err != nil {
 			return err
 		}
@@ -61,24 +75,30 @@ Once registered, you can generate an MCP tool schema from this API definition.`,
 			CredentialRef: credentialRef,
 		}
 
-		if err := reg.Register(api); err != nil {
+		replaced, err := reg.RegisterWithOptions(api, force)
+		if err != nil {
 			return err
 		}
 
 		// Wrap in a response struct for formatting
-		resp := &APIRegistrationResponse{API: *api}
+		resp := &APIRegistrationResponse{API: *api, Replaced: replaced}
 		return formatter.Print(resp)
 	},
 }
 
 // APIRegistrationResponse wraps an idp.API for table rendering after registration.
 type APIRegistrationResponse struct {
-	API idp.API `json:"api" yaml:"api"`
+	API      idp.API `json:"api" yaml:"api"`
+	Replaced bool    `json:"replaced" yaml:"replaced"`
 }
 
 // RenderTable implements the output.TableRenderer interface.
 func (r *APIRegistrationResponse) RenderTable(w io.Writer) error {
-	_, _ = fmt.Fprintf(w, "Registered API  %s\n", r.API.Name)
+	action := "Registered"
+	if r.Replaced {
+		action = "Replaced"
+	}
+	_, _ = fmt.Fprintf(w, "%s API  %s\n", action, r.API.Name)
 	_, _ = fmt.Fprintf(w, "ID              %s\n", r.API.ID)
 	_, _ = fmt.Fprintf(w, "Module          %s\n", r.API.Module)
 	_, _ = fmt.Fprintf(w, "Method          %s\n", r.API.Method)
@@ -95,7 +115,7 @@ var apiListCmd = &cobra.Command{
 	Example: `  bridgectl api list
   bridgectl api list -o json`,
 	RunE: func(_ *cobra.Command, _ []string) error {
-		reg, err := idp.NewRegistry("", RootLog)
+		reg, err := contextRegistry()
 		if err != nil {
 			return err
 		}
@@ -127,7 +147,7 @@ var apiSetCredentialRefCmd = &cobra.Command{
 	Example: `  bridgectl api set-credential-ref get-invoices --credential-ref ERP_API_KEY`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		reg, err := idp.NewRegistry("", RootLog)
+		reg, err := contextRegistry()
 		if err != nil {
 			return err
 		}
@@ -155,14 +175,41 @@ var apiScrubCredentialsCmd = &cobra.Command{
 		if !yes {
 			return fmt.Errorf("scrub-credentials is destructive; repeat with --yes")
 		}
-		reg, err := idp.NewRegistry("", RootLog)
+		if err := idp.ScrubAllRegistries(RootLog); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Legacy credentials scrubbed from all registry targets.")
+		return nil
+	},
+}
+
+var apiMigrateRegistryCmd = &cobra.Command{
+	Use:   "migrate-registry",
+	Short: "Move the legacy global API registry into the selected context",
+	Long:  "Copy the legacy global registry into the selected context registry, then remove the old global file. Legacy credentials must be scrubbed first and collisions require --force.",
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		yes, err := cmd.Flags().GetBool("yes")
 		if err != nil {
 			return err
 		}
-		if err := reg.ScrubCredentials(); err != nil {
+		if !yes {
+			return fmt.Errorf("migrate-registry is destructive; repeat with --yes")
+		}
+		if cfg == nil {
+			return fmt.Errorf("CLI configuration is not initialized")
+		}
+		if _, err := cfg.EffectiveContext(); err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Legacy credentials scrubbed.")
+		force, err := cmd.Flags().GetBool("force")
+		if err != nil {
+			return err
+		}
+		count, err := idp.MigrateGlobalRegistry(cfg.CurrentContext, force, RootLog)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated %d API(s) to context %s.\n", count, cfg.CurrentContext)
 		return nil
 	},
 }
@@ -176,7 +223,7 @@ URL, and authentication headers, and displays the response status and latency.`,
 	Example: `  bridgectl api test get-invoices`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		reg, err := idp.NewRegistry("", RootLog)
+		reg, err := contextRegistry()
 		if err != nil {
 			return err
 		}
@@ -276,6 +323,7 @@ func init() {
 	apiCmd.AddCommand(apiListCmd)
 	apiCmd.AddCommand(apiSetCredentialRefCmd)
 	apiCmd.AddCommand(apiScrubCredentialsCmd)
+	apiCmd.AddCommand(apiMigrateRegistryCmd)
 	apiCmd.AddCommand(apiTestCmd)
 
 	apiRegisterCmd.Flags().String("name", "", "Unique name for this API")
@@ -286,8 +334,11 @@ func init() {
 	apiRegisterCmd.Flags().String("auth-type", "api-key", "Auth type")
 	apiRegisterCmd.Flags().String("auth-header", "X-API-Key", "Auth header")
 	apiRegisterCmd.Flags().String("credential-ref", "", "Environment variable containing the auth credential")
+	apiRegisterCmd.Flags().Bool("force", false, "Replace an existing API with the same name")
 	apiSetCredentialRefCmd.Flags().String("credential-ref", "", "Environment variable containing the auth credential")
-	apiScrubCredentialsCmd.Flags().Bool("yes", false, "Confirm destructive credential removal")
+	apiScrubCredentialsCmd.Flags().Bool("yes", false, "Confirm destructive credential removal for all registry targets")
+	apiMigrateRegistryCmd.Flags().Bool("yes", false, "Confirm removal of the legacy global registry")
+	apiMigrateRegistryCmd.Flags().Bool("force", false, "Replace colliding APIs in the selected context")
 	_ = apiSetCredentialRefCmd.MarkFlagRequired("credential-ref")
 
 	_ = apiRegisterCmd.MarkFlagRequired("name")

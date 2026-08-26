@@ -67,11 +67,20 @@ and supports multiple output formats including Table, JSON, and YAML.`,
 		var err error
 		cfg, err = config.Load()
 		if err != nil {
+			if errors.Is(err, config.ErrContextNotFound) {
+				return NewError(CodeNotFound, "CONTEXT_NOT_FOUND", err.Error(), "Run 'bridgectl context list' or select a configured context with --context.")
+			}
 			return fmt.Errorf("load config: %w", err)
 		}
 
 		if ctxOverride != "" {
 			cfg.CurrentContext = ctxOverride
+		}
+		if _, err := cfg.EffectiveContext(); err != nil {
+			if errors.Is(err, config.ErrContextNotFound) {
+				return NewError(CodeNotFound, "CONTEXT_NOT_FOUND", err.Error(), "Run 'bridgectl context list' or select a configured context with --context.")
+			}
+			return err
 		}
 
 		formatter = &output.Formatter{

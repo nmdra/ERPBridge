@@ -95,6 +95,7 @@ func TestAPITestResponse_RenderTable(t *testing.T) {
 
 func TestApiListCmd(t *testing.T) {
 	setupTest()
+	t.Setenv("HOME", t.TempDir())
 	var buf bytes.Buffer
 	formatter.Out = &buf
 
@@ -114,7 +115,7 @@ func TestApiTestCmd(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	reg, err := idp.NewRegistry("", RootLog)
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
 	api := &idp.API{
 		Name:   "testapi",
@@ -147,7 +148,7 @@ func TestAPITestResolvesCredentialReference(t *testing.T) {
 	defer ts.Close()
 	t.Setenv(security.InsecureAuthAllowedHostsEnv, strings.TrimPrefix(ts.URL, "http://"))
 
-	reg, err := idp.NewRegistry("", RootLog)
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
 	require.NoError(t, reg.Register(&idp.API{
 		Name:          "secured-testapi",
@@ -174,7 +175,7 @@ func TestAPITestBlocksLegacyRegistry(t *testing.T) {
 	require.NoError(t, os.WriteFile(registryDir+string(os.PathSeparator)+"registry.json", []byte(registry), 0600))
 
 	err := apiTestCmd.RunE(apiTestCmd, []string{"legacy"})
-	require.ErrorIs(t, err, idp.ErrLegacyCredentials)
+	require.ErrorIs(t, err, idp.ErrLegacyRegistry)
 	require.NotContains(t, err.Error(), legacySecret)
 }
 
@@ -196,7 +197,7 @@ func TestApiRegisterCmd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	reg, err := idp.NewRegistry("", RootLog)
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
 	api, ok := reg.Get("newapi")
 	require.True(t, ok)
@@ -206,12 +207,35 @@ func TestApiRegisterCmd(t *testing.T) {
 func TestAPITestRequiresCredentialReference(t *testing.T) {
 	setupTest()
 	t.Setenv("HOME", t.TempDir())
-	reg, err := idp.NewRegistry("", RootLog)
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
 	require.NoError(t, reg.Register(&idp.API{Name: "secured", URL: "https://example.invalid", Method: http.MethodGet, AuthType: testBearerAuthType}))
 	err = apiTestCmd.RunE(apiTestCmd, []string{"secured"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "credential reference")
+}
+
+func TestAPIRegisterDuplicateRequiresForce(t *testing.T) {
+	setupTest()
+	t.Setenv("HOME", t.TempDir())
+	for name, value := range map[string]string{
+		"name": "duplicate", "url": "http://first", "module": "hr", "description": "test desc", "credential-ref": "",
+	} {
+		require.NoError(t, apiRegisterCmd.Flags().Set(name, value))
+	}
+	require.NoError(t, apiRegisterCmd.Flags().Set("force", "false"))
+	require.NoError(t, apiRegisterCmd.RunE(apiRegisterCmd, nil))
+	require.NoError(t, apiRegisterCmd.Flags().Set("url", "http://second"))
+	err := apiRegisterCmd.RunE(apiRegisterCmd, nil)
+	require.ErrorIs(t, err, idp.ErrRegistryConflict)
+
+	require.NoError(t, apiRegisterCmd.Flags().Set("force", "true"))
+	require.NoError(t, apiRegisterCmd.RunE(apiRegisterCmd, nil))
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
+	require.NoError(t, err)
+	api, ok := reg.Get("duplicate")
+	require.True(t, ok)
+	require.Equal(t, "http://second", api.URL)
 }
 
 func TestAPIRegisterUsesCredentialReference(t *testing.T) {
@@ -223,7 +247,7 @@ func TestAPIRegisterUsesCredentialReference(t *testing.T) {
 	require.NoError(t, apiRegisterCmd.Flags().Set("description", "test desc"))
 	require.NoError(t, apiRegisterCmd.Flags().Set("credential-ref", "ERP_CUSTOM_KEY"))
 	require.NoError(t, apiRegisterCmd.RunE(apiRegisterCmd, nil))
-	reg, err := idp.NewRegistry("", RootLog)
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
 	api, ok := reg.Get("refapi")
 	require.True(t, ok)
@@ -233,12 +257,12 @@ func TestAPIRegisterUsesCredentialReference(t *testing.T) {
 func TestAPISetCredentialRefCmd(t *testing.T) {
 	setupTest()
 	t.Setenv("HOME", t.TempDir())
-	reg, err := idp.NewRegistry("", RootLog)
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
 	require.NoError(t, reg.Register(&idp.API{Name: "setref", AuthType: testBearerAuthType}))
 	require.NoError(t, apiSetCredentialRefCmd.Flags().Set("credential-ref", "ERP_SETREF_KEY"))
 	require.NoError(t, apiSetCredentialRefCmd.RunE(apiSetCredentialRefCmd, []string{"setref"}))
-	reg, err = idp.NewRegistry("", RootLog)
+	reg, err = idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
 	api, ok := reg.Get("setref")
 	require.True(t, ok)

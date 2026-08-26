@@ -130,7 +130,10 @@ func pluginServerBase() (string, error) {
 	if cfg == nil {
 		return "", fmt.Errorf("CLI configuration is not initialized")
 	}
-	ctx := cfg.ActiveContext()
+	ctx, err := cfg.EffectiveContext()
+	if err != nil {
+		return "", err
+	}
 	if err := ValidateServerURL(ctx.MCPServer, "MCP", cfg.CurrentContext); err != nil {
 		return "", err
 	}

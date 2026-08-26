@@ -8,9 +8,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
+	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/logger"
 )
@@ -34,6 +36,27 @@ type API struct {
 // ErrLegacyCredentials indicates that the registry still contains raw legacy credentials.
 var ErrLegacyCredentials = errors.New("registry contains legacy plaintext credentials; run bridgectl api scrub-credentials --yes")
 
+// ErrLegacyRegistry indicates that the old global registry needs explicit migration.
+var ErrLegacyRegistry = errors.New("legacy global registry exists; run bridgectl api migrate-registry --context <name> --yes")
+
+// ErrRegistryConflict indicates that an API with the same name already exists.
+var ErrRegistryConflict = errors.New("API already exists; use --force to replace it")
+
+// GlobalRegistryPath returns the pre-context-isolation registry path.
+func GlobalRegistryPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".bridgectl", "registry.json")
+}
+
+// ContextRegistryPath returns the isolated registry path for a validated context.
+func ContextRegistryPath(contextName string) (string, error) {
+	if err := config.ValidateContextName(contextName); err != nil {
+		return "", err
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".bridgectl", "registries", contextName+".json"), nil
+}
+
 // Registry manages storage and retrieval of registered API definitions.
 type Registry struct {
 	path              string
@@ -44,11 +67,12 @@ type Registry struct {
 	rename            func(string, string) error
 }
 
-// NewRegistry initializes an API registry from the specified file path or default user home path.
+// NewRegistry initializes an API registry from the specified file path or the
+// legacy global user-home path. New CLI API commands should use
+// NewRegistryForContext instead.
 func NewRegistry(path string, rootLog *slog.Logger) (*Registry, error) {
 	if path == "" {
-		home, _ := os.UserHomeDir()
-		path = filepath.Join(home, ".bridgectl", "registry.json")
+		path = GlobalRegistryPath()
 	}
 
 	reg := &Registry{
@@ -62,6 +86,22 @@ func NewRegistry(path string, rootLog *slog.Logger) (*Registry, error) {
 	}
 
 	return reg, nil
+}
+
+// NewRegistryForContext opens the registry isolated for contextName. It
+// refuses to proceed while a legacy global registry exists, so old state is
+// never silently ignored.
+func NewRegistryForContext(contextName string, rootLog *slog.Logger) (*Registry, error) {
+	path, err := ContextRegistryPath(contextName)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(GlobalRegistryPath()); err == nil {
+		return nil, ErrLegacyRegistry
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect legacy registry: %w", err)
+	}
+	return NewRegistry(path, rootLog)
 }
 
 func (r *Registry) load() error {
@@ -209,17 +249,32 @@ func (l *registryFileLock) release() {
 	_ = os.Remove(l.path)
 }
 
-// Register adds or updates an API definition in the registry.
+// Register adds a new API definition. Existing names are rejected; use
+// RegisterWithOptions with force=true for an explicit replacement.
 func (r *Registry) Register(api *API) error {
+	_, err := r.RegisterWithOptions(api, false)
+	return err
+}
+
+// RegisterWithOptions registers an API and reports whether it replaced an
+// existing definition.
+func (r *Registry) RegisterWithOptions(api *API, force bool) (bool, error) {
 	if api == nil {
-		return errors.New("API is required")
+		return false, errors.New("API is required")
 	}
 	if api.CredentialRef != "" {
 		if err := credentials.ValidateReference(api.CredentialRef); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return r.withWrite(func() error {
+	replaced := false
+	err := r.withWrite(func() error {
+		if _, exists := r.APIs[api.Name]; exists {
+			if !force {
+				return ErrRegistryConflict
+			}
+			replaced = true
+		}
 		if api.ID == "" {
 			api.ID = fmt.Sprintf("api-%d", time.Now().UnixNano())
 		}
@@ -234,6 +289,7 @@ func (r *Registry) Register(api *API) error {
 		)
 		return nil
 	})
+	return replaced, err
 }
 
 // HasLegacyCredentials reports whether the loaded registry contains raw legacy fields.
@@ -251,6 +307,12 @@ func (r *Registry) List() []API {
 	for _, api := range r.APIs {
 		list = append(list, api)
 	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].Name == list[j].Name {
+			return list[i].ID < list[j].ID
+		}
+		return list[i].Name < list[j].Name
+	})
 	return list
 }
 
@@ -313,6 +375,87 @@ func (r *Registry) ScrubCredentials() error {
 	}
 	r.legacyCredentials = false
 	return nil
+}
+
+// ScrubAllRegistries removes legacy credential fields from the global and
+// every context-scoped registry. It emits no registry contents or credential
+// values in errors or output.
+func ScrubAllRegistries(rootLog *slog.Logger) error {
+	paths := []string{GlobalRegistryPath()}
+	home, _ := os.UserHomeDir()
+	entries, err := os.ReadDir(filepath.Join(home, ".bridgectl", "registries"))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("list context registries: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		paths = append(paths, filepath.Join(home, ".bridgectl", "registries", entry.Name()))
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		registry, err := NewRegistry(path, rootLog)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("load registry for scrubbing: %w", err)
+		}
+		if err := registry.ScrubCredentials(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MigrateGlobalRegistry copies the global registry to one context and removes
+// the old file only after a successful, collision-free write. Legacy raw
+// credentials must be scrubbed before migration.
+func MigrateGlobalRegistry(contextName string, force bool, rootLog *slog.Logger) (int, error) {
+	if _, err := ContextRegistryPath(contextName); err != nil {
+		return 0, err
+	}
+	global := GlobalRegistryPath()
+	if _, err := os.Stat(global); err != nil {
+		if os.IsNotExist(err) {
+			return 0, fmt.Errorf("%w: global registry does not exist", ErrLegacyRegistry)
+		}
+		return 0, fmt.Errorf("inspect global registry: %w", err)
+	}
+	source, err := NewRegistry(global, rootLog)
+	if err != nil {
+		return 0, err
+	}
+	if source.HasLegacyCredentials() {
+		return 0, ErrLegacyCredentials
+	}
+	targetPath, err := ContextRegistryPath(contextName)
+	if err != nil {
+		return 0, err
+	}
+	target, err := NewRegistry(targetPath, rootLog)
+	if err != nil {
+		return 0, fmt.Errorf("load target registry: %w", err)
+	}
+	apis := source.List()
+	for _, api := range apis {
+		if _, exists := target.Get(api.Name); exists && !force {
+			return 0, fmt.Errorf("%w: API %q", ErrRegistryConflict, api.Name)
+		}
+	}
+	if err := target.withWrite(func() error {
+		for _, api := range apis {
+			target.APIs[api.Name] = api
+		}
+		return nil
+	}); err != nil {
+		return 0, fmt.Errorf("write migrated registry: %w", err)
+	}
+	if err := os.Remove(global); err != nil {
+		return 0, fmt.Errorf("remove global registry after migration: %w", err)
+	}
+	return len(apis), nil
 }
 
 // Get returns the API definition by name if found.

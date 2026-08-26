@@ -69,9 +69,11 @@ contexts:
     api-token: <token-from-environment>
 ```
 
-`bridgectl api register` accepts `--credential-ref NAME`, and `bridgectl api set-credential-ref NAME --credential-ref ENV_NAME` assigns an environment-backed ERP credential reference. The registry stores the name only. If an older registry contains `authKey` or `authToken`, state-changing API commands and `api test` stop until you run `bridgectl api scrub-credentials --yes`. Scrubbing atomically removes those fields without creating a plaintext backup; set a new reference after the scrub.
+`bridgectl api register` accepts `--credential-ref NAME`, and `bridgectl api set-credential-ref NAME --credential-ref ENV_NAME` assigns an environment-backed ERP credential reference. The registry stores the name only. New API entries are isolated at `~/.bridgectl/registries/<context>.json`; context names are validated before they are used in a path. API names are unique within a context. Duplicate registration fails unless `api register --force` explicitly replaces the existing definition.
 
-The CLI reads its defaults from `~/.bridgectl/config.yaml`. The default context uses:
+If the old global `~/.bridgectl/registry.json` exists, context-scoped API commands stop instead of ignoring it. Run `bridgectl api scrub-credentials --yes` to scrub the global file and every context registry. Scrubbing atomically removes `authKey` and `authToken` without creating a plaintext backup. Then run `bridgectl api migrate-registry --context NAME --yes` to copy the cleaned global entries into one selected context and remove the old global file. Migration refuses collisions unless `--force` is also supplied.
+
+The CLI reads its defaults from `~/.bridgectl/config.yaml`. `BRIDGE_CONTEXT` and `--context` select a configured context. A missing or malformed selected context is an error; the CLI does not silently create a replacement context. Context and API listings are sorted by name. The default context uses:
 
 | Key | Default |
 | :--- | :--- |

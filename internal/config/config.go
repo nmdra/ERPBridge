@@ -2,15 +2,31 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/goccy/go-yaml"
 )
 
 // DefaultContextName is the default context identifier.
 const DefaultContextName = "local"
+
+// ErrContextNotFound indicates that the selected context is not configured.
+var ErrContextNotFound = errors.New("context not found")
+
+var contextNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+// ValidateContextName validates a context name before it is used for selection
+// or as part of a local registry path.
+func ValidateContextName(name string) error {
+	if !contextNamePattern.MatchString(name) {
+		return fmt.Errorf("invalid context name %q: use 1-64 letters, numbers, dots, underscores, or hyphens", name)
+	}
+	return nil
+}
 
 // AuthConfig defines the authentication parameters for communicating with an ERP or bridge server.
 type AuthConfig struct {
@@ -40,9 +56,18 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg, err := loadFile()
 	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
 		cfg = defaultConfig()
 	}
+	if cfg.Contexts == nil {
+		cfg.Contexts = make(map[string]Context)
+	}
 	applyEnvOverrides(cfg)
+	if _, err := cfg.EffectiveContext(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 
@@ -100,14 +125,45 @@ func applyEnvOverrides(cfg *Config) {
 		ctx.Auth.Key = v // Basic Auth password maps to key field
 	}
 
-	cfg.Contexts[cfg.CurrentContext] = ctx
+	if _, ok := cfg.Contexts[cfg.CurrentContext]; ok {
+		cfg.Contexts[cfg.CurrentContext] = ctx
+	}
+}
+
+// ResolveContext returns a named context, or the current context when name is
+// empty. It is the single error-producing context lookup used by consumers.
+func (c *Config) ResolveContext(name string) (Context, error) {
+	if c == nil {
+		return Context{}, fmt.Errorf("%w: configuration is nil", ErrContextNotFound)
+	}
+	if name == "" {
+		name = c.CurrentContext
+	}
+	if err := ValidateContextName(name); err != nil {
+		return Context{}, fmt.Errorf("%w: %w", ErrContextNotFound, err)
+	}
+	if c.Contexts == nil {
+		return Context{}, fmt.Errorf("%w: %q is not configured", ErrContextNotFound, name)
+	}
+	ctx, ok := c.Contexts[name]
+	if !ok {
+		return Context{}, fmt.Errorf("%w: %q is not configured", ErrContextNotFound, name)
+	}
+	return ctx, nil
+}
+
+// EffectiveContext returns the configured current context.
+func (c *Config) EffectiveContext() (Context, error) {
+	return c.ResolveContext("")
 }
 
 // ActiveContext returns the currently active context from the configuration.
+//
+// Deprecated: use EffectiveContext when a missing context must be reported.
 func (c *Config) ActiveContext() Context {
-	ctx, ok := c.Contexts[c.CurrentContext]
-	if !ok {
-		return defaultContext()
+	ctx, err := c.EffectiveContext()
+	if err != nil {
+		return Context{}
 	}
 	return ctx
 }

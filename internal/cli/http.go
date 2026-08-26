@@ -41,7 +41,9 @@ func doBridgeRequestWithHeaders(cmd *cobra.Command, method, target string, body 
 func bridgeAPIToken() string {
 	contextToken := ""
 	if cfg != nil {
-		contextToken = cfg.ActiveContext().APIToken
+		if context, err := cfg.EffectiveContext(); err == nil {
+			contextToken = context.APIToken
+		}
 	}
 	return bridgeclient.ResolveToken(tokenOverride, os.Getenv("BRIDGE_API_TOKEN"), contextToken)
 }

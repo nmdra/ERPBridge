@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/goccy/go-yaml"
 	"github.com/nmdra/ERPBridge/internal/output"
@@ -16,7 +17,8 @@ var contextCmd = &cobra.Command{
 	Short: "Manage bridgectl contexts",
 	Long: `The context command allows you to switch between different ERPBridge 
 environments (e.g., local, staging, production). Each context defines the 
-middleware server URL, default ERP base URL, and authentication credentials.`,
+middleware server URL, default ERP base URL, and authentication credentials.
+The --context flag and BRIDGE_CONTEXT must name a configured context.`,
 }
 
 var contextListCmd = &cobra.Command{
@@ -26,7 +28,12 @@ var contextListCmd = &cobra.Command{
 	Example: `  bridgectl context list`,
 	RunE: func(_ *cobra.Command, _ []string) error {
 		var items []ContextItem
+		names := make([]string, 0, len(cfg.Contexts))
 		for name := range cfg.Contexts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
 			current := name == cfg.CurrentContext
 			items = append(items, ContextItem{
 				Name:    name,

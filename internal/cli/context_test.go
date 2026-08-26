@@ -28,6 +28,8 @@ func TestContextListResponse_RenderTable(t *testing.T) {
 
 func TestContextListCmd(t *testing.T) {
 	setupTest()
+	cfg.Contexts["aaa"] = cfg.Contexts[testContextName]
+	cfg.Contexts["zzz"] = cfg.Contexts[testContextName]
 	var buf bytes.Buffer
 	formatter.Out = &buf
 
@@ -37,6 +39,11 @@ func TestContextListCmd(t *testing.T) {
 	}
 	if !bytes.Contains(buf.Bytes(), []byte(testContextName)) {
 		t.Errorf("expected output to contain 'test'")
+	}
+	output := buf.String()
+	if bytes.Index([]byte(output), []byte("aaa")) > bytes.Index([]byte(output), []byte("test")) ||
+		bytes.Index([]byte(output), []byte("test")) > bytes.Index([]byte(output), []byte("zzz")) {
+		t.Fatalf("contexts are not sorted: %s", output)
 	}
 }
 
