@@ -1,11 +1,11 @@
 ---
 name: bridgectl-ops
-description: Operate ERPBridge with bridgectl. Use for ERP API onboarding, MCP tool lifecycle work, token or role administration, cache and log operations, runtime troubleshooting, SDK integration diagnosis, or ERPBridge bug reporting.
+description: "Use this skill when operating ERPBridge with bridgectl: onboard ERP APIs, manage MCP tools or external plugins and plugin bindings, administer tokens or roles, inspect caches or logs, troubleshoot runtime or SDK integrations, or prepare a redacted bug report. Reach for it even when the user asks indirectly about plugin endpoints, post-response transformations, plugin authentication, or plugin lifecycle."
 license: MIT
 compatibility: Requires a current bridgectl binary, an authorized ERPBridge context, and network access to the selected ERPBridge server and ERP endpoint. Git is required for repository diagnosis; GitHub CLI is optional for approved issue creation.
 metadata:
   author: ERPBridge Team
-  version: 3.0.0
+  version: 3.1.0
 ---
 
 # Bridgectl Operations
@@ -35,6 +35,7 @@ facts.
 | Register an ERP endpoint and publish an MCP tool | [Onboarding](references/onboarding.md) |
 | Inspect, update, retire, or secure APIs and tools | [Operations](references/operations.md) |
 | Manage tokens, scopes, or guarded tool roles | [Operations](references/operations.md) |
+| Manage external plugins, plugin bindings, plugin auth, or post-response processing | [Plugins](references/plugins.md) |
 | Investigate errors, cache behavior, logs, or an SDK integration | [Diagnostics](references/diagnostics.md) |
 | Produce a maintainer-ready defect report | [Diagnostics](references/diagnostics.md) and [report template](assets/bug-report.md) |
 | Review fields in a tool manifest | [MCP tool template](assets/mcp-tool.yaml) |
@@ -42,19 +43,24 @@ facts.
 ## Change gates
 
 Explain the target, environment, and expected effect before any command that
-registers an API, applies or deletes a tool, creates or revokes a token, or
-flushes cache entries. Obtain explicit confirmation for that exact action.
-For a hard delete or an all-cache flush, require the target and impact to be
-repeated in the confirmation.
+registers an API, applies or deletes a tool, applies or deletes a plugin or
+plugin binding, creates or revokes a token, or flushes cache entries. Obtain
+explicit confirmation for that exact action. For a hard delete or an all-cache
+flush, repeat the target and impact in the confirmation. For a plugin change,
+include the exact plugin version or binding name, endpoint/tool reference, and
+expected affected-tool cache impact.
 
-Use environment references for downstream ERP credentials. Tool manifests use
-`credentialRef`, never a credential value. Show a newly created API token only
-to its intended recipient once, then omit it from all subsequent output.
+Use environment references for downstream ERP and plugin credentials. Tool
+manifests use `credentialRef`; plugin manifests use a `PLUGIN_*`
+`credentialRef`; neither contains a credential value. Show a newly created API
+token only to its intended recipient once, then omit it from all subsequent
+output.
 
 ## Verify and hand off
 
 After a workflow, verify the observable result at its highest available seam:
-the API test, local schema validation, registry readback, MCP discovery/call,
-or an affected runtime metric/log. State the context, versions, commands run,
-result, and remaining risk. Redact secrets, authorization headers, and
-personally identifying ERP data.
+the API test, local schema validation, registry readback, plugin or binding
+readback, MCP discovery/call, or an affected runtime metric/log. State the
+context, versions, commands run, result, and remaining risk. Redact secrets,
+authorization headers, plugin payloads and response bodies, and personally
+identifying ERP data.

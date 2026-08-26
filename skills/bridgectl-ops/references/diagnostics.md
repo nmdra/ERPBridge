@@ -17,6 +17,24 @@
    separates them. If an operation would alter production state, obtain the
    change gate described in `SKILL.md`.
 
+## Plugin diagnosis
+
+For plugin or binding failures, read [Plugins](plugins.md) before changing
+state. Classify the failure as strict manifest validation, protected admission
+or endpoint allowlist, exact reference resolution, missing credential,
+timeout, non-2xx response, malformed or oversized response, transformed-output
+schema failure, binding failure policy, or stale cache. Start with plugin and
+binding readback, bounded log stats/tail, and cache stats. Reproduce with safe
+deterministic data and preserve the distinction between an original result and
+a transformed result.
+
+Keep plugin evidence redacted: omit authorization headers, credential values,
+sensitive endpoints, request/response payloads, plugin response bodies, ERP
+records, and opaque invocation tokens. For repository diagnosis, use the
+existing plugin unit tests and `go test -tags pluginintegration
+./internal/integration -run TestPluginSystemBlackBox -count=1` when its fixture
+stack is available.
+
 ## Bug-report workflow
 
 Create `.agents/reports/<YYYY-MM-DD>-<slug>.md` from

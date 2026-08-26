@@ -1,0 +1,17 @@
+apiVersion: erpbridge.io/v1
+kind: PluginBinding
+metadata:
+  name: transform-orders
+  isActive: true
+spec:
+  pluginRef:
+    name: response-transformer
+    version: 1.0.0
+  toolRef:
+    name: list-orders
+    version: 1.0.0
+  phase: after_response
+  priority: 10
+  failurePolicy: continue
+  config:
+    mode: safe

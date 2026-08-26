@@ -5,6 +5,10 @@ starting implementation work.
 
 ## Active
 
+- [`Plan-Bridgectl-Ops-Plugin-Details.md`](./active/Plan-Bridgectl-Ops-Plugin-Details.md)
+  — extend the `bridgectl-ops` skill with external plugin operations, secure
+  lifecycle guidance, and trigger evaluations.
+
 ## Upcoming
 
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP

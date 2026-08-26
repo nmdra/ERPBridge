@@ -1,0 +1,14 @@
+apiVersion: erpbridge.io/v1
+kind: Plugin
+metadata:
+  name: response-transformer
+  version: 1.0.0
+  type: api
+  isActive: true
+spec:
+  endpoint: https://plugin-host.example
+  timeoutMilliseconds: 5000
+  auth:
+    type: api-key
+    credentialRef: PLUGIN_RESPONSE_TRANSFORMER_KEY
+    header: X-API-Key

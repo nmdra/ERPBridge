@@ -19,6 +19,16 @@ separate confirmed action.
 - Use deactivation/soft deletion where retention for audit or rollback is
   needed. Confirm that MCP discovery no longer exposes the retired tool.
 
+## External plugins
+
+Read [Plugins](plugins.md) before managing an external plugin or binding. Apply
+and read back the exact plugin version before applying a binding that references
+that plugin and an exact tool version. A normal delete is a soft delete; a hard
+delete needs explicit confirmation and an active binding blocks hard deletion
+of its exact plugin version. Applying, updating, or deleting a plugin or
+binding flushes affected tool cache entries, so verify the narrowest affected
+cache target after the lifecycle change.
+
 ## Tokens and guarded tools
 
 `bridgectl token create`, `list`, and `revoke` require the admin credential.

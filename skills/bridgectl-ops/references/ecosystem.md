@@ -8,6 +8,7 @@
 | `bridgectl` | Control CLI for contexts, API registration/testing, tool resources, tokens, logs, and cache. | Performing supported operations against an ERPBridge environment. |
 | MCP client | Discovers and calls tools through stdio or `/mcp/`. | Verifying user-visible tool discovery and calls. |
 | `@erpbridge/sdk` | TypeScript facade for MCP tools, registry/direct invoke, logs, metrics, health, and cache. | Diagnosing application integration or envelope-handling behavior. |
+| External plugin process | Separately operated HTTP process or container that receives the bounded `/v1/process` contract and returns a result envelope. | Verifying post-response processing or diagnosing plugin endpoint behavior. ERPBridge stores and invokes it but does not deploy it. |
 | ERPBridge source repository | Source of truth for the checked-out revision, tests, and server implementation. | Reproducing, tracing, or fixing a defect. |
 
 ## Documentation source order
@@ -31,4 +32,6 @@ local `erpbridge-docs` checkout, then in-repo docs and source.
 MCP clients and the SDK must preserve the MCP result envelope. A text content
 item can contain a JSON-encoded ERPBridge compatibility result; it is not a
 replacement for the complete MCP response. REST direct invocation addresses
-registered tools only, not built-in MCP system tools.
+registered tools only, not built-in MCP system tools. Plugin processing is
+shared by MCP and direct tool invocation; the plugin payload is not a pass-through
+of caller arguments or credentials.

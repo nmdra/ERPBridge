@@ -30,6 +30,10 @@ the selected ERPBridge context.
 7. Verify with `bridgectl tool get <name>`, `bridgectl tool describe <name>`,
    and an MCP discovery/call that has safe test data. For guarded tools, verify
    both an authorized role and a denied role without exposing credentials.
+8. If the tool needs post-response processing, read [Plugins](plugins.md).
+   Apply and verify the exact plugin version first, then apply a binding to this
+   exact tool version. Confirm the transformed result and output-schema behavior
+   with safe data; keep plugin deployment outside this onboarding workflow.
 
 ## Completion evidence
 

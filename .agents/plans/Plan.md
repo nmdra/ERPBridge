@@ -1,1 +1,1 @@
-completed/[COMPLETED]Plan-Plugin-Endpoint-Authentication.md
+active/Plan-Bridgectl-Ops-Plugin-Details.md
