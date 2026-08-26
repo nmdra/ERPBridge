@@ -27,8 +27,37 @@ func (s *Server) executeToolCall(ctx context.Context, tool *Tool, args map[strin
 	if err != nil {
 		return nil, err
 	}
-	encoded, _ := json.Marshal(result.Result)
-	return mcp.NewToolResultText(string(encoded)), nil
+	if result == nil {
+		return nil, errors.New("tool returned no result")
+	}
+
+	value := result.Result
+	if result.IsError && result.Error != nil {
+		value = result.Error
+	}
+	encoded, marshalErr := json.Marshal(value)
+	if marshalErr != nil {
+		return nil, errors.New("encode tool result")
+	}
+	text := string(encoded)
+	if result.IsError {
+		if message, ok := result.Error.(string); ok {
+			text = message
+		}
+	} else if object, ok := result.Result.(map[string]any); ok {
+		if outputText, ok := object["text"].(string); ok {
+			text = outputText
+		}
+	}
+
+	mcpResult := mcp.NewToolResultText(text)
+	mcpResult.IsError = result.IsError
+	if !result.IsError && tool.Spec.OutputSchema != nil {
+		if _, ok := result.Result.(map[string]any); ok {
+			mcpResult.StructuredContent = result.Result
+		}
+	}
+	return mcpResult, nil
 }
 
 func (s *Server) executeTool(ctx context.Context, tool *Tool, args map[string]any) (*ToolResult, error) {

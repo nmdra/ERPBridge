@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Advertise developer-owned tool output schemas through MCP, return structured
+  content with equivalent text, propagate tool execution errors with `isError`,
+  and prevent error results from populating the cache
 - Process bounded ERP JSON and binary responses through ordered
   `raw_response` plugins before normalization, response-path selection, schema
   validation, and legacy `after_response` processing

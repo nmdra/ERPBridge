@@ -137,6 +137,30 @@ func TestCacheMiddleware_PreservesMCPResult(t *testing.T) {
 	assert.Equal(t, 1, called)
 }
 
+func TestCacheMiddleware_DoesNotCacheErrorResults(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(nil, cache.NewMemoryManager(10, log), log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	tool := &Tool{
+		Metadata: Metadata{Name: "error-cached-tool", Version: testVersion100},
+		Spec:     ToolSpec{Cache: &cache.Config{Enabled: true}},
+	}
+	calls := 0
+	next := func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls++
+		return &mcp.CallToolResult{Content: []mcp.Content{mcp.TextContent{Type: textContentType, Text: "safe error"}}, IsError: true}, nil
+	}
+	handler := s.CacheMiddleware(tool)(next)
+	req := mcp.CallToolRequest{}
+	req.Params.Name = tool.Metadata.Name
+	req.Params.Arguments = map[string]any{"id": "1"}
+
+	_, err := handler(context.Background(), req)
+	assert.NoError(t, err)
+	_, err = handler(context.Background(), req)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, calls)
+}
+
 func TestCacheMiddleware_FlushesOnDisabledWrite(t *testing.T) {
 	log := logger.Init()
 	s := NewServer(nil, cache.NewMemoryManager(10, log), log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")

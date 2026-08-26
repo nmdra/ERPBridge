@@ -286,7 +286,7 @@ version.
   `go test ./internal/mcp -run 'Test(ServerPlugin|RawResponse|Tool_Execute)' -count=1`;
   **Commit:** `feat(plugin): process raw ERP responses`.)
 
-- [ ] **Task 5: Advertise final MCP schemas and preserve transport/cache semantics.**
+- [x] **Task 5: Advertise final MCP schemas and preserve transport/cache semantics.**
   Write failing MCP, direct, and cache tests first. Map a declared
   object-shaped `ToolSpec.OutputSchema` to MCP `RawOutputSchema`, return
   structured content conforming to that schema alongside equivalent text

@@ -529,9 +529,16 @@ func (s *Server) RegisterTool(t *Tool) {
 	// For now, we register with the base name and let the handler resolve.
 	mcpTool := mcp.NewToolWithRawSchema(t.Metadata.Name, t.Spec.Description.Short, json.RawMessage(schemaJSON))
 
-	// Explicitly clear structured schema fields to avoid conflict during marshaling
+	// Explicitly clear structured input fields because RawInputSchema is used.
 	mcpTool.InputSchema = mcp.ToolInputSchema{}
-	mcpTool.OutputSchema = mcp.ToolOutputSchema{}
+	if t.Spec.OutputSchema != nil {
+		outputSchemaJSON, err := json.Marshal(*t.Spec.OutputSchema)
+		if err != nil {
+			s.log.Error("failed to prepare output schema", slog.String("tool_name", t.Metadata.Name), slog.String("error", err.Error()))
+			return
+		}
+		mcpTool.RawOutputSchema = json.RawMessage(outputSchemaJSON)
+	}
 
 	// Add tool to server with the shared middleware and execution seam.
 	handler := s.applyToolMiddlewares(t, s.handleMCPToolCall(t.Metadata.Name))
@@ -966,7 +973,9 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 	// or just send the MCP result content.
 	// For bridgectl compatibility, we send ToolResult structure.
 	var result any
-	if len(mcpResult.Content) > 0 {
+	if mcpResult.StructuredContent != nil {
+		result = mcpResult.StructuredContent
+	} else if len(mcpResult.Content) > 0 {
 		if text, ok := mcpResult.Content[0].(mcp.TextContent); ok {
 			_ = json.Unmarshal([]byte(text.Text), &result)
 		}

@@ -71,17 +71,33 @@ The controller also runs immediately after a `tool apply` HTTP request. The tool
 
 ### 5. External response plugins
 
-ERPBridge can pass a successful, normalized tool result to a plugin process that
-runs outside ERPBridge. The control plane stores only the plugin endpoint and
-exact version. It never installs, starts, upgrades, or schedules plugin code.
+ERPBridge invokes an already-running external plugin. The control plane stores
+only the plugin endpoint and exact version. It never installs, starts, upgrades,
+or schedules plugin code.
 
 A `PluginBinding` connects one exact `Plugin{name, version}` to one exact
-`MCPTool{name, version}`. Active `after_response` bindings run synchronously in
-ascending priority order after output-schema validation and before MCP or direct
-invoke serialization. The request contains only the protocol version,
-invocation ID, exact tool identity, normalized result, and binding config. It
-does not contain original arguments, inbound headers, caller identity, or ERP
-credentials.
+`MCPTool{name, version}`. A `raw_response` binding runs first and receives a
+bounded ERP response with status, normalized content type, and a tagged JSON or
+base64 body. It can adapt media, such as an ERP image to `{text: ...}`. The
+plugin cannot change status or receive ERP headers, URLs, credentials, caller
+identity, or original arguments. The developer owns the final object-shaped MCP
+output schema; plugins never change it dynamically. An incompatible output
+meaning requires a new MCP-visible tool name and exact tool version.
+
+For successful responses, the fixed order is:
+
+```mermaid
+flowchart LR
+    ERP[ERP response bytes] --> Raw[raw_response plugins]
+    Raw --> Path[responsePath]
+    Path --> Schema[output-schema validation]
+    Schema --> After[after_response plugins]
+    After --> Final[final validation and MCP result]
+```
+
+Terminal non-2xx responses can be inspected by raw plugins while retaining ERP
+retry and circuit-breaker accounting. They remain errors, including 3xx. They
+do not run success-only normalization or after-response processing.
 
 ```mermaid
 sequenceDiagram
@@ -91,17 +107,21 @@ sequenceDiagram
     participant Plugin as External plugin
     Client->>Bridge: invoke exact tool
     Bridge->>ERP: execute tool request
-    ERP-->>Bridge: normalized validated result
-    Bridge->>Plugin: POST /v1/process
-    Plugin-->>Bridge: transformed result
-    Bridge-->>Client: final result
+    ERP-->>Bridge: bounded response bytes and status
+    Bridge->>Plugin: raw_response with safe tagged body
+    Plugin-->>Bridge: JSON result
+    Bridge->>Plugin: optional after_response normalized result
+    Plugin-->>Bridge: final JSON result
+    Bridge-->>Client: structured content and equivalent text
 ```
 
 The pipeline runs only on a cache miss. The cache stores the final transformed
-MCP result, so a cache hit does not invoke a plugin. Applying, changing, or
-deleting a plugin or binding flushes the affected tool cache entries. The
-`continue` failure policy returns the original result; `fail` returns a generic
-tool error.
+MCP result and never stores an error result, so a cache hit does not invoke ERP
+or plugins. Applying, changing, or deleting a plugin or binding flushes the
+affected tool cache entries. `continue` uses the original captured response
+only when it satisfies the developer-owned final schema; otherwise it returns a
+safe error. Use `fail` for media conversion unless a compatible fallback is
+known.
 
 ---
 

@@ -146,8 +146,39 @@ func TestServerPlugin_RawResponseAdaptsBinaryBody(t *testing.T) {
 	s.pluginClient = processor
 
 	result := invokeMCPHandler(t, s.handleMCPToolCall(tool.Metadata.Name), tool.Metadata.Name)
-	require.Equal(t, map[string]any{"text": "invoice text"}, textResult(t, result))
+	require.Equal(t, map[string]any{"text": "invoice text"}, result.StructuredContent)
+	require.Equal(t, "invoice text", result.Content[0].(mcp.TextContent).Text)
 	require.False(t, result.IsError)
+}
+
+func TestServerPlugin_RawMCPAndDirectResultsMatch(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+	tool := rawResponseTool("raw-direct-tool")
+	connector := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(bytes.NewReader([]byte{0xff, 0xd8, 0xff}))}, nil
+	}}
+	s := NewServer(connector, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	s.RegisterTool(tool)
+	binding := validPluginBindingForTest()
+	binding.Spec.ToolRef.Name = tool.Metadata.Name
+	binding.Spec.Phase = PluginPhaseRawResponse
+	installActivePluginBindings(s, tool, binding)
+	s.pluginClient = &fakePluginProcessor{process: func(PluginInvocation) (*PluginResponse, error) {
+		return &PluginResponse{Result: map[string]any{"text": "direct text"}}, nil
+	}}
+
+	mcpResult := invokeMCPHandler(t, s.handleMCPToolCall(tool.Metadata.Name), tool.Metadata.Name)
+	require.Equal(t, map[string]any{"text": "direct text"}, mcpResult.StructuredContent)
+	require.Equal(t, "direct text", mcpResult.Content[0].(mcp.TextContent).Text)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/tools/invoke", bytes.NewBufferString(`{"name":"raw-direct-tool","arguments":{}}`))
+	recorder := httptest.NewRecorder()
+	s.handleDirectInvoke(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var direct ToolResult
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &direct))
+	require.Equal(t, map[string]any{"text": "direct text"}, direct.Result)
 }
 
 func TestServerPlugin_RawRunsBeforeNormalizationAndAfterResponse(t *testing.T) {
@@ -179,7 +210,8 @@ func TestServerPlugin_RawRunsBeforeNormalizationAndAfterResponse(t *testing.T) {
 	s.pluginClient = processor
 
 	result := invokeMCPHandler(t, s.handleMCPToolCall(tool.Metadata.Name), tool.Metadata.Name)
-	require.Equal(t, map[string]any{"text": "converted-after"}, textResult(t, result))
+	require.Equal(t, map[string]any{"text": "converted-after"}, result.StructuredContent)
+	require.Equal(t, "converted-after", result.Content[0].(mcp.TextContent).Text)
 	calls := processor.Calls()
 	require.Len(t, calls, 2)
 	require.NotNil(t, calls[0].RawResponse)
@@ -639,6 +671,6 @@ func TestServerPlugin_DeniedAndERPErrorCallsNoPlugin(t *testing.T) {
 	errBinding.Spec.ToolRef.Name = errTool.Metadata.Name
 	installActivePluginBindings(s, errTool, errBinding)
 	errResult := invokeMCPHandler(t, s.handleMCPToolCall(errTool.Metadata.Name), errTool.Metadata.Name)
-	require.False(t, errResult.IsError, "legacy MCP serialization must remain unchanged for ERP error results")
+	require.True(t, errResult.IsError, "MCP must propagate tool execution errors")
 	require.Empty(t, processor.Calls())
 }
