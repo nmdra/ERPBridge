@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 
@@ -249,6 +250,34 @@ func TestServerPlugin_RawTerminalErrorPreservesStatusAndSkipsAfterResponse(t *te
 	require.True(t, result.IsError)
 	require.Equal(t, map[string]any{"text": "handled error"}, result.Result)
 	require.Len(t, processor.Calls(), 1)
+}
+
+func TestServerPlugin_RawStatusErrorsReachPluginAndRemainErrors(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+	for _, status := range []int{http.StatusOK, http.StatusMultipleChoices, http.StatusBadRequest, http.StatusTooManyRequests, http.StatusBadGateway} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			tool := rawResponseTool("raw-status-" + strings.ReplaceAll(http.StatusText(status), " ", "-"))
+			connector := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+				return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewBufferString(`{"message":"status"}`))}, nil
+			}}
+			s := NewServer(connector, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+			s.RegisterTool(tool)
+			binding := validPluginBindingForTest()
+			binding.Spec.ToolRef.Name = tool.Metadata.Name
+			binding.Spec.Phase = PluginPhaseRawResponse
+			installActivePluginBindings(s, tool, binding)
+			s.pluginClient = &fakePluginProcessor{process: func(invocation PluginInvocation) (*PluginResponse, error) {
+				require.Equal(t, status, invocation.RawResponse.Status)
+				return &PluginResponse{Result: map[string]any{"text": "handled"}}, nil
+			}}
+
+			result, err := s.executeTool(context.Background(), tool, nil)
+			require.NoError(t, err)
+			require.Equal(t, status < http.StatusOK || status >= http.StatusMultipleChoices, result.IsError)
+			require.Equal(t, map[string]any{"text": "handled"}, result.Result)
+		})
+	}
 }
 
 func TestServerPlugin_RawFailureUsesSafeFallbackPolicy(t *testing.T) {

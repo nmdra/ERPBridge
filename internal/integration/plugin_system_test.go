@@ -51,9 +51,24 @@ func TestPluginSystemBlackBox(t *testing.T) {
 	applyJSON(t, client, baseURL+"/apis/erpbridge.io/v1/plugins", plugin)
 
 	boundTool := integrationTool("plugin-fixture-bound")
+	rawTool := integrationRawTool("plugin-fixture-raw")
 	ordinaryTool := integrationTool("plugin-fixture-ordinary")
 	applyJSON(t, client, baseURL+"/apis/erpbridge.io/v1/tools", boundTool)
+	applyJSON(t, client, baseURL+"/apis/erpbridge.io/v1/tools", rawTool)
 	applyJSON(t, client, baseURL+"/apis/erpbridge.io/v1/tools", ordinaryTool)
+
+	rawBinding := mcp.PluginBinding{
+		APIVersion: mcp.PluginAPIVersion,
+		Kind:       mcp.PluginBindingKind,
+		Metadata:   mcp.PluginBindingMetadata{Name: "mock-plugin-raw-fixture-binding", IsActive: true},
+		Spec: mcp.PluginBindingSpec{
+			PluginRef:     mcp.PluginRef{Name: plugin.Metadata.Name, Version: plugin.Metadata.Version},
+			ToolRef:       mcp.ToolRef{Name: rawTool.Metadata.Name, Version: rawTool.Metadata.Version},
+			Phase:         mcp.PluginPhaseRawResponse,
+			FailurePolicy: mcp.PluginFailurePolicyFail,
+		},
+	}
+	applyJSON(t, client, baseURL+"/apis/erpbridge.io/v1/pluginbindings", rawBinding)
 
 	binding := mcp.PluginBinding{
 		APIVersion: mcp.PluginAPIVersion,
@@ -69,8 +84,10 @@ func TestPluginSystemBlackBox(t *testing.T) {
 	applyJSON(t, client, baseURL+"/apis/erpbridge.io/v1/pluginbindings", binding)
 
 	directBound := invokeDirect(t, client, baseURL, boundTool.Metadata.Name)
+	directRaw := invokeDirect(t, client, baseURL, rawTool.Metadata.Name)
 	directOrdinary := invokeDirect(t, client, baseURL, ordinaryTool.Metadata.Name)
 	assertFixture(t, directBound, true)
+	assertRawFixture(t, directRaw)
 	assertFixture(t, directOrdinary, false)
 
 	sessionID, initResponse := mcpRequest(t, client, baseURL, "", map[string]any{
@@ -90,25 +107,51 @@ func TestPluginSystemBlackBox(t *testing.T) {
 		jsonRPCField: jsonRPCVersion, "id": 2, jsonMethodField: "tools/list", jsonParamsField: map[string]any{},
 	})
 	assertToolListed(t, listResponse, boundTool.Metadata.Name)
+	assertToolListed(t, listResponse, rawTool.Metadata.Name)
 	assertToolListed(t, listResponse, ordinaryTool.Metadata.Name)
 
 	_, boundCall := mcpRequest(t, client, baseURL, sessionID, map[string]any{
 		jsonRPCField: jsonRPCVersion, "id": 3, jsonMethodField: "tools/call",
 		jsonParamsField: map[string]any{jsonNameField: boundTool.Metadata.Name, "arguments": map[string]any{}},
 	})
+	_, rawCall := mcpRequest(t, client, baseURL, sessionID, map[string]any{
+		jsonRPCField: jsonRPCVersion, "id": 5, jsonMethodField: "tools/call",
+		jsonParamsField: map[string]any{jsonNameField: rawTool.Metadata.Name, "arguments": map[string]any{}},
+	})
 	_, ordinaryCall := mcpRequest(t, client, baseURL, sessionID, map[string]any{
 		jsonRPCField: jsonRPCVersion, "id": 4, jsonMethodField: "tools/call",
 		jsonParamsField: map[string]any{jsonNameField: ordinaryTool.Metadata.Name, "arguments": map[string]any{}},
 	})
 	mcpBound := mcpTextResult(t, boundCall)
+	mcpRaw := mcpTextResult(t, rawCall)
 	mcpOrdinary := mcpTextResult(t, ordinaryCall)
 	assertFixture(t, mcpBound, true)
+	assertRawFixture(t, mcpRaw)
 	assertFixture(t, mcpOrdinary, false)
 	if !reflect.DeepEqual(directBound, mcpBound) {
 		t.Fatalf("direct and MCP bound results differ: direct=%#v mcp=%#v", directBound, mcpBound)
 	}
+	if !reflect.DeepEqual(directRaw, mcpRaw) {
+		t.Fatalf("direct and MCP raw results differ: direct=%#v mcp=%#v", directRaw, mcpRaw)
+	}
 	if !reflect.DeepEqual(directOrdinary, mcpOrdinary) {
 		t.Fatalf("direct and MCP ordinary results differ: direct=%#v mcp=%#v", directOrdinary, mcpOrdinary)
+	}
+}
+
+func integrationRawTool(name string) mcp.Tool {
+	schema := any(map[string]any{"type": "object"})
+	return mcp.Tool{
+		APIVersion: mcp.PluginAPIVersion,
+		Kind:       "MCPTool",
+		Metadata:   mcp.Metadata{Name: name, Version: "1.0.0", Module: "integration", IsActive: true},
+		Spec: mcp.ToolSpec{
+			Description:  mcp.Description{Short: "Read the deterministic plugin fixture through raw processing"},
+			InputSchema:  mcp.InputSchema{Type: "object", Properties: map[string]mcp.Property{}},
+			OutputSchema: &schema,
+			Execution:    mcp.Execution{Type: "http", Method: http.MethodGet, Endpoint: "/api/resource/Plugin Fixture"},
+			Security:     mcp.Security{AuthType: "api-key", CredentialRef: integrationCredential},
+		},
 	}
 }
 
@@ -258,6 +301,17 @@ func mcpTextResult(t *testing.T, response map[string]any) map[string]any {
 		t.Fatal(err)
 	}
 	return value
+}
+
+func assertRawFixture(t *testing.T, value map[string]any) {
+	t.Helper()
+	expected := map[string]any{
+		"data":        map[string]any{"id": "plugin-fixture", "state": "source"},
+		"processedBy": "mock-plugin",
+	}
+	if !reflect.DeepEqual(value, expected) {
+		t.Fatalf("unexpected raw fixture: got=%#v want=%#v", value, expected)
+	}
 }
 
 func assertFixture(t *testing.T, value map[string]any, processed bool) {

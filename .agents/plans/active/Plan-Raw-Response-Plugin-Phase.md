@@ -310,7 +310,7 @@ version.
   `go test ./internal/mcp -run 'Test(RegisterTool|MCP|Direct|Cache|ServerPlugin)' -count=1`;
   **Commit:** `feat(mcp): expose stable transformed output contracts`.)
 
-- [ ] **Task 6: Add focused media and black-box integration coverage.** Write
+- [x] **Task 6: Add focused media and black-box integration coverage.** Write
   failing tests first. Add an in-process `httptest` plugin test that asserts the
   raw payload contains status, content type, base64 image bytes, no ERP headers,
   no URL, and no credentials; it returns `{text: ...}` and proves the final

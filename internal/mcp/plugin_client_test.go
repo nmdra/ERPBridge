@@ -65,6 +65,36 @@ func TestPluginClient_Process_Success(t *testing.T) {
 	require.Equal(t, map[string]any{"id": pluginTestResultID, "processed": true}, response.Result)
 }
 
+func TestPluginClient_Process_SendsRawResponseWithoutLegacyResult(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		require.NotContains(t, payload, "result")
+		raw, ok := payload["rawResponse"].(map[string]any)
+		require.True(t, ok)
+		require.Equal(t, float64(http.StatusOK), raw["status"])
+		require.Equal(t, "image/png", raw["contentType"])
+		require.Equal(t, "base64", raw["body"].(map[string]any)["encoding"])
+		_, _ = w.Write([]byte(`{"result":{"text":"ok"}}`))
+	}))
+	defer server.Close()
+
+	plugin := validPluginForTest(server.URL)
+	invocation := validPluginInvocationForTest()
+	invocation.Result = nil
+	invocation.RawResponse = &PluginRawResponse{
+		Status:      http.StatusOK,
+		ContentType: "image/png",
+		Body: PluginRawBody{
+			Encoding: PluginRawBodyEncodingBase64,
+			Value:    "iVBORw==",
+		},
+	}
+	response, err := NewPluginClient().Process(context.Background(), &plugin, invocation)
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"text": "ok"}, response.Result)
+}
+
 func TestPluginClient_Process_RejectsUnsupportedProtocol(t *testing.T) {
 	plugin := validPluginForTest("http://plugins.example.test")
 	invocation := validPluginInvocationForTest()
