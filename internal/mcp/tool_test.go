@@ -42,6 +42,60 @@ func TestServer_RegisterTool(t *testing.T) {
 	assert.Equal(t, testToolName, registered.Metadata.Name)
 }
 
+func TestTool_CallERP_CapturesResponseBeforeDecoding(t *testing.T) {
+	mockConn := &MockConnector{
+		CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, options connector.CallOptions) (*http.Response, error) {
+			assert.True(t, options.PreserveErrorResponses)
+			return &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Header:     http.Header{"Content-Type": []string{"IMAGE/PNG; charset=binary"}},
+				Body:       io.NopCloser(bytes.NewReader([]byte{0x89, 'P', 'N', 'G'})),
+			}, nil
+		},
+	}
+	tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{
+		Execution: Execution{Method: http.MethodGet, Endpoint: testEndpoint},
+	}}
+
+	response, err := tool.CallERP(context.Background(), nil, mockConn, connector.CallOptions{PreserveErrorResponses: true})
+
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadGateway, response.Status)
+	assert.Equal(t, "image/png", response.ContentType)
+	assert.Equal(t, []byte{0x89, 'P', 'N', 'G'}, response.Body)
+}
+
+func TestTool_CallERP_CapturesEmptyAndMalformedBodies(t *testing.T) {
+	for name, body := range map[string][]byte{
+		"empty":     []byte{},
+		"malformed": []byte(`{"not":`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			mockConn := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body))}, nil
+			}}
+			tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{Execution: Execution{Method: http.MethodGet, Endpoint: testEndpoint}}}
+
+			response, err := tool.CallERP(context.Background(), nil, mockConn, connector.CallOptions{PreserveErrorResponses: true})
+
+			assert.NoError(t, err)
+			assert.Equal(t, body, response.Body)
+		})
+	}
+}
+
+func TestTool_CallERP_RejectsOversizedResponse(t *testing.T) {
+	mockConn := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(bytes.Repeat([]byte{'x'}, MaxPluginJSONBytes+1)))}, nil
+	}}
+	tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{Execution: Execution{Method: http.MethodGet, Endpoint: testEndpoint}}}
+
+	response, err := tool.CallERP(context.Background(), nil, mockConn, connector.CallOptions{PreserveErrorResponses: true})
+
+	assert.Error(t, err)
+	assert.Nil(t, response)
+}
+
 func TestTool_Execute(t *testing.T) {
 	mockConn := &MockConnector{
 		CallFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader) (*http.Response, error) {

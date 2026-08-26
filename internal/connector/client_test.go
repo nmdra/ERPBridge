@@ -3,6 +3,7 @@ package connector
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -44,6 +45,40 @@ func TestClientCallDoesNotLogRequestOrResponseBodies(t *testing.T) {
 
 	if encoded := logs.String(); bytes.Contains([]byte(encoded), []byte(requestSecret)) || bytes.Contains([]byte(encoded), []byte(responseSecret)) || bytes.Contains([]byte(encoded), []byte(endpointSecret)) {
 		t.Fatalf("connector logs expose request data: %s", encoded)
+	}
+}
+
+func TestClient_CallWithOptions_PreservesFinalTransientResponse(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":"upstream"}`))
+	}))
+	defer server.Close()
+
+	resp, err := NewClient(slog.Default()).CallWithOptions(context.Background(), EndpointConfig{
+		Method:  http.MethodGet,
+		BaseURL: server.URL,
+	}, nil, nil, CallOptions{PreserveErrorResponses: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadGateway)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `{"error":"upstream"}` {
+		t.Fatalf("body = %q", body)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts = %d, want 3", attempts)
 	}
 }
 

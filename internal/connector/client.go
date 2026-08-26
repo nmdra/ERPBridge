@@ -5,6 +5,7 @@ package connector
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -111,8 +112,35 @@ func (c *Client) applyAuth(req *http.Request, ep EndpointConfig) {
 	}
 }
 
+// CallOptions controls optional response handling without changing the
+// default connector behavior.
+type CallOptions struct {
+	// PreserveErrorResponses retains the final 429 or 5xx response after the
+	// normal retry budget while still recording the failure in the circuit breaker.
+	PreserveErrorResponses bool
+}
+
+// preservedResponseError keeps a terminal response available to callers while
+// returning an error to the circuit breaker.
+type preservedResponseError struct {
+	response *http.Response
+	err      error
+}
+
+func (e *preservedResponseError) Error() string { return e.err.Error() }
+func (e *preservedResponseError) Unwrap() error { return e.err }
+
 // Call executes an outbound request to the ERP endpoint with retries and circuit breaking.
 func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Values, body io.Reader) (*http.Response, error) {
+	return c.call(ctx, ep, queryParams, body, CallOptions{})
+}
+
+// CallWithOptions executes an outbound request with explicit response handling.
+func (c *Client) CallWithOptions(ctx context.Context, ep EndpointConfig, queryParams url.Values, body io.Reader, options CallOptions) (*http.Response, error) {
+	return c.call(ctx, ep, queryParams, body, options)
+}
+
+func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Values, body io.Reader, options CallOptions) (*http.Response, error) {
 	start := time.Now()
 	log := logger.FromContext(ctx)
 
@@ -145,6 +173,7 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 
 	res, err := c.cb.Execute(func() (any, error) {
 		var lastResp *http.Response
+		var lastTransientResp *http.Response
 		err := retry.Do(
 			func() error {
 				var currentBody io.Reader
@@ -172,10 +201,17 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 
 				if resp.StatusCode == http.StatusTooManyRequests ||
 					resp.StatusCode >= 500 {
-					_ = resp.Body.Close()
+					if lastTransientResp != nil {
+						_ = lastTransientResp.Body.Close()
+					}
+					lastTransientResp = resp
 					return fmt.Errorf("transient erp error: %d", resp.StatusCode)
 				}
 
+				if lastTransientResp != nil {
+					_ = lastTransientResp.Body.Close()
+					lastTransientResp = nil
+				}
 				lastResp = resp
 				return nil
 			},
@@ -185,8 +221,22 @@ func (c *Client) Call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 			retry.MaxJitter(100*time.Millisecond),
 			retry.LastErrorOnly(true),
 		)
+		if err != nil && options.PreserveErrorResponses && lastTransientResp != nil {
+			return nil, &preservedResponseError{response: lastTransientResp, err: err}
+		}
+		if lastTransientResp != nil {
+			_ = lastTransientResp.Body.Close()
+		}
 		return lastResp, err
 	})
+
+	if err != nil {
+		var responseErr *preservedResponseError
+		if options.PreserveErrorResponses && errors.As(err, &responseErr) {
+			res = responseErr.response
+			err = nil
+		}
+	}
 
 	if err != nil {
 		log.Error("erp request failed",

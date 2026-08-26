@@ -3,8 +3,10 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -130,17 +132,24 @@ type ERPConnector interface {
 	Call(ctx context.Context, ep connector.EndpointConfig, queryParams url.Values, body io.Reader) (*http.Response, error)
 }
 
-// Execute performs the actual tool invocation by calling either a native handler or the underlying ERP API.
-func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnector) (*ToolResult, error) {
-	if t.Handler != nil {
-		return t.Handler(ctx, args)
-	}
+// ERPResponseConnector is an optional connector capability for raw-response
+// processing. Its legacy Call method remains the default execution path.
+type ERPResponseConnector interface {
+	CallWithOptions(ctx context.Context, ep connector.EndpointConfig, queryParams url.Values, body io.Reader, options connector.CallOptions) (*http.Response, error)
+}
 
+// ERPResponse is a bounded response captured before JSON decoding.
+type ERPResponse struct {
+	Status      int
+	ContentType string
+	Body        []byte
+}
+
+func (t *Tool) prepareERPCall(args map[string]any) (connector.EndpointConfig, url.Values, io.Reader, error) {
 	if t.Spec.Execution.Endpoint == "" {
-		return nil, fmt.Errorf("tool %s has no endpoint configuration", t.Metadata.Name)
+		return connector.EndpointConfig{}, nil, nil, fmt.Errorf("tool %s has no endpoint configuration", t.Metadata.Name)
 	}
 
-	// Apply argument mapping (LLM arg name -> ERP arg name)
 	erpArgs := make(map[string]any)
 	for k, v := range args {
 		if mappedKey, ok := t.Spec.Execution.Mapping[k]; ok {
@@ -151,19 +160,16 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 	}
 
 	fullURL := t.Spec.Execution.Endpoint
-
-	// Path parameter substitution
 	for k, v := range erpArgs {
 		placeholder := "{" + k + "}"
 		if strings.Contains(fullURL, placeholder) {
 			fullURL = strings.ReplaceAll(fullURL, placeholder, fmt.Sprintf("%v", v))
-			delete(erpArgs, k) // Remove from args so it's not sent as query/body param
+			delete(erpArgs, k)
 		}
 	}
 
 	queryParams := url.Values{}
 	var body io.Reader
-
 	if t.Spec.Execution.Method == http.MethodGet {
 		for k, v := range erpArgs {
 			queryParams.Set(k, fmt.Sprintf("%v", v))
@@ -171,18 +177,16 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 	} else if len(erpArgs) > 0 {
 		data, err := json.Marshal(erpArgs)
 		if err != nil {
-			return nil, fmt.Errorf("marshal arguments: %w", err)
+			return connector.EndpointConfig{}, nil, nil, fmt.Errorf("marshal arguments: %w", err)
 		}
 		body = strings.NewReader(string(data))
 	}
 
 	envBaseURL := os.Getenv("ERP_BASE_URL")
-
 	if envBaseURL != "" {
 		u, err := url.Parse(fullURL)
 		if err == nil {
 			if u.IsAbs() {
-				// If it's an absolute URL pointing to localhost, override it with ERP_BASE_URL
 				if strings.HasPrefix(u.Host, "localhost") || strings.HasPrefix(u.Host, "127.0.0.1") || strings.HasPrefix(u.Host, "[::1]") {
 					base, err := url.Parse(envBaseURL)
 					if err == nil {
@@ -192,23 +196,18 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 					}
 				}
 			} else {
-				// If it's a relative path, simply prepend the base URL
 				fullURL = strings.TrimSuffix(envBaseURL, "/") + "/" + strings.TrimPrefix(fullURL, "/")
 			}
 		}
 	} else if !strings.HasPrefix(fullURL, "http") {
-		// Fallback for relative paths if no environment variable is set
 		fullURL = "http://localhost:8081" + "/" + strings.TrimPrefix(fullURL, "/")
 	}
 
-	// Resolve CredentialRef from environment variables. A configured but missing
-	// reference must fail closed rather than being sent as a literal credential.
 	cred, err := resolveCredential(t.Spec.Security.CredentialRef)
 	if err != nil {
-		return nil, err
+		return connector.EndpointConfig{}, nil, nil, err
 	}
-
-	ep := connector.EndpointConfig{
+	return connector.EndpointConfig{
 		Method:  t.Spec.Execution.Method,
 		Path:    fullURL,
 		BaseURL: "",
@@ -216,11 +215,62 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 			Type: t.Spec.Security.AuthType,
 			Key:  cred,
 		},
-	}
+	}, queryParams, body, nil
+}
 
-	resp, err := conn.Call(ctx, ep, queryParams, body)
+func (t *Tool) callERPResponse(ctx context.Context, args map[string]any, conn ERPConnector, options connector.CallOptions) (*http.Response, error) {
+	ep, queryParams, body, err := t.prepareERPCall(args)
+	if err != nil {
+		return nil, err
+	}
+	if options.PreserveErrorResponses {
+		responseConnector, ok := conn.(ERPResponseConnector)
+		if !ok {
+			return nil, errors.New("ERP connector does not support raw response capture")
+		}
+		return responseConnector.CallWithOptions(ctx, ep, queryParams, body, options)
+	}
+	return conn.Call(ctx, ep, queryParams, body)
+}
+
+// CallERP captures an ERP response before JSON decoding for raw processing.
+func (t *Tool) CallERP(ctx context.Context, args map[string]any, conn ERPConnector, options connector.CallOptions) (*ERPResponse, error) {
+	resp, err := t.callERPResponse(ctx, args, conn, options)
 	if err != nil {
 		return nil, fmt.Errorf("erp call failed: %w", err)
+	}
+	if resp == nil || resp.Body == nil {
+		return nil, errors.New("erp response body is unavailable")
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxPluginJSONBytes+1))
+	if err != nil {
+		return nil, errors.New("read ERP response")
+	}
+	if len(body) > MaxPluginJSONBytes {
+		return nil, errors.New("ERP response exceeds maximum size")
+	}
+	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if mediaType, _, parseErr := mime.ParseMediaType(contentType); parseErr == nil {
+		contentType = strings.ToLower(mediaType)
+	} else {
+		contentType = "application/octet-stream"
+	}
+	return &ERPResponse{Status: resp.StatusCode, ContentType: contentType, Body: body}, nil
+}
+
+// Execute performs the actual tool invocation by calling either a native handler or the underlying ERP API.
+func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnector) (*ToolResult, error) {
+	if t.Handler != nil {
+		return t.Handler(ctx, args)
+	}
+	resp, err := t.callERPResponse(ctx, args, conn, connector.CallOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("erp call failed: %w", err)
+	}
+	if resp == nil || resp.Body == nil {
+		return nil, errors.New("erp response body is unavailable")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -228,29 +278,18 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 	if err := json.NewDecoder(resp.Body).Decode(&resultData); err != nil {
 		return nil, fmt.Errorf("decode erp response: %w", err)
 	}
-
-	// Unwrap response based on ResponsePath.
 	if t.Spec.Execution.ResponsePath != "" && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		resultData, err = resolveResponsePath(resultData, t.Spec.Execution.ResponsePath)
 		if err != nil {
 			return nil, err
 		}
 	}
-
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if err := t.ValidateResult(resultData); err != nil {
-			return &ToolResult{
-				Result:  resultData,
-				Error:   fmt.Sprintf("response validation failed: %v", err),
-				IsError: true,
-			}, nil
+			return &ToolResult{Result: resultData, Error: fmt.Sprintf("response validation failed: %v", err), IsError: true}, nil
 		}
 	}
-
-	return &ToolResult{
-		Result:  resultData,
-		IsError: resp.StatusCode >= 400,
-	}, nil
+	return &ToolResult{Result: resultData, IsError: resp.StatusCode >= 400}, nil
 }
 
 type responsePathToken struct {

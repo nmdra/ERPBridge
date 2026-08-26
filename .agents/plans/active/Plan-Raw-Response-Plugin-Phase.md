@@ -219,7 +219,7 @@ version.
   update the local contract guide and Unreleased entry in this same commit;
   **Commit:** `feat(plugin): define raw response invocation contract`.)
 
-- [ ] **Task 2: Separate bounded ERP response capture from normalization.** Write
+- [x] **Task 2: Separate bounded ERP response capture from normalization.** Write
   failing connector and tool tests first. Introduce an internal ERP response
   capture value containing status, normalized content type, and bounded body
   bytes. Extract request construction and response capture from `Tool.Execute`,
