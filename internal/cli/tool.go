@@ -384,7 +384,7 @@ var toolGenerateCmd = &cobra.Command{
 		apiName, _ := cmd.Flags().GetString("api")
 		openapiURL, _ := cmd.Flags().GetString("openapi")
 
-		reg, err := idp.NewRegistry("", RootLog)
+		reg, err := contextRegistry()
 		if err != nil {
 			return err
 		}

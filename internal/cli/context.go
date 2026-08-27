@@ -15,9 +15,7 @@ import (
 var contextCmd = &cobra.Command{
 	Use:   "context",
 	Short: "Manage bridgectl contexts",
-	Long: `The context command allows you to switch between different ERPBridge 
-environments (e.g., local, staging, production). Each context defines the 
-middleware server URL, default ERP base URL, and authentication credentials.
+	Long: `The context command allows you to switch between different ERPBridge environments (e.g., local, staging, production). Each context defines the middleware server URL, default ERP base URL, and authentication credentials.
 The --context flag and BRIDGE_CONTEXT must name a configured context.`,
 }
 

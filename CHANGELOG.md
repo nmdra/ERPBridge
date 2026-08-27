@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add a disposable `scripts/test-onboarding.sh` Compose check covering
+  server-side probing, draft generation, validation, apply, MCP discovery/call,
+  duplicate protection, and control-plane URL recovery without printing
+  credentials or ERP bodies
 - Expand `bridgectl-ops` onboarding and diagnosis guidance with deterministic
   preflight, stable-code recovery branches, safe manifest ownership, and
   credential-free positive and near-miss evaluations

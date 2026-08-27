@@ -221,6 +221,7 @@ var apiTestCmd = &cobra.Command{
 	Use:   "test [name]",
 	Short: "Send a test request to a registered API",
 	Long: `Verify connectivity to a registered ERP API endpoint through the ERPBridge server.
+The server resolves credentialRef from its environment and returns only status, content type, latency, and success.
 Use --local only for an explicit legacy host-side diagnostic.`,
 	Example: `  bridgectl api test get-invoices
   bridgectl api test get-invoices --local`,

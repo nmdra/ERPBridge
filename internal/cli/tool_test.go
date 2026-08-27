@@ -12,8 +12,10 @@ import (
 	"testing"
 
 	"github.com/nmdra/ERPBridge/internal/config"
+	"github.com/nmdra/ERPBridge/internal/idp"
 	"github.com/nmdra/ERPBridge/internal/mcp"
 	"github.com/nmdra/ERPBridge/internal/output"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -143,6 +145,77 @@ spec:
 	require.Equal(t, int32(1), requests.Load())
 	require.Equal(t, "list_orders", applied.Metadata.Name)
 	require.Contains(t, output.String(), "list_orders@1.0.0 applied successfully")
+}
+
+func TestToolGenerateCmdUsesSelectedContextRegistry(t *testing.T) {
+	setupTest()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
+	require.NoError(t, err)
+	require.NoError(t, reg.Register(&idp.API{
+		Name:          "department-api",
+		URL:           "http://mock-erp:8081/api/resource/Department",
+		Method:        http.MethodGet,
+		AuthType:      "api-key", // #nosec G101 -- test exercises an auth type, not a credential.
+		AuthHeader:    "Authorization",
+		CredentialRef: "ERP_ONBOARDING_CREDENTIAL",
+		Module:        "erp",
+		Description:   "List departments",
+	}))
+
+	spec := filepath.Join(t.TempDir(), "openapi.yaml")
+	require.NoError(t, os.WriteFile(spec, []byte(`openapi: 3.0.3
+info:
+  title: onboarding fixture
+  version: 1.0.0
+servers:
+  - url: http://mock-erp:8081/api
+paths:
+  /resource/Department:
+    get:
+      operationId: list_departments
+      summary: List departments
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+`), 0600))
+
+	oldAPI, oldOpenAPI := flagValue(t, toolGenerateCmd, "api"), flagValue(t, toolGenerateCmd, "openapi")
+	t.Cleanup(func() {
+		_ = toolGenerateCmd.Flags().Set("api", oldAPI)
+		_ = toolGenerateCmd.Flags().Set("openapi", oldOpenAPI)
+	})
+	require.NoError(t, toolGenerateCmd.Flags().Set("api", "department-api"))
+	require.NoError(t, toolGenerateCmd.Flags().Set("openapi", spec))
+	var output bytes.Buffer
+	toolGenerateCmd.SetOut(&output)
+	toolGenerateCmd.SetContext(t.Context())
+	t.Cleanup(func() { toolGenerateCmd.SetOut(nil) })
+
+	require.NoError(t, toolGenerateCmd.RunE(toolGenerateCmd, nil))
+	require.Contains(t, output.String(), "list_departments")
+	require.Contains(t, output.String(), "ERP_ONBOARDING_CREDENTIAL")
+}
+
+func flagValue(t *testing.T, cmd *cobra.Command, name string) string {
+	t.Helper()
+	value, err := cmd.Flags().GetString(name)
+	require.NoError(t, err)
+	return value
 }
 
 func TestToolValidateCmd(t *testing.T) {

@@ -30,6 +30,17 @@ The stack includes:
 RedisInsight binds to `127.0.0.1` by default. Keep this setting unless you
 explicitly need local-network access, and never expose RedisInsight publicly.
 
+For a disposable end-to-end onboarding check, run:
+
+```bash
+./scripts/test-onboarding.sh
+```
+
+The check uses an isolated Compose project, temporary CLI home, dynamic
+loopback ports, synthetic fixture data, and ephemeral credentials. It removes
+its containers and temporary files on exit. It does not use caller credentials
+or print ERP response bodies.
+
 ## 2. Configuration
 
 Environment variables for the server are set in the `docker-compose.yml` file.

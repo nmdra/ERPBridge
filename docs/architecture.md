@@ -135,6 +135,26 @@ ERPBridge uses a "Template-Based Generation" approach. When generating tools (es
 
 This decoupling allows you to use the same OpenAPI spec to generate tools for different environments (Dev, Staging, Prod) simply by pointing to a different registered API.
 
+### Safe onboarding boundary
+
+Onboarding has two independent state boundaries. The CLI stores API
+registrations in a registry scoped to the selected context. The server stores
+only reviewed, applied tool resources in its SQLite control plane. A generated
+manifest is a temporary draft; a reviewed file under `manifests/<module>/` is
+the owned source for an apply operation.
+
+The default API test is an authenticated server-side probe. The server resolves
+`credentialRef` and returns only status, content type, latency, and success. The
+host-side `--local` path is an explicit diagnostic exception. Control-plane
+requests use the context's host root; only an exact `/mcp` or `/mcp/` suffix is
+normalized. Other paths stop with `CONTROL_PLANE_URL_INVALID` instead of being
+sent to the MCP session endpoint.
+
+A disposable Compose onboarding check is available at
+`scripts/test-onboarding.sh`. It isolates the CLI home, project, ports, and
+credentials, verifies duplicate and invalid-root recovery branches, and
+removes its temporary resources on exit.
+
 ---
 
 ## 🔄 Lifecycle of a Tool Change

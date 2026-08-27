@@ -26,6 +26,14 @@ To override the address for one command:
 BRIDGE_MCP_SERVER=http://localhost:8080 bridgectl tool get
 ```
 
+### How do I verify onboarding without changing my local registry?
+
+Run `./scripts/test-onboarding.sh`. It uses a temporary CLI home, an isolated
+Compose project, dynamic loopback ports, synthetic fixture data, and ephemeral
+credentials. The script checks the server-side API probe, generation,
+validation, apply, MCP discovery/call, duplicate protection, and invalid-root
+recovery. It removes the temporary stack when it exits.
+
 ### Why do `bridgectl cache` and `bridgectl log` fail with "connection refused"?
 
 The default context points `server` at `http://localhost:8082`. Nothing listens there. Set `BRIDGE_SERVER=http://localhost:8080`, or edit the `server` value in `~/.bridgectl/config.yaml`.

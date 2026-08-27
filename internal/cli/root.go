@@ -48,15 +48,16 @@ var RootCmd = &cobra.Command{
 	Version:       Version,
 	SilenceErrors: true,
 	SilenceUsage:  true,
-	Long: `bridgectl is the developer CLI for the ERPBridge ecosystem. 
-It provides tools to manage environments, register and test ERP APIs, 
-generate and validate MCP tool schemas, and monitor the middleware's 
+	Long: `bridgectl is the developer CLI for the ERPBridge ecosystem.
+It provides tools to manage environments, register and test ERP APIs,
+generate and validate MCP tool schemas, and monitor the middleware's
 health through real-time log streaming and cache analytics.
 
 The CLI interacts with the ERPBridge middleware via a REST API
 and supports multiple output formats including Table, JSON, and YAML.
+
 Control-plane failures use stable error codes, safe messages, and remediation
-suggestions without exposing upstream response bodies or credentials.`,
+suggestions. They do not expose upstream response bodies or credentials.`,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		// Initialize Logger for CLI
 		if verbose {
