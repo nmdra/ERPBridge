@@ -13,6 +13,7 @@ import (
 
 	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/idp"
+	"github.com/nmdra/ERPBridge/internal/output"
 	"github.com/nmdra/ERPBridge/internal/security"
 	"github.com/stretchr/testify/require"
 )
@@ -240,6 +241,45 @@ func TestAPITestServerSideSendsOnlyReference(t *testing.T) {
 	apiTestCmd.SetContext(context.Background())
 	require.NoError(t, apiTestCmd.Flags().Set("local", "false"))
 	require.NoError(t, apiTestCmd.RunE(apiTestCmd, []string{"server-test"}))
+}
+
+func TestAPITestServerSideOutputOmitsEndpointMetadata(t *testing.T) {
+	setupTest()
+	t.Setenv("HOME", t.TempDir())
+	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":200,"contentType":"application/json","latency":1,"success":true}`))
+	}))
+	defer controlPlane.Close()
+	cfg.Contexts[testContextName] = config.Context{MCPServer: controlPlane.URL}
+
+	const endpoint = "https://erp.example.test/items?opaque=not-for-output"
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
+	require.NoError(t, err)
+	require.NoError(t, reg.Register(&idp.API{
+		Name:          "safe-output",
+		URL:           endpoint,
+		Method:        http.MethodGet,
+		AuthType:      testBearerAuthType,
+		AuthHeader:    "Authorization", // #nosec G101 -- header name, not a credential.
+		CredentialRef: "ERP_OUTPUT_REF",
+	}))
+
+	var buf bytes.Buffer
+	formatter = &output.Formatter{Format: output.FormatJSON, Out: &buf}
+	require.NoError(t, apiTestCmd.Flags().Set("local", "false"))
+	apiTestCmd.SetContext(t.Context())
+	require.NoError(t, apiTestCmd.RunE(apiTestCmd, []string{"safe-output"}))
+
+	result := buf.String()
+	require.NotContains(t, result, endpoint)
+	require.NotContains(t, result, "Authorization")
+	require.NotContains(t, result, "ERP_OUTPUT_REF")
+	safe := make(map[string]any)
+	require.NoError(t, json.Unmarshal([]byte(result), &safe))
+	require.Equal(t, "safe-output", safe["api"])
+	require.NotContains(t, safe, "url")
+	require.NotContains(t, safe, "authType")
 }
 
 func TestAPITestRequiresCredentialReference(t *testing.T) {

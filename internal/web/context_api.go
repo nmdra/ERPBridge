@@ -141,7 +141,7 @@ func (h *consoleHandler) deployment(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, err := cfg.ResolveContext(name)
 	if err != nil {
-		writeAPIError(w, http.StatusNotFound, "context_not_found", fmt.Sprintf("context %q is not configured", name))
+		writeAPIError(w, http.StatusNotFound, "context_not_found", "the selected context is not configured")
 		return
 	}
 	current := cfg.CurrentContext == name

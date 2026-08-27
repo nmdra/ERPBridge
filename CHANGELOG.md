@@ -65,6 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Scope local API registries to the selected context, require explicit
+  credential-safe migration for legacy registries, and require `--force` for
+  intentional duplicate replacement
 - Keep generated tool manifests pure until explicitly written or applied; the
   `generate-tools` workflow now applies one temporary YAML stream exactly once
   and cleans up temporary artifacts

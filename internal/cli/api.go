@@ -282,6 +282,7 @@ Use --local only for an explicit legacy host-side diagnostic.`,
 		}
 		return formatter.Print(&APITestResponse{
 			API:         api,
+			APIName:     api.Name,
 			Status:      fmt.Sprintf("%d %s", probe.Status, http.StatusText(probe.Status)),
 			Code:        probe.Status,
 			ContentType: probe.ContentType,
@@ -313,6 +314,7 @@ func runLocalAPITest(cmd *cobra.Command, api idp.API) error {
 	defer func() { _ = resp.Body.Close() }()
 	return formatter.Print(&APITestResponse{
 		API:         api,
+		APIName:     api.Name,
 		Status:      resp.Status,
 		Code:        resp.StatusCode,
 		ContentType: resp.Header.Get("Content-Type"),
@@ -321,21 +323,26 @@ func runLocalAPITest(cmd *cobra.Command, api idp.API) error {
 	})
 }
 
-// APITestResponse contains the results of an API connectivity test.
+// APITestResponse contains the safe results of an API connectivity test.
 type APITestResponse struct {
-	API         idp.API       `json:"api"`
-	Status      string        `json:"status"`
-	Code        int           `json:"code"`
-	Latency     time.Duration `json:"latency"`
-	ContentType string        `json:"contentType,omitempty"`
-	IsSuccess   bool          `json:"isSuccess"`
+	// API is retained internally for local diagnostics and table naming. It is
+	// never serialized because it contains the registered endpoint metadata.
+	API         idp.API       `json:"-" yaml:"-"`
+	APIName     string        `json:"api" yaml:"api"`
+	Status      string        `json:"status" yaml:"status"`
+	Code        int           `json:"code" yaml:"code"`
+	Latency     time.Duration `json:"latency" yaml:"latency"`
+	ContentType string        `json:"contentType,omitempty" yaml:"contentType,omitempty"`
+	IsSuccess   bool          `json:"isSuccess" yaml:"isSuccess"`
 }
 
 // RenderTable implements the output.TableRenderer interface.
 func (r *APITestResponse) RenderTable(w io.Writer) error {
-	_, _ = fmt.Fprintf(w, "Testing  %s\n", r.API.Name)
-	_, _ = fmt.Fprintf(w, "URL      %s %s\n", r.API.Method, r.API.URL)
-	_, _ = fmt.Fprintf(w, "Auth     %s (%s)\n\n", r.API.AuthType, r.API.AuthHeader)
+	name := r.APIName
+	if name == "" {
+		name = r.API.Name
+	}
+	_, _ = fmt.Fprintf(w, "Testing  %s\n", name)
 	_, _ = fmt.Fprintf(w, "Status   %s\n", r.Status)
 	_, _ = fmt.Fprintf(w, "Type     %s\n", r.ContentType)
 	_, _ = fmt.Fprintf(w, "Latency  %v\n\n", r.Latency)

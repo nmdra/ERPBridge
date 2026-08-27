@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -99,7 +100,8 @@ func TestContextAPIRejectsUnknownContextAndArbitraryProxy(t *testing.T) {
 	}
 	defer func() { _ = server.Close() }()
 
-	request := httptest.NewRequest(http.MethodGet, server.URL()+"/api/console/v1/deployment?context=missing", nil)
+	const hostileContext = "https://erp.example.invalid/path?opaque=not-for-output"
+	request := httptest.NewRequest(http.MethodGet, server.URL()+"/api/console/v1/deployment?context="+url.QueryEscape(hostileContext), nil)
 	request.Host = server.Host()
 	request.Header.Set(CapabilityHeader, server.Capability())
 	recorder := httptest.NewRecorder()
@@ -107,7 +109,10 @@ func TestContextAPIRejectsUnknownContextAndArbitraryProxy(t *testing.T) {
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("unknown context status = %d, want %d", recorder.Code, http.StatusNotFound)
 	}
-	if strings.Contains(recorder.Body.String(), "missing") == false {
+	if strings.Contains(recorder.Body.String(), hostileContext) {
+		t.Fatalf("unknown context response leaked query value = %q", recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "context_not_found") {
 		t.Fatalf("unknown context error = %q", recorder.Body.String())
 	}
 

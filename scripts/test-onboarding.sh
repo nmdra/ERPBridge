@@ -108,6 +108,13 @@ MANIFEST_FILE="$TMP_DIR/generated.yaml"
 run_quiet api-test env HOME="$HOME_DIR" \
   "$CLI" --context "$CTX" -o json api test "$API_NAME"
 grep -Eq '"isSuccess"[[:space:]]*:[[:space:]]*true' "$TMP_DIR/api-test.out" || fail 'server-side API probe did not succeed'
+for field in api status code latency contentType isSuccess; do
+  grep -Eq '"'"$field"'"[[:space:]]*:' "$TMP_DIR/api-test.out" || fail "probe output omitted $field"
+done
+if grep -Eiq '"(url|authType|authHeader|credentialRef)"[[:space:]]*:' "$TMP_DIR/api-test.out" ||
+  grep -Fq 'mock-erp:8081' "$TMP_DIR/api-test.out"; then
+  fail 'server-side API probe exposed endpoint metadata'
+fi
 
 if ! env HOME="$HOME_DIR" "$CLI" --context "$CTX" -o json api register \
   --name "$API_NAME" \
