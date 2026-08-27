@@ -309,7 +309,7 @@ func runLocalAPITest(cmd *cobra.Command, api idp.API) error {
 	resp, err := client.Call(cmd.Context(), ep, nil, nil)
 	latency := time.Since(start)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return NewError(CodeTimeout, "UPSTREAM_UNREACHABLE", "the local ERP API test could not reach the endpoint", "check the selected API endpoint and retry")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	return formatter.Print(&APITestResponse{

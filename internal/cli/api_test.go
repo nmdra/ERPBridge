@@ -282,6 +282,27 @@ func TestAPITestServerSideOutputOmitsEndpointMetadata(t *testing.T) {
 	require.NotContains(t, safe, "authType")
 }
 
+func TestAPITestLocalFailureOmitsEndpoint(t *testing.T) {
+	setupTest()
+	t.Setenv("HOME", t.TempDir())
+	require.NoError(t, apiTestCmd.Flags().Set("local", "true"))
+	t.Cleanup(func() { _ = apiTestCmd.Flags().Set("local", "false") })
+	const endpoint = "http://127.0.0.1:1/onboarding-check"
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
+	require.NoError(t, err)
+	require.NoError(t, reg.Register(&idp.API{
+		Name:   "unreachable",
+		Method: http.MethodGet,
+		URL:    endpoint,
+	}))
+
+	apiTestCmd.SetContext(t.Context())
+	err = apiTestCmd.RunE(apiTestCmd, []string{"unreachable"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "UPSTREAM_UNREACHABLE")
+	require.NotContains(t, err.Error(), endpoint)
+}
+
 func TestAPITestRequiresCredentialReference(t *testing.T) {
 	setupTest()
 	t.Setenv("HOME", t.TempDir())
