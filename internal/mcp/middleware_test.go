@@ -14,6 +14,7 @@ import (
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
 
@@ -159,6 +160,102 @@ func TestCacheMiddleware_DoesNotCacheErrorResults(t *testing.T) {
 	_, err = handler(context.Background(), req)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, calls)
+}
+
+func TestCacheMiddleware_BypassesFileBackedCredentials(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(nil, cache.NewMemoryManager(10, log), log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	tool := &Tool{
+		Metadata: Metadata{Name: "file-cached-tool", Version: testVersion100},
+		Spec: ToolSpec{
+			Cache: &cache.Config{Enabled: true},
+			Security: Security{
+				CredentialRef:    "ERP_FILE_CACHE_KEY", // #nosec G101 -- logical credential reference, not a secret.
+				CredentialSource: "file",
+			},
+		},
+	}
+	called := 0
+	handler := s.CacheMiddleware(tool)(func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		called++
+		return mcp.NewToolResultText("fresh"), nil
+	})
+	req := mcp.CallToolRequest{}
+	req.Params.Name = tool.Metadata.Name
+	req.Params.Arguments = map[string]any{"id": "1"}
+	_, err := handler(context.Background(), req)
+	assert.NoError(t, err)
+	_, err = handler(context.Background(), req)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, called)
+}
+
+func TestCacheMiddleware_UsesCurrentToolSourceMetadata(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(nil, cache.NewMemoryManager(10, log), log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	current := &Tool{
+		Metadata: Metadata{Name: "updated-cache-tool", Version: testVersion100, IsActive: true},
+		Spec: ToolSpec{
+			Cache: &cache.Config{Enabled: true},
+			Security: Security{
+				CredentialRef:    "ERP_UPDATED_CACHE_KEY", // #nosec G101 -- logical credential reference, not a secret.
+				CredentialSource: "file",
+			},
+		},
+	}
+	require.NoError(t, s.registry.Add(current))
+	stale := &Tool{
+		Metadata: Metadata{Name: current.Metadata.Name, Version: current.Metadata.Version},
+		Spec:     ToolSpec{Cache: &cache.Config{Enabled: true}},
+	}
+	called := 0
+	handler := s.CacheMiddleware(stale)(func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		called++
+		return mcp.NewToolResultText("fresh"), nil
+	})
+	req := mcp.CallToolRequest{}
+	req.Params.Name = current.Metadata.Name
+	req.Params.Arguments = map[string]any{"id": "1"}
+	_, err := handler(context.Background(), req)
+	assert.NoError(t, err)
+	_, err = handler(context.Background(), req)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, called)
+}
+
+func TestCacheMiddleware_BypassesFileBackedPluginCredentials(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(nil, cache.NewMemoryManager(10, log), log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	tool := &Tool{
+		Metadata: Metadata{Name: "plugin-file-cache-tool", Version: testVersion100, IsActive: true},
+		Spec:     ToolSpec{Cache: &cache.Config{Enabled: true}},
+	}
+	plugin := &Plugin{
+		Metadata: PluginMetadata{Name: "file-plugin", Version: testVersion100, IsActive: true},
+		Spec: PluginSpec{Auth: &PluginAuth{
+			Type:             PluginAuthTypeBearer,
+			CredentialRef:    "PLUGIN_FILE_CACHE_KEY", // #nosec G101 -- logical credential reference, not a secret.
+			CredentialSource: "file",
+		}},
+	}
+	s.pluginRegistry.Replace(map[string][]*ActivePluginBinding{
+		tool.Metadata.Name + "@" + tool.Metadata.Version: {{
+			Binding: &PluginBinding{Spec: PluginBindingSpec{
+				ToolRef: ToolRef{Name: tool.Metadata.Name, Version: tool.Metadata.Version},
+			}},
+			Plugin: plugin,
+		}},
+	})
+	called := 0
+	handler := s.CacheMiddleware(tool)(func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		called++
+		return mcp.NewToolResultText("fresh"), nil
+	})
+	_, err := handler(context.Background(), mcp.CallToolRequest{})
+	assert.NoError(t, err)
+	_, err = handler(context.Background(), mcp.CallToolRequest{})
+	assert.NoError(t, err)
+	assert.Equal(t, 2, called)
 }
 
 func TestCacheMiddleware_FlushesOnDisabledWrite(t *testing.T) {

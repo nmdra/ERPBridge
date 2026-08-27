@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -316,6 +318,56 @@ func TestServerAPIProbeResolvesCredentialAndReturnsBoundedSummary(t *testing.T) 
 	require.True(t, response.Success)
 }
 
+func TestServerAPIProbeResolvesFileCredential(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	dir := t.TempDir()
+	t.Setenv("ERPBRIDGE_CREDENTIALS_DIR", dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ERP_FILE_PROBE_KEY"), []byte("file-probe-value"), 0600))
+
+	var received []string
+	erp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = append(received, r.Header.Get("X-Probe-Token"))
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer erp.Close()
+	setProbeInsecureHost(t, erp.URL)
+
+	s := NewServer(connector.NewClient(logger.Init()), nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	mux := http.NewServeMux()
+	s.ServeHTTP(mux, "")
+	payload, err := json.Marshal(APIProbeRequest{
+		URL:              erp.URL,
+		Method:           http.MethodGet,
+		AuthType:         "bearer",
+		AuthHeader:       "X-Probe-Token",
+		CredentialRef:    "ERP_FILE_PROBE_KEY", // #nosec G101 -- logical credential reference, not a secret.
+		CredentialSource: "file",
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, apiProbePath, bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer admin-token")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response APIProbeResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Equal(t, http.StatusNoContent, response.Status)
+	require.True(t, response.Success)
+
+	temporary := filepath.Join(dir, ".ERP_FILE_PROBE_KEY.next")
+	require.NoError(t, os.WriteFile(temporary, []byte("file-probe-value-b"), 0600))
+	require.NoError(t, os.Rename(temporary, filepath.Join(dir, "ERP_FILE_PROBE_KEY")))
+	req = httptest.NewRequest(http.MethodPost, apiProbePath, bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer admin-token")
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, []string{"Bearer file-probe-value", "Bearer file-probe-value-b"}, received)
+}
+
 func TestServerAPIProbeIsAdminOnly(t *testing.T) {
 	t.Setenv(authTokenEnv, "admin-token")
 	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
@@ -347,6 +399,18 @@ func TestToolPrepareERPCallRewritesOnlyExactLocalhost(t *testing.T) {
 			require.Equal(t, test.want, ep.Path)
 		})
 	}
+}
+
+func TestInsecureAPIProbeRequestTreatsFileReferenceAsCredentialed(t *testing.T) {
+	request := APIProbeRequest{
+		URL:              "http://erp.example.test/items",
+		Method:           http.MethodGet,
+		AuthType:         "bearer",
+		CredentialRef:    "ERP_FILE_PROBE_KEY", // #nosec G101 -- logical credential reference, not a secret.
+		CredentialSource: "file",
+	}
+	t.Setenv(security.InsecureAuthAllowedHostsEnv, "erp.example.test")
+	require.True(t, insecureAPIProbeRequest(request))
 }
 
 func TestServerAPIProbeDoesNotFollowCredentialedRedirect(t *testing.T) {

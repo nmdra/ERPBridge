@@ -30,7 +30,8 @@ bridgectl api register [flags]
 ```
       --auth-header string      Auth header (default "X-API-Key")
       --auth-type string        Auth type (default "api-key")
-      --credential-ref string   Environment variable containing the auth credential
+      --credential-ref string   Logical credential reference
+      --credential-source string   Credential source: env or file (default "env")
       --description string      Human-readable description
       --force                   Replace an existing API with the same name
   -h, --help                    help for register

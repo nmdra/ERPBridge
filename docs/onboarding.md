@@ -101,8 +101,8 @@ go build -o bridgectl ./tools/bridgectl/main.go
 
 ## Step 3 — Register Your ERP API
 
-Tell ERPBridge how to connect to your ERP system. The credential flag names an
-environment variable; it does not contain the credential value:
+Tell ERPBridge how to connect to your ERP system. The credential flag names a logical reference; it does not contain the
+credential value. Environment resolution is the default:
 
 ```bash
 ./bridgectl api register \
@@ -122,7 +122,8 @@ environment variable; it does not contain the credential value:
 | `--url` | Base URL of your ERP service |
 | `--module` | Logical grouping (for example `finance`, `hr`, `erp`) |
 | `--description` | Human-readable description. This flag is required. |
-| `--credential-ref` | Name of the environment variable resolved by the server. |
+| `--credential-ref` | Logical credential reference. The server resolves it from the environment by default. |
+| `--credential-source` | Optional `env` or `file`; use `file` with `ERPBRIDGE_CREDENTIALS_DIR` for a mounted credential. |
 
 > **Tip:** The `--description` flag is mandatory. It helps the LLM layer understand the purpose of the API.
 
@@ -188,7 +189,7 @@ of reviewed manifest files. Do not retain generated per-tool JSON files or use
 ## Step 6 — Test the ERP API through the server
 
 Run API probes through ERPBridge. The server resolves `credentialRef` from its
-own environment and returns only status, content type, latency, and success.
+configured source and returns only status, content type, latency, and success.
 The ERP response body and headers never cross the probe boundary.
 
 ```bash
@@ -207,6 +208,25 @@ It may be a host root such as `http://localhost:8080`, or the exact MCP
 transport URL `http://localhost:8080/mcp/`; the CLI removes that exact suffix
 for control-plane calls. Other non-empty paths are rejected. Keep `/mcp/` for
 MCP clients; do not use it as the REST API path.
+
+### Optional mounted credential rotation
+
+Keep environment variables for the default deployment. For a selected API or
+plugin, register or manifest a `credentialSource: file` value and set
+`ERPBRIDGE_CREDENTIALS_DIR` in the ERPBridge process. The process reads the
+reference-named file immediately before each request. It accepts provider-
+managed projected files after they refresh, but does not watch or cache them;
+missing, empty, invalid, control-character, non-regular, or larger-than-64 KiB
+files fail closed.
+
+For a local writable mount, write a complete temporary file and atomically
+rename it over the live file. For AWS EKS ASCP, AKS Key Vault CSI, or GKE Secret
+Manager CSI, use workload identity and least privilege, mount a directory and
+not `subPath`, enable provider rotation, and expect eventual refresh. Adding a
+new cloud secret can require a provider mapping change and workload rollout
+before its filename is mounted. `bridgectl api test --local` reads from the
+CLI process and therefore needs the same mount; the normal server-side probe
+reads from ERPBridge. Environment-variable changes still require recreation.
 
 ## Step 7 — Verify Everything Is Working
 

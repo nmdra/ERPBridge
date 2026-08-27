@@ -92,10 +92,11 @@ type Execution struct {
 
 // Security defines the authentication requirements for the tool.
 type Security struct {
-	AuthType      string   `json:"authType"`      // api-key, basic, bearer
-	CredentialRef string   `json:"credentialRef"` // Env var name or vault key
-	DataClass     string   `json:"dataClass,omitempty"`
-	AllowedRoles  []string `json:"allowedRoles,omitempty"`
+	AuthType         string                       `json:"authType"`      // api-key, basic, bearer
+	CredentialRef    string                       `json:"credentialRef"` // Logical environment variable name
+	CredentialSource credentials.CredentialSource `json:"credentialSource,omitempty"`
+	DataClass        string                       `json:"dataClass,omitempty"`
+	AllowedRoles     []string                     `json:"allowedRoles,omitempty"`
 }
 
 // Routing provides metadata to improve LLM tool selection accuracy.
@@ -205,7 +206,7 @@ func (t *Tool) prepareERPCall(args map[string]any) (connector.EndpointConfig, ur
 		fullURL = "http://localhost:8081" + "/" + strings.TrimPrefix(fullURL, "/")
 	}
 
-	cred, err := resolveCredential(t.Spec.Security.CredentialRef)
+	cred, err := resolveCredential(t.Spec.Security.CredentialRef, t.Spec.Security.CredentialSource)
 	if err != nil {
 		return connector.EndpointConfig{}, nil, nil, err
 	}
@@ -389,8 +390,8 @@ func isLocalEndpoint(u *url.URL) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func resolveCredential(ref string) (string, error) {
-	return credentials.Resolve(ref)
+func resolveCredential(ref string, source credentials.CredentialSource) (string, error) {
+	return credentials.Resolve(ref, source)
 }
 
 // ValidateResult checks a normalized successful result against the tool's

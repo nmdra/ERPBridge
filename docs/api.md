@@ -257,8 +257,12 @@ MCP tool execution errors retain the MCP result envelope and set `isError: true`
 ### API probe
 
 `POST /api/apis/test` is an authenticated administrator endpoint. It accepts
-an API URL, method, authentication type, non-secret `credentialRef`, and
-optional auth-header name. The server resolves the credential and returns only
-HTTP status, normalized content type, latency, and success. It never returns
-an ERP response body or upstream headers. Use `bridgectl api test` to invoke
-this endpoint; use `--local` only for the explicit legacy host-side diagnostic.
+an API URL, method, authentication type, non-secret `credentialRef`, optional
+`credentialSource` (`env` or `file`), and optional auth-header name. Omitted
+source means `env`. The server resolves the credential in ERPBridge and returns
+only HTTP status, normalized content type, latency, and success. File mode
+requires `ERPBRIDGE_CREDENTIALS_DIR`, reads the reference-named file on every
+probe, and fails closed without an environment fallback. It never returns an
+ERP response body or upstream headers. Use `bridgectl api test` to invoke this
+endpoint; use `--local` only for the explicit host-side diagnostic, which
+requires the CLI process to have the same mounted directory.

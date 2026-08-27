@@ -33,7 +33,7 @@ func (r *Resource) Execute(ctx context.Context, _ string, conn ERPConnector) (st
 		return "", fmt.Errorf("resource %s has no endpoint configuration", r.Name)
 	}
 
-	cred, err := resolveCredential(r.Security.CredentialRef)
+	cred, err := resolveCredential(r.Security.CredentialRef, r.Security.CredentialSource)
 	if err != nil {
 		return "", err
 	}

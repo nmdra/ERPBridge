@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/nmdra/ERPBridge/internal/credentials"
 )
 
 const (
@@ -81,11 +82,13 @@ type PluginMetadata struct {
 	IsActive bool   `json:"isActive,omitempty"`
 }
 
-// PluginAuth describes an environment-backed plugin credential.
+// PluginAuth describes a plugin credential resolved from the environment by
+// default or from an explicitly configured mounted file.
 type PluginAuth struct {
-	Type          string `json:"type"`
-	CredentialRef string `json:"credentialRef"`
-	Header        string `json:"header,omitempty"`
+	Type             string                       `json:"type"`
+	CredentialRef    string                       `json:"credentialRef"`
+	CredentialSource credentials.CredentialSource `json:"credentialSource,omitempty"`
+	Header           string                       `json:"header,omitempty"`
 }
 
 // PluginSpec contains the endpoint, optional authentication, and invocation timeout for a plugin.
@@ -309,11 +312,17 @@ func (a *PluginAuth) validate() error {
 	if a == nil {
 		return nil
 	}
+	if err := credentials.ValidateCredentialSource(a.CredentialSource); err != nil {
+		return fmt.Errorf("spec.auth.credentialSource: %w", err)
+	}
+	if a.CredentialSource == credentials.CredentialSourceFile && a.CredentialRef == "" {
+		return fmt.Errorf("spec.auth.credentialRef is required for file credentials")
+	}
 	if a.Type != PluginAuthTypeBearer && a.Type != PluginAuthTypeAPIKey {
 		return fmt.Errorf("spec.auth.type must be %q or %q", PluginAuthTypeBearer, PluginAuthTypeAPIKey)
 	}
 	if !validPluginCredentialRef(a.CredentialRef) {
-		return fmt.Errorf("spec.auth.credentialRef must be a PLUGIN_ environment variable name")
+		return fmt.Errorf("spec.auth.credentialRef must be a PLUGIN_ logical reference")
 	}
 	if a.Type == PluginAuthTypeBearer && a.Header != "" {
 		return fmt.Errorf("spec.auth.header is only supported for api-key authentication")

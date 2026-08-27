@@ -77,10 +77,11 @@ func TestGenerator_RequiresAndUsesCredentialReference(t *testing.T) {
 	_, err := gen.Generate(API{Name: "secured", AuthType: "api-key"})
 	assert.Error(t, err)
 	// #nosec G101 -- this is an environment-variable reference used by the test.
-	api := API{Name: "secured", AuthType: "api-key", CredentialRef: "ERP_CUSTOM_KEY"}
+	api := API{Name: "secured", AuthType: "api-key", CredentialRef: "ERP_CUSTOM_KEY", CredentialSource: "file"}
 	tool, err := gen.Generate(api)
 	assert.NoError(t, err)
 	assert.Equal(t, "ERP_CUSTOM_KEY", tool.Spec.Security.CredentialRef)
+	assert.Equal(t, "file", string(tool.Spec.Security.CredentialSource))
 }
 
 func TestGenerator_GenerateIsPureAndSaveIsExplicit(t *testing.T) {
@@ -221,7 +222,7 @@ paths:
 `
 	path := filepath.Join(t.TempDir(), "openapi.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(spec), 0600))
-	api := API{Module: "sales", AuthType: "bearer", CredentialRef: "ERP_API_KEY"} // #nosec G101 -- environment-variable reference.
+	api := API{Module: "sales", AuthType: "bearer", CredentialRef: "ERP_API_KEY", CredentialSource: "file"} // #nosec G101 -- environment-variable reference.
 
 	first, err := NewGenerator(t.TempDir(), logger.Init()).GenerateFromOpenAPI(context.Background(), api, path)
 	require.NoError(t, err)
@@ -246,6 +247,7 @@ paths:
 	require.Equal(t, []string{"id"}, get.Spec.InputSchema.Required)
 	require.NotNil(t, get.Spec.OutputSchema)
 	require.Equal(t, "ERP_API_KEY", get.Spec.Security.CredentialRef)
+	require.Equal(t, "file", string(get.Spec.Security.CredentialSource))
 
 	create := first[0]
 	require.Equal(t, "POST", create.Spec.Execution.Method)

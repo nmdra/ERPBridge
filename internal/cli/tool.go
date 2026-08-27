@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/idp"
 	"github.com/nmdra/ERPBridge/internal/mcp"
 	"github.com/nmdra/ERPBridge/internal/output"
@@ -370,6 +371,12 @@ var toolValidateCmd = &cobra.Command{
 		}
 		if tool.Metadata.Version == "" {
 			return fmt.Errorf("validation failed: metadata.version is missing")
+		}
+		if err := credentials.ValidateCredentialSource(tool.Spec.Security.CredentialSource); err != nil {
+			return fmt.Errorf("validation failed: %w", err)
+		}
+		if credentials.IsFileBacked(tool.Spec.Security.CredentialSource) && tool.Spec.Security.CredentialRef == "" {
+			return fmt.Errorf("validation failed: security.credentialRef is required for file credentials")
 		}
 
 		fmt.Printf("✓ tool %s@%s is locally valid\n", tool.Metadata.Name, tool.Metadata.Version)

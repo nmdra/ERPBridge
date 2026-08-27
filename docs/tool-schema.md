@@ -70,7 +70,8 @@ Technical mapping to the ERP API.
 Authentication strategy.
 
 - **`authType`**: `api-key`, `bearer`, or `basic`.
-- **`credentialRef`**: The name of the environment variable containing the secret. **Never embed raw secrets here.**
+- **`credentialRef`**: A logical reference, normally the name of the environment variable containing the secret. **Never embed raw secrets here.**
+- **`credentialSource`**: (Optional) `env` or `file`; omitted means `env`. `file` reads `<ERPBRIDGE_CREDENTIALS_DIR>/<credentialRef>` immediately before each request and never falls back to the environment.
 - **`dataClass`**: (Optional string) Declared sensitivity: `public`, `internal`, `pii`, or `restricted`. The field is optional for compatibility with older schemas.
 - **`allowedRoles`**: (Optional array) Roles that may call this tool. Each role must match `[a-z][a-z0-9_-]{0,63}`; the list must contain unique values and no more than 32 roles. `pii` and `restricted` tools must provide at least one role.
 
@@ -120,7 +121,8 @@ spec:
     responsePath: "data" # ERP returns { "data": { ... } }, we only want the inner object
   security:
     authType: api-key
-    credentialRef: ERP_FINANCE_KEY # Resolves to ENV["ERP_FINANCE_KEY"]
+    credentialRef: ERP_FINANCE_KEY # Logical reference; resolves from the environment by default
+    # credentialSource: file # Reads ERPBRIDGE_CREDENTIALS_DIR/ERP_FINANCE_KEY
     allowedRoles: [finance_reader, finance_writer]
   cache:
     enabled: false # Don't cache write operations

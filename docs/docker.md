@@ -67,6 +67,7 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | `INSECURE_AUTH_ALLOWED_HOSTS` | Development-only exact `host:port` exceptions for credentialed HTTP calls. | `mock-erp:8081` |
 | `MCP_ENABLE_TEST_TOOLS` | Development-only registration of `system.*_test` demo tools. | `true` in this Compose path |
 | `API_AUTH_TOKEN` | Bearer token for protected admin, MCP, and direct-invoke routes. | unset |
+| `ERPBRIDGE_CREDENTIALS_DIR` | Optional mounted directory used only by resources with `credentialSource: file`. | unset |
 | `PLUGIN_ENDPOINT_ALLOWLIST` | Exact `host:port` values allowed for credentialed plugin resources. | unset |
 | `PLUGIN_MOCK_API_KEY` | Environment-backed API key reference used by the plugin integration fixture. | unset |
 | `MOCK_PLUGIN_API_KEY` | API key accepted by the separately deployed mock plugin fixture. | unset |
@@ -87,6 +88,40 @@ preflight. Set a credential source first, then run `docker compose config
 --quiet` and `docker compose up --build --force-recreate -d`. RedisInsight binds
 to `127.0.0.1` by default. Change `REDIS_INSIGHT_BIND_ADDRESS` only when you
 explicitly need another interface.
+
+### Optional mounted credentials
+
+Environment variables remain the default credential source. For a credential
+that must rotate without recreating the ERPBridge container, mount a directory
+and set `ERPBRIDGE_CREDENTIALS_DIR` in the server container. Add
+`credentialSource: file` beside the logical `credentialRef` for only the tools,
+APIs, resources, or plugins that use that mount:
+
+```yaml
+services:
+  erpbridge-server:
+    volumes:
+      - ./operator-secrets:/run/secrets/erpbridge:ro
+    environment:
+      ERPBRIDGE_CREDENTIALS_DIR: /run/secrets/erpbridge
+```
+
+The mounted file name is the validated `credentialRef`. ERPBridge reads it on
+each request, accepts complete projected-file generations, and fails closed on
+missing, empty, control-character, invalid UTF-8, non-regular, or oversized
+(over 64 KiB) content. It does not retain the previous value or fall back to an
+environment value. For a writable local directory, replace files by writing a
+complete temporary file and atomically renaming it over the live name.
+
+For Kubernetes, use a normal directory volume rather than `subPath`; projected
+Secret updates do not update `subPath` mounts. AWS EKS ASCP, AKS Key Vault CSI,
+and GKE Secret Manager CSI can populate this directory. Use workload identity,
+least privilege, and provider rotation settings. Provider updates are eventual
+and replicas can observe them at different times. Adding a new cloud secret
+may require changing the provider's workload mapping and rolling the workload
+before the new filename is mounted. ERPBridge does not access AWS, Azure, or
+Google Cloud APIs directly. Environment-variable changes still require a
+container recreation.
 
 Credentialed ERP and plugin endpoints must use HTTPS. The bundled MockERP
 fixture is HTTP-only, so Compose explicitly sets

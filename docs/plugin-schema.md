@@ -20,6 +20,7 @@ spec:
   auth:
     type: api-key
     credentialRef: PLUGIN_RESPONSE_TRANSFORMER_KEY
+    # credentialSource: file # Reads ERPBRIDGE_CREDENTIALS_DIR/PLUGIN_RESPONSE_TRANSFORMER_KEY
     header: X-API-Key
 ```
 
@@ -34,13 +35,17 @@ and 5 minutes.
 
 `spec.auth` is optional. It supports `bearer` and `api-key` authentication.
 `api-key` can use `header`, or the default `X-API-Key` header. `credentialRef`
-must name a `PLUGIN_` environment variable. Manifests never contain the
-credential value. Bearer authentication cannot set `header`. API-key
-authentication cannot use reserved HTTP headers. At invocation, ERPBridge
-resolves the reference and sends exactly one header: `Authorization: Bearer
-<value>` for bearer auth, or the raw value in the API-key header. If the
-reference is missing or empty, ERPBridge makes no plugin request and reports a
-safe configuration error without exposing the credential.
+must name a `PLUGIN_` logical reference. `credentialSource` is optional and
+accepts `env` (the default) or `file`. File mode reads
+`<ERPBRIDGE_CREDENTIALS_DIR>/<credentialRef>` for every invocation and never
+falls back to an environment value. Manifests never contain the credential
+value. Bearer authentication cannot set `header`. API-key authentication
+cannot use reserved HTTP headers. At invocation, ERPBridge resolves the
+reference and sends exactly one header: `Authorization: Bearer <value>` for
+bearer auth, or the raw value in the API-key header. If the reference is
+missing or empty, or a file is invalid, ERPBridge makes no plugin request and
+reports a safe configuration error without exposing the credential.
+File-backed authenticated plugin bindings bypass the tool response cache.
 
 Plugin JSON and YAML manifests reject unknown fields. This prevents a misspelled
 or raw credential field from changing the authentication behavior.

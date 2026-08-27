@@ -53,6 +53,13 @@ var (
 		Help: "Total number of cache misses",
 	})
 
+	// CredentialResolutionsTotal counts credential lookup outcomes without
+	// labeling the logical reference or any credential-derived value.
+	CredentialResolutionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "credential_resolutions_total",
+		Help: "Total number of credential resolution outcomes",
+	}, []string{"source", "outcome"})
+
 	// ServerStartsTotal counts total MCP server starts.
 	ServerStartsTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "mcp_server_starts_total",

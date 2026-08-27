@@ -10,6 +10,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/metrics"
 	"golang.org/x/time/rate"
@@ -171,6 +172,9 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 			if s.cache == nil || t.Spec.Cache == nil {
 				return next(ctx, req)
 			}
+			if s.cacheBypassedForCredential(t) {
+				return next(ctx, req)
+			}
 
 			args, _ := req.Params.Arguments.(map[string]any)
 			role := ""
@@ -230,4 +234,32 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 			return result, err
 		}
 	}
+}
+
+// cacheBypassedForCredential uses the current registered tool metadata before
+// cache access. This avoids stale middleware closures serving a result after a
+// tool switches from environment to file-backed credentials.
+func (s *Server) cacheBypassedForCredential(fallback *Tool) bool {
+	current := fallback
+	if s != nil && s.registry != nil && fallback != nil {
+		s.mu.RLock()
+		resolved, err := s.registry.Resolve(fallback.Metadata.Name, "")
+		s.mu.RUnlock()
+		if err == nil && resolved != nil {
+			current = resolved
+		}
+	}
+	if current != nil && credentials.IsFileBacked(current.Spec.Security.CredentialSource) {
+		return true
+	}
+	if s == nil || s.pluginRegistry == nil || current == nil {
+		return false
+	}
+	for _, binding := range s.pluginRegistry.RuntimeBindingsForTool(current.Metadata.Name, current.Metadata.Version) {
+		if binding != nil && binding.Plugin != nil && binding.Plugin.Spec.Auth != nil &&
+			credentials.IsFileBacked(binding.Plugin.Spec.Auth.CredentialSource) {
+			return true
+		}
+	}
+	return false
 }

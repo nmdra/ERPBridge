@@ -66,16 +66,18 @@ Once registered, you can generate an MCP tool schema from this API definition.`,
 		authType, _ := cmd.Flags().GetString("auth-type")
 		authHeader, _ := cmd.Flags().GetString("auth-header")
 		credentialRef, _ := cmd.Flags().GetString("credential-ref")
+		credentialSource, _ := cmd.Flags().GetString("credential-source")
 
 		api := &idp.API{
-			Name:          name,
-			URL:           url,
-			Method:        method,
-			Module:        module,
-			Description:   desc,
-			AuthType:      authType,
-			AuthHeader:    authHeader,
-			CredentialRef: credentialRef,
+			Name:             name,
+			URL:              url,
+			Method:           method,
+			Module:           module,
+			Description:      desc,
+			AuthType:         authType,
+			AuthHeader:       authHeader,
+			CredentialRef:    credentialRef,
+			CredentialSource: credentials.CredentialSource(credentialSource),
 		}
 
 		replaced, err := reg.RegisterWithOptions(api, force)
@@ -146,7 +148,7 @@ func (r *APIListResponse) RenderTable(w io.Writer) error {
 
 var apiSetCredentialRefCmd = &cobra.Command{
 	Use:     "set-credential-ref [name]",
-	Short:   "Set the environment credential reference for an API",
+	Short:   "Set the logical credential reference for an API",
 	Example: `  bridgectl api set-credential-ref get-invoices --credential-ref ERP_API_KEY`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -221,8 +223,8 @@ var apiTestCmd = &cobra.Command{
 	Use:   "test [name]",
 	Short: "Send a test request to a registered API",
 	Long: `Verify connectivity to a registered ERP API endpoint through the ERPBridge server.
-The server resolves credentialRef from its environment and returns only status, content type, latency, and success.
-Use --local only for an explicit legacy host-side diagnostic.`,
+The server resolves credentialRef from its configured source and returns only status, content type, latency, and success.
+Use --local only for an explicit host-side diagnostic; file-backed local tests require the same mounted credential directory.`,
 	Example: `  bridgectl api test get-invoices
   bridgectl api test get-invoices --local`,
 	Args: cobra.ExactArgs(1),
@@ -259,11 +261,12 @@ Use --local only for an explicit legacy host-side diagnostic.`,
 			return err
 		}
 		payload, err := json.Marshal(mcp.APIProbeRequest{
-			URL:           api.URL,
-			Method:        api.Method,
-			AuthType:      api.AuthType,
-			AuthHeader:    api.AuthHeader,
-			CredentialRef: api.CredentialRef,
+			URL:              api.URL,
+			Method:           api.Method,
+			AuthType:         api.AuthType,
+			AuthHeader:       api.AuthHeader,
+			CredentialRef:    api.CredentialRef,
+			CredentialSource: api.CredentialSource,
 		})
 		if err != nil {
 			return fmt.Errorf("marshal API probe request: %w", err)
@@ -356,13 +359,16 @@ func (r *APITestResponse) RenderTable(w io.Writer) error {
 }
 
 func resolveAPICredential(api idp.API) (string, error) {
+	if err := credentials.ValidateCredentialSource(api.CredentialSource); err != nil {
+		return "", err
+	}
 	if api.AuthType == "" {
 		return "", nil
 	}
 	if api.CredentialRef == "" {
 		return "", fmt.Errorf("API %q requires a credential reference before testing", api.Name)
 	}
-	return credentials.Resolve(api.CredentialRef)
+	return credentials.Resolve(api.CredentialRef, api.CredentialSource)
 }
 
 func init() {
@@ -381,9 +387,10 @@ func init() {
 	apiRegisterCmd.Flags().String("description", "", "Human-readable description")
 	apiRegisterCmd.Flags().String("auth-type", "api-key", "Auth type")
 	apiRegisterCmd.Flags().String("auth-header", "X-API-Key", "Auth header")
-	apiRegisterCmd.Flags().String("credential-ref", "", "Environment variable containing the auth credential")
+	apiRegisterCmd.Flags().String("credential-ref", "", "Logical credential reference")
+	apiRegisterCmd.Flags().String("credential-source", string(credentials.CredentialSourceEnv), "Credential source: env or file")
 	apiRegisterCmd.Flags().Bool("force", false, "Replace an existing API with the same name")
-	apiSetCredentialRefCmd.Flags().String("credential-ref", "", "Environment variable containing the auth credential")
+	apiSetCredentialRefCmd.Flags().String("credential-ref", "", "Logical credential reference")
 	apiScrubCredentialsCmd.Flags().Bool("yes", false, "Confirm destructive credential removal for all registry targets")
 	apiMigrateRegistryCmd.Flags().Bool("yes", false, "Confirm removal of the legacy global registry")
 	apiMigrateRegistryCmd.Flags().Bool("force", false, "Replace colliding APIs in the selected context")

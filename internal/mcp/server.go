@@ -20,6 +20,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/nmdra/ERPBridge/internal/cache"
+	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/metrics"
 )
@@ -254,23 +255,30 @@ func (s *Server) warnUnresolvedCredentials() {
 			s.log.Warn("could not inspect tool credentials", slog.String("error", err.Error()))
 		} else {
 			for _, tool := range tools {
-				if !credentialConfigured(tool.Spec.Security.CredentialRef) {
-					s.log.Warn("tool credential reference is unresolved", slog.String("tool_name", tool.Metadata.Name), slog.String("credential_ref", tool.Spec.Security.CredentialRef))
+				if !credentialConfigured(tool.Spec.Security.CredentialRef, tool.Spec.Security.CredentialSource) {
+					s.log.Warn("tool credential is unresolved", slog.String("tool_name", tool.Metadata.Name), slog.String("credential_source", string(tool.Spec.Security.CredentialSource)))
 				}
 			}
 		}
 	}
 
 	for _, resource := range resources {
-		if !credentialConfigured(resource.Security.CredentialRef) {
-			s.log.Warn("resource credential reference is unresolved", slog.String("resource_name", resource.Name), slog.String("credential_ref", resource.Security.CredentialRef))
+		if !credentialConfigured(resource.Security.CredentialRef, resource.Security.CredentialSource) {
+			s.log.Warn("resource credential is unresolved", slog.String("resource_name", resource.Name), slog.String("credential_source", string(resource.Security.CredentialSource)))
 		}
 	}
 }
 
-func credentialConfigured(ref string) bool {
+func credentialConfigured(ref string, source credentials.CredentialSource) bool {
 	if ref == "" {
 		return true
+	}
+	if err := credentials.ValidateCredentialSource(source); err != nil {
+		return false
+	}
+	if credentials.IsFileBacked(source) {
+		dir, ok := os.LookupEnv(credentials.CredentialsDirEnv)
+		return ok && dir != ""
 	}
 	value, ok := os.LookupEnv(ref)
 	return ok && value != ""
@@ -881,6 +889,17 @@ func testToolsEnabled() bool {
 
 // Admission Controller
 func (s *Server) validateTool(t *Tool) error {
+	if err := credentials.ValidateCredentialSource(t.Spec.Security.CredentialSource); err != nil {
+		return fmt.Errorf("invalid security.credentialSource: %w", err)
+	}
+	if credentials.IsFileBacked(t.Spec.Security.CredentialSource) && t.Spec.Security.CredentialRef == "" {
+		return fmt.Errorf("security.credentialRef is required for file credentials")
+	}
+	if t.Spec.Security.CredentialRef != "" {
+		if err := credentials.ValidateReference(t.Spec.Security.CredentialRef); err != nil {
+			return fmt.Errorf("invalid security.credentialRef")
+		}
+	}
 	if t.Metadata.Name == "" {
 		return fmt.Errorf("metadata.name is required")
 	}

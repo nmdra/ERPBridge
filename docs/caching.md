@@ -98,6 +98,21 @@ The cache endpoints work with both backends:
 - `GET /api/cache/stats`
 - `GET /api/cache/flush`
 
+## Credential rotation and cache safety
+
+Environment-backed tools keep the normal cache behavior. A tool with
+`security.credentialSource: file` bypasses cache reads and writes. A tool with
+an active authenticated file-backed plugin binding also bypasses the cache.
+This prevents a response produced with an earlier file value from being served
+after rotation. Cache keys never contain credential values, file contents, or
+file metadata.
+
+File resolution happens immediately before the outbound operation. A complete
+file replacement observed by ERPBridge is used by the next request; missing,
+empty, invalid, control-character, non-regular, or oversized files fail before
+transport. Provider-managed CSI updates are eventual and are outside cache
+coordination. Multiple replicas can observe different versions temporarily.
+
 ## 🏗 System Architecture
 
 1. **ERPBridge Server**: Orchestrates the middleware and selects the configured backend.

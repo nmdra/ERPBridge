@@ -1,6 +1,6 @@
 # Plan: Hot Credential Updates Without Container Restart
 
-**Status:** Draft — not approved for implementation.
+**Status:** Completed — implementation and verification passed.
 
 ## Goal
 
@@ -120,7 +120,7 @@ credential.
 
 ## Tasks
 
-- [ ] **Task 1: Define environment-default and file-opt-in resolver contracts
+- [x] **Task 1: Define environment-default and file-opt-in resolver contracts
   test-first.** Start with failing tests for omitted/`env` source retaining the
   current lookup, `file` source requiring a directory, file failure while a
   same-named environment variable exists (no fallback), empty references
@@ -135,7 +135,7 @@ credential.
   `internal/credentials/credentials_test.go`. **Verify:**
   `go test ./internal/credentials -run 'Credential|Resolve' -count=1`.
 
-- [ ] **Task 2: Persist and propagate source selection through every
+- [x] **Task 2: Persist and propagate source selection through every
   credentialRef consumer.** Add failing registry/generator round-trip tests for
   omitted source, `env`, and `file`; generated file-backed tools must remain
   file-backed. Add rotation tests that replace a mounted file between two
@@ -162,7 +162,7 @@ credential.
   `internal/mcp/server_plugin_test.go`. **Verify:**
   `go test ./internal/idp ./internal/mcp ./internal/cli ./internal/connector -run 'Credential|Probe|Resource|Plugin|Transport|Generator|Registry' -count=1`.
 
-- [ ] **Task 3: Make cache behavior safe during file-backed rotation.** Write
+- [x] **Task 3: Make cache behavior safe during file-backed rotation.** Write
   failing tests showing that a tool declared `credentialSource: file` neither
   consumes an existing cache entry nor writes a new one; an authenticated active
   plugin binding declared file-backed also bypasses the tool cache; a failed
@@ -181,7 +181,7 @@ credential.
   **Verify:**
   `go test ./internal/mcp ./internal/cache -run 'Cache.*Credential|Credential.*Cache|Plugin.*Cache' -count=1`.
 
-- [ ] **Task 4: Add safe reload telemetry and failure handling.** Add fixed
+- [x] **Task 4: Add safe reload telemetry and failure handling.** Add fixed
   source/outcome counters for file-resolution attempts and safe failure logs.
   Make reconciliation diagnostics source-aware without opening files merely to
   warn, and remove credential-reference labels from diagnostics. Test that
@@ -197,7 +197,7 @@ credential.
   `internal/mcp/server_plugin_test.go`. **Verify:**
   `go test ./internal/credentials ./internal/metrics ./internal/mcp -run 'Credential|Metric|Redact|Plugin' -count=1`.
 
-- [ ] **Task 5: Add process-level rotation integration coverage.** Create a
+- [x] **Task 5: Add process-level rotation integration coverage.** Create a
   deterministic test with an ERP `httptest.Server`, a real ERPBridge server,
   one active file-backed tool, and a temporary credential directory. Assert the
   first call uses version A, atomically replace the local file, and assert the
@@ -214,7 +214,7 @@ credential.
   **Verify:**
   `go test ./internal/integration ./internal/mcp ./internal/connector -run 'CredentialRotation|HotCredential' -count=1`.
 
-- [ ] **Task 6: Document environment-default and cloud-mounted deployment.**
+- [x] **Task 6: Document environment-default and cloud-mounted deployment.**
   Update developer documentation with optional `credentialSource: file`, its
   default `env` behavior, `ERPBRIDGE_CREDENTIALS_DIR`, a read-only
   mounted-directory example, the stable logical `credentialRef` contract, the
@@ -233,7 +233,7 @@ credential.
   `docs/plugin-schema.md`, `docs/onboarding.md`, `CHANGELOG.md`. **Verify:**
   `grep -RIn 'credentialSource\|ERPBRIDGE_CREDENTIALS_DIR\|subPath\|AWS\|Azure\|GKE\|cache bypass\|multi-replica' docs .env.example CHANGELOG.md`.
 
-- [ ] **Task 7: Synchronize public documentation.** Mirror the final
+- [x] **Task 7: Synchronize public documentation.** Mirror the final
   environment-default/file-opt-in contract, source-selector schema, AWS/Azure/
   GKE deployment links and limitations, cache implications, plugin/tool
   behavior, local versus provider-managed rotation behavior, and replica limits

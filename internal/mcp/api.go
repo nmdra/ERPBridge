@@ -7,11 +7,11 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/nmdra/ERPBridge/internal/connector"
+	"github.com/nmdra/ERPBridge/internal/credentials"
 	"github.com/nmdra/ERPBridge/internal/security"
 )
 
@@ -27,13 +27,14 @@ const (
 )
 
 // APIProbeRequest is the bounded, non-secret request accepted by the API
-// probe. credentialRef is an environment-variable name, never a credential.
+// probe. credentialRef is a logical reference, never a credential.
 type APIProbeRequest struct {
-	URL           string `json:"url"`
-	Method        string `json:"method"`
-	AuthType      string `json:"authType,omitempty"`
-	AuthHeader    string `json:"authHeader,omitempty"`
-	CredentialRef string `json:"credentialRef,omitempty"`
+	URL              string                       `json:"url"`
+	Method           string                       `json:"method"`
+	AuthType         string                       `json:"authType,omitempty"`
+	AuthHeader       string                       `json:"authHeader,omitempty"`
+	CredentialRef    string                       `json:"credentialRef,omitempty"`
+	CredentialSource credentials.CredentialSource `json:"credentialSource,omitempty"`
 }
 
 // APIProbeResponse is the complete probe result. It intentionally contains no
@@ -72,7 +73,11 @@ func (s *Server) handleAPIProbe(w http.ResponseWriter, r *http.Request) {
 
 	tool := &Tool{Spec: ToolSpec{
 		Execution: Execution{Method: request.Method, Endpoint: request.URL},
-		Security:  Security{AuthType: request.AuthType, CredentialRef: request.CredentialRef},
+		Security: Security{
+			AuthType:         request.AuthType,
+			CredentialRef:    request.CredentialRef,
+			CredentialSource: request.CredentialSource,
+		},
 	}}
 	ep, queryParams, body, err := tool.prepareERPCall(nil)
 	if err != nil {
@@ -111,7 +116,7 @@ func (s *Server) handleAPIProbe(w http.ResponseWriter, r *http.Request) {
 }
 
 func insecureAPIProbeRequest(request APIProbeRequest) bool {
-	if request.CredentialRef == "" || strings.TrimSpace(os.Getenv(request.CredentialRef)) == "" {
+	if request.CredentialRef == "" {
 		return false
 	}
 	parsed, err := url.Parse(request.URL)
@@ -131,6 +136,16 @@ func validateAPIProbeRequest(request APIProbeRequest) error {
 	}
 	if len(request.AuthType) > maxAPIProbeAuth || len(request.AuthHeader) > maxAPIProbeHeader || len(request.CredentialRef) > maxAPIProbeCredRef {
 		return errors.New("authentication fields are bounded")
+	}
+	if err := credentials.ValidateCredentialSource(request.CredentialSource); err != nil {
+		return err
+	}
+	if request.CredentialRef != "" {
+		if err := credentials.ValidateReference(request.CredentialRef); err != nil {
+			return err
+		}
+	} else if credentials.IsFileBacked(request.CredentialSource) {
+		return errors.New("file credential reference is required")
 	}
 	return nil
 }

@@ -72,8 +72,9 @@ func (g *Generator) Generate(api API) (*mcp.Tool, error) {
 			},
 			Cache: defaultCache(method),
 			Security: mcp.Security{
-				AuthType:      api.AuthType,
-				CredentialRef: credentialRef,
+				AuthType:         api.AuthType,
+				CredentialRef:    credentialRef,
+				CredentialSource: api.CredentialSource,
 			},
 		},
 	}
@@ -255,8 +256,9 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 					},
 					Cache: defaultCache(method),
 					Security: mcp.Security{
-						AuthType:      api.AuthType,
-						CredentialRef: credentialRef,
+						AuthType:         api.AuthType,
+						CredentialRef:    credentialRef,
+						CredentialSource: api.CredentialSource,
 					},
 				},
 			}
@@ -390,6 +392,12 @@ func sanitizeOperationName(name string) string {
 }
 
 func credentialRefForAPI(api API) (string, error) {
+	if err := credentials.ValidateCredentialSource(api.CredentialSource); err != nil {
+		return "", err
+	}
+	if credentials.IsFileBacked(api.CredentialSource) && api.CredentialRef == "" {
+		return "", fmt.Errorf("API %q requires a credential reference for file credentials", api.Name)
+	}
 	if api.AuthType == "" {
 		return "", nil
 	}

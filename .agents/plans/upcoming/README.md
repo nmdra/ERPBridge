@@ -10,9 +10,6 @@ Current candidates:
 
 - [`Plan-MCP-Upgrade.md`](./Plan-MCP-Upgrade.md) — deferred MCP specification
   evaluation and migration.
-- [`Plan-Hot-Credential-Update.md`](./Plan-Hot-Credential-Update.md) — draft
-  design for rotating mounted credential files without restarting ERPBridge.
-
 Reference:
 
 - [`rca-sdk-integration-testing.md`](./rca-sdk-integration-testing.md) —

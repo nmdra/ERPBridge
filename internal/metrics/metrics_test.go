@@ -26,6 +26,9 @@ func TestMetricsRegistration(t *testing.T) {
 	if CacheMissesTotal == nil {
 		t.Error("CacheMissesTotal is not initialized")
 	}
+	if CredentialResolutionsTotal == nil {
+		t.Error("CredentialResolutionsTotal is not initialized")
+	}
 }
 
 func TestMetricsUsage(_ *testing.T) {
@@ -36,4 +39,5 @@ func TestMetricsUsage(_ *testing.T) {
 	ToolLatency.With(prometheus.Labels{labelTool: "test-tool"}).Observe(0.5)
 	CacheHitsTotal.With(prometheus.Labels{"type": "exact"}).Inc()
 	CacheMissesTotal.Inc()
+	CredentialResolutionsTotal.WithLabelValues("file", "success").Inc()
 }

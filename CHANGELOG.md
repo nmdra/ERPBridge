@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add environment-default credential resolution with explicit per-resource
+  mounted-file sources, bounded fail-closed reads, hot rotation without a
+  server restart, safe outcome metrics, and AWS/Azure/GCP CSI deployment
+  guidance
 - Add a disposable `scripts/test-onboarding.sh` Compose check covering
   server-side probing, draft generation, validation, apply, MCP discovery/call,
   duplicate protection, and control-plane URL recovery without printing

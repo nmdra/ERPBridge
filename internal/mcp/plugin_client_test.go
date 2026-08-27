@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -356,6 +358,38 @@ func TestPluginClient_Process_SendsAuthenticationHeaders(t *testing.T) {
 	}
 }
 
+func TestPluginClient_Process_ResolvesFileCredential(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ERPBRIDGE_CREDENTIALS_DIR", dir)
+	credentialPath := filepath.Join(dir, pluginClientTestCredentialRef)
+	require.NoError(t, os.WriteFile(credentialPath, []byte("plugin-file-value-a"), 0600))
+	var received []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = append(received, r.Header.Get(pluginAuthorizationHeader))
+		_, _ = w.Write([]byte(`{"result":true}`))
+	}))
+	defer server.Close()
+	allowInsecurePluginAuthHost(t, server.URL)
+
+	plugin := validPluginForTest(server.URL)
+	plugin.Spec.Auth = &PluginAuth{
+		Type:             PluginAuthTypeBearer,
+		CredentialRef:    pluginClientTestCredentialRef,
+		CredentialSource: "file",
+	}
+	client := NewPluginClient()
+	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.NoError(t, err)
+
+	temporary := filepath.Join(dir, ".plugin-file.next")
+	require.NoError(t, os.WriteFile(temporary, []byte("plugin-file-value-b"), 0600))
+	require.NoError(t, os.Rename(temporary, credentialPath))
+	_, err = client.Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.NoError(t, err)
+	require.Equal(t, []string{"Bearer plugin-file-value-a", "Bearer plugin-file-value-b"}, received)
+}
+
 func TestPluginClient_Process_RejectsCredentialedHTTPBeforeOutboundCall(t *testing.T) {
 	const credential = pluginClientTestValue
 	t.Setenv(pluginClientTestCredentialRef, credential)
@@ -438,6 +472,24 @@ func TestPluginClient_Process_MissingCredentialMakesZeroOutboundCalls(t *testing
 	})})
 	plugin := validPluginForTest("https://plugins.example.test")
 	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: credentialRef}
+
+	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
+	require.EqualError(t, err, `plugin credential is not configured`)
+	require.Zero(t, calls)
+}
+
+func TestPluginClient_Process_FileCredentialFailureMakesZeroOutboundCalls(t *testing.T) {
+	const credentialRef = "PLUGIN_CLIENT_FILE_MISSING" // #nosec G101 -- environment-variable reference used by this test.
+	t.Setenv(credentialRef, "environment-fallback-must-not-be-used")
+	t.Setenv("ERPBRIDGE_CREDENTIALS_DIR", t.TempDir())
+
+	calls := 0
+	client := NewPluginClient(&http.Client{Transport: pluginRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		calls++
+		return nil, errors.New("outbound call must not occur")
+	})})
+	plugin := validPluginForTest("https://plugins.example.test")
+	plugin.Spec.Auth = &PluginAuth{Type: PluginAuthTypeBearer, CredentialRef: credentialRef, CredentialSource: "file"}
 
 	_, err := client.Process(context.Background(), &plugin, validPluginInvocationForTest())
 	require.EqualError(t, err, `plugin credential is not configured`)

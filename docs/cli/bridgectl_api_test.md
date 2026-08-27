@@ -5,8 +5,8 @@ Send a test request to a registered API
 ### Synopsis
 
 Verify connectivity to a registered ERP API endpoint through the ERPBridge server.
-The server resolves credentialRef from its environment and returns only status, content type, latency, and success.
-Use --local only for an explicit legacy host-side diagnostic.
+The server resolves credentialRef from its configured source and returns only status, content type, latency, and success.
+Use --local only for an explicit host-side diagnostic; file-backed local tests require the same mounted credential directory.
 
 ```
 bridgectl api test [name] [flags]

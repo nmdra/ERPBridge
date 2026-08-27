@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -353,6 +354,28 @@ func TestAPIRegisterUsesCredentialReference(t *testing.T) {
 	api, ok := reg.Get("refapi")
 	require.True(t, ok)
 	require.Equal(t, "ERP_CUSTOM_KEY", api.CredentialRef)
+}
+
+func TestResolveAPICredentialUsesFileSource(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ERPBRIDGE_CREDENTIALS_DIR", dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ERP_LOCAL_KEY"), []byte("local-value"), 0600))
+	api := idp.API{
+		Name:             "local-file-api",
+		AuthType:         testBearerAuthType,
+		CredentialRef:    "ERP_LOCAL_KEY", // #nosec G101 -- logical credential reference, not a secret.
+		CredentialSource: "file",
+	}
+	value, err := resolveAPICredential(api)
+	require.NoError(t, err)
+	require.Equal(t, "local-value", value)
+
+	temporary := filepath.Join(dir, ".ERP_LOCAL_KEY.next")
+	require.NoError(t, os.WriteFile(temporary, []byte("local-value-next"), 0600))
+	require.NoError(t, os.Rename(temporary, filepath.Join(dir, "ERP_LOCAL_KEY")))
+	value, err = resolveAPICredential(api)
+	require.NoError(t, err)
+	require.Equal(t, "local-value-next", value)
 }
 
 func TestAPISetCredentialRefCmd(t *testing.T) {

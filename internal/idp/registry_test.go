@@ -85,6 +85,24 @@ func TestRegistryListIsSorted(t *testing.T) {
 	assert.Equal(t, "z", list[1].Name)
 }
 
+func TestRegistryPreservesCredentialSource(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.json")
+	reg, err := NewRegistry(path, logger.Init())
+	require.NoError(t, err)
+	require.NoError(t, reg.Register(&API{
+		Name:             "file-backed",
+		AuthType:         "bearer",
+		CredentialRef:    "ERP_FILE_KEY", // #nosec G101 -- logical credential reference, not a secret.
+		CredentialSource: "file",
+	}))
+
+	loaded, err := NewRegistry(path, logger.Init())
+	require.NoError(t, err)
+	api, ok := loaded.Get("file-backed")
+	require.True(t, ok)
+	assert.Equal(t, "file", string(api.CredentialSource))
+}
+
 func TestNewRegistry(t *testing.T) {
 	log := logger.Init()
 

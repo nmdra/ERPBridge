@@ -162,7 +162,7 @@ func pluginAuthenticationHeader(auth *PluginAuth) (string, string, error) {
 		return "", "", nil
 	}
 
-	credential, err := resolveCredential(auth.CredentialRef)
+	credential, err := resolveCredential(auth.CredentialRef, auth.CredentialSource)
 	if err != nil {
 		return "", "", errors.New("plugin credential is not configured")
 	}

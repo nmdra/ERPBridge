@@ -10,9 +10,6 @@ starting implementation work.
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
   specification evaluation and migration. It is not authorization to begin
   implementation.
-- [`Plan-Hot-Credential-Update.md`](./upcoming/Plan-Hot-Credential-Update.md)
-  — draft hot credential rotation design. It is not authorization to begin
-  implementation.
 
 Reference evidence for the SDK integration plan:
 
@@ -57,6 +54,8 @@ promotion to `active/`.
 - [`[COMPLETED]Plan-Onboarding-Reliability.md`](./completed/%5BCOMPLETED%5DPlan-Onboarding-Reliability.md)
   — reliable Compose onboarding, context-scoped registries, structured errors,
   reloadable Console state, security gates, agent guidance, and end-to-end docs.
+- [`[COMPLETED]Plan-Hot-Credential-Update.md`](./completed/%5BCOMPLETED%5DPlan-Hot-Credential-Update.md)
+  — environment-default credentials with optional mounted-file rotation.
 
 Completed plans are historical records. Do not execute their unchecked task
 lists as new work.

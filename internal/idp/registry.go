@@ -19,18 +19,19 @@ import (
 
 // API represents a registered downstream ERP API endpoint and authentication metadata.
 type API struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	URL           string    `json:"url"`
-	Method        string    `json:"method"`
-	AuthType      string    `json:"authType"`
-	AuthHeader    string    `json:"authHeader,omitempty"`
-	CredentialRef string    `json:"credentialRef,omitempty"`
-	AuthUsername  string    `json:"authUsername,omitempty"`
-	Module        string    `json:"module"`
-	Description   string    `json:"description"`
-	Status        string    `json:"status"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID               string                       `json:"id"`
+	Name             string                       `json:"name"`
+	URL              string                       `json:"url"`
+	Method           string                       `json:"method"`
+	AuthType         string                       `json:"authType"`
+	AuthHeader       string                       `json:"authHeader,omitempty"`
+	CredentialRef    string                       `json:"credentialRef,omitempty"`
+	CredentialSource credentials.CredentialSource `json:"credentialSource,omitempty"`
+	AuthUsername     string                       `json:"authUsername,omitempty"`
+	Module           string                       `json:"module"`
+	Description      string                       `json:"description"`
+	Status           string                       `json:"status"`
+	CreatedAt        time.Time                    `json:"createdAt"`
 }
 
 // ErrLegacyCredentials indicates that the registry still contains raw legacy credentials.
@@ -137,6 +138,17 @@ func (r *Registry) loadLocked() error {
 		var api API
 		if err := json.Unmarshal(raw, &api); err != nil {
 			return fmt.Errorf("decode API %q: %w", name, err)
+		}
+		if err := credentials.ValidateCredentialSource(api.CredentialSource); err != nil {
+			return fmt.Errorf("validate API %q credential source: %w", name, err)
+		}
+		if api.CredentialSource == credentials.CredentialSourceFile && api.CredentialRef == "" {
+			return fmt.Errorf("validate API %q credential source: credential reference is required for file credentials", name)
+		}
+		if api.CredentialRef != "" {
+			if err := credentials.ValidateReference(api.CredentialRef); err != nil {
+				return fmt.Errorf("validate API %q credential reference: %w", name, err)
+			}
 		}
 		apis[name] = api
 	}
@@ -262,6 +274,12 @@ func (r *Registry) RegisterWithOptions(api *API, force bool) (bool, error) {
 	if api == nil {
 		return false, errors.New("API is required")
 	}
+	if err := credentials.ValidateCredentialSource(api.CredentialSource); err != nil {
+		return false, err
+	}
+	if api.CredentialSource == credentials.CredentialSourceFile && api.CredentialRef == "" {
+		return false, errors.New("API requires a credential reference for file credentials")
+	}
 	if api.CredentialRef != "" {
 		if err := credentials.ValidateReference(api.CredentialRef); err != nil {
 			return false, err
@@ -324,7 +342,7 @@ func (r *Registry) Delete(name string) error {
 	})
 }
 
-// SetCredentialRef assigns an environment-backed credential reference to an API.
+// SetCredentialRef assigns a logical credential reference to an API without changing its source.
 func (r *Registry) SetCredentialRef(name, ref string) error {
 	if err := credentials.ValidateReference(ref); err != nil {
 		return err

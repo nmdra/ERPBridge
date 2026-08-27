@@ -26,6 +26,8 @@ The server reads these variables directly from the environment. It does not load
 | `LOG_TO_STDERR` | (unset) | `true` writes logs to stderr. The server sets this automatically in stdio mode. |
 | `ERP_PRIMARY_KEY` | (unset) | Example environment credential for generated ERP tools. The local API registry stores only a `credentialRef`, never this value. |
 | `<ERP_CREDENTIAL_REF>` | (unset) | Any environment variable named by an API or tool `credentialRef`; resolved at request time and never persisted by `bridgectl`. |
+| `ERPBRIDGE_CREDENTIALS_DIR` | (unset) | Optional directory for references that explicitly set `credentialSource: file`. ERPBridge reads `<dir>/<credentialRef>` on each credentialed operation. |
+| `credentialSource` | `env` when omitted | Per-resource selector. `env` preserves environment lookup; `file` requires `ERPBRIDGE_CREDENTIALS_DIR` and never falls back to the environment. This is a manifest field, not an environment variable. |
 | `PLUGIN_<NAME>` | (unset) | Environment credential named by a plugin `credentialRef`; use only for bearer or API-key values. The resolved value is never persisted. |
 | `PLUGIN_ENDPOINT_ALLOWLIST` | (unset) | Exact normalized `host:port` values allowed for credentialed plugin endpoints. Empty or nonmatching values reject credentialed plugin admission. |
 | `INSECURE_AUTH_ALLOWED_HOSTS` | (unset) | Development-only comma-separated exact `host:port` allowlist for credentialed `http://` ERP or plugin calls. Credentialed calls otherwise require HTTPS. |
@@ -70,9 +72,53 @@ contexts:
     api-token: <token-from-environment>
 ```
 
-`bridgectl api register` accepts `--credential-ref NAME`, and `bridgectl api set-credential-ref NAME --credential-ref ENV_NAME` assigns an environment-backed ERP credential reference. The registry stores the name only. New API entries are isolated at `~/.bridgectl/registries/<context>.json`; context names are validated before they are used in a path. API names are unique within a context. Duplicate registration fails unless `api register --force` explicitly replaces the existing definition.
+`bridgectl api register` accepts `--credential-ref NAME` and optional `--credential-source env|file`. `bridgectl api set-credential-ref NAME --credential-ref REF` changes the logical reference without changing its source. The registry stores the name and source only. New API entries are isolated at `~/.bridgectl/registries/<context>.json`; context names are validated before they are used in a path. API names are unique within a context. Duplicate registration fails unless `api register --force` explicitly replaces the existing definition.
 
 If the old global `~/.bridgectl/registry.json` exists, context-scoped API commands stop instead of ignoring it. Run `bridgectl api scrub-credentials --yes` to scrub the global file and every context registry. Scrubbing atomically removes `authKey` and `authToken` without creating a plaintext backup. Then run `bridgectl api migrate-registry --context NAME --yes` to copy the cleaned global entries into one selected context and remove the old global file. Migration refuses collisions unless `--force` is also supplied.
+
+### Optional mounted credential files
+
+Environment variables remain the default. To rotate one credential without
+restarting ERPBridge, configure a read-only mounted directory with
+`ERPBRIDGE_CREDENTIALS_DIR` and set `credentialSource: file` beside that
+resource's `credentialRef` in a tool, API, resource, or plugin definition:
+
+```yaml
+security:
+  authType: bearer
+  credentialRef: ERP_PRIMARY_KEY
+  credentialSource: file
+```
+
+ERPBridge reads the file immediately before each credential-bearing operation.
+The file name is the validated logical reference. Missing, unreadable,
+non-regular, empty, control-character, invalid UTF-8, or larger-than-64 KiB
+files fail closed. ERPBridge does not trim, cache, or fall back to an
+environment value after a file failure. File-backed tools and authenticated
+file-backed plugin bindings bypass the response cache.
+
+For a writable local mount, write a complete temporary file in the same
+directory and atomically rename it over the live name. CSI/projected secret
+volumes are read-only and provider-managed; their update is eventual, so the
+next request observes the new value only after the mounted file has refreshed.
+Mount the directory itself, not a Kubernetes `subPath`, because `subPath` does
+not receive projected Secret updates. A replica may observe a replacement at a
+different time from another replica, and an in-flight request may use the old
+value.
+
+AWS EKS with the [AWS Secrets and Configuration Provider](https://docs.aws.amazon.com/eks/latest/userguide/manage-secrets.html),
+[AKS Key Vault provider](https://learn.microsoft.com/en-us/azure/aks/csi-secrets-store-configuration-options),
+and [GKE Secret Manager CSI](https://docs.cloud.google.com/secret-manager/docs/secret-manager-managed-csi-component)
+can provide this directory. Use workload identity and least-privilege access;
+enable and configure provider rotation. Adding a new remote secret name can
+require updating the provider mapping and rolling the workload before that
+file exists. These integrations are outside ERPBridge, which does not call
+cloud APIs directly.
+
+The CLI's server-side API probe resolves the credential in ERPBridge. The
+explicit `bridgectl api test --local` diagnostic resolves it in the CLI process,
+which must have the same directory mount. Changing an environment variable
+still requires process or container recreation.
 
 The CLI reads its defaults from `~/.bridgectl/config.yaml`. `BRIDGE_CONTEXT` and `--context` select a configured context. A missing or malformed selected context is an error; the CLI does not silently create a replacement context. Context and API listings are sorted by name. The default context uses:
 
