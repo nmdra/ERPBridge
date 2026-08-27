@@ -1,1 +1,1 @@
-completed/[COMPLETED]Plan-Bridgectl-Skill-Install-and-Embed.md
+active/Plan-Live-E2E-Issue-Fixes.md

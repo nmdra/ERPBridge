@@ -4,10 +4,14 @@ This directory is organized by execution state. Read this index before
 starting implementation work.
 
 ## Active
+- [`Plan-Live-E2E-Issue-Fixes.md`](./active/Plan-Live-E2E-Issue-Fixes.md) — remediation of the live E2E product gaps and fixture classifications.
 
 ## Upcoming
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
   specification evaluation and migration. It is not authorization to begin
+  implementation.
+- [`Plan-Hot-Credential-Update.md`](./upcoming/Plan-Hot-Credential-Update.md)
+  — draft hot credential rotation design. It is not authorization to begin
   implementation.
 
 Reference evidence for the SDK integration plan:
