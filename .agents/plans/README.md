@@ -5,10 +5,6 @@ starting implementation work.
 
 ## Active
 
-- [`Plan-Onboarding-Reliability.md`](./active/Plan-Onboarding-Reliability.md)
-  — fix first-run Compose, context, registry, CLI/server, Console, security,
-  and agent-guidance failures.
-
 ## Upcoming
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
   specification evaluation and migration. It is not authorization to begin
@@ -54,6 +50,9 @@ promotion to `active/`.
 - [`[COMPLETED]Plan-Plugin-Endpoint-Authentication.md`](./completed/[COMPLETED]Plan-Plugin-Endpoint-Authentication.md)
   — plugin authentication, secure credential transport, redaction, runtime
   invariants, fixture authentication, and legacy ERP credential migration.
+- [`[COMPLETED]Plan-Onboarding-Reliability.md`](./completed/%5BCOMPLETED%5DPlan-Onboarding-Reliability.md)
+  — reliable Compose onboarding, context-scoped registries, structured errors,
+  reloadable Console state, security gates, agent guidance, and end-to-end docs.
 
 Completed plans are historical records. Do not execute their unchecked task
 lists as new work.

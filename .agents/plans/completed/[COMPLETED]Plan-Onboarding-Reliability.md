@@ -452,7 +452,7 @@ archived as completed before this plan is promoted.
     repeated trigger evaluation runs when the local evaluation client is
     available, otherwise records the existing deferred-client limitation.
 
-- [ ] **Task 9: Prove the end-to-end onboarding path and synchronize public docs.**
+- [x] **Task 9: Prove the end-to-end onboarding path and synchronize public docs.**
   - Add `scripts/test-onboarding.sh`, a disposable integration path that runs
     the bootstrap, registers an API in a selected context, tests it through the
     server, generates one
