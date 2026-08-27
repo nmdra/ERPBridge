@@ -56,6 +56,8 @@ promotion to `active/`.
   reloadable Console state, security gates, agent guidance, and end-to-end docs.
 - [`[COMPLETED]Plan-Hot-Credential-Update.md`](./completed/%5BCOMPLETED%5DPlan-Hot-Credential-Update.md)
   — environment-default credentials with optional mounted-file rotation.
+- [`[COMPLETED]Plan-Erpbridge-Infra.md`](./completed/%5BCOMPLETED%5DPlan-Erpbridge-Infra.md)
+  — minimal native-HCL Azure Container Apps demo deployment.
 
 Completed plans are historical records. Do not execute their unchecked task
 lists as new work.
