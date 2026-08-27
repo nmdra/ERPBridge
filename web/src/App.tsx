@@ -1,10 +1,4 @@
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Route, Switch } from "wouter";
 
 import { AppShell } from "./components/layout/AppShell";

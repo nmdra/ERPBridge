@@ -141,9 +141,7 @@ type PluginBindingResponse = {
   observedAt?: string;
 };
 
-export function useTools(
-  contextName: string,
-): RefreshableState<ToolResponse> {
+export function useTools(contextName: string): RefreshableState<ToolResponse> {
   return useAsyncResource(
     `/api/console/v1/tools?context=${encodeURIComponent(contextName)}`,
     "Tools are unavailable",

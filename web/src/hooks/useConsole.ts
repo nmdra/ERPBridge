@@ -182,9 +182,7 @@ export function useHealth(
   );
 }
 
-export function useCache(
-  contextName: string,
-): RefreshableState<CacheResponse> {
+export function useCache(contextName: string): RefreshableState<CacheResponse> {
   return useAsyncResource(
     `/api/console/v1/cache?context=${encodeURIComponent(contextName)}`,
     "Cache data is unavailable",

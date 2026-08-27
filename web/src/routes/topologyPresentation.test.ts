@@ -33,18 +33,16 @@ test("switches to compact mode only for large filtered graphs", () => {
   expect(shouldUseCompactTopology([], [])).toBe(false);
   expect(
     shouldUseCompactTopology(
-      Array.from(
-        { length: compactTopologyNodeThreshold - 1 },
-        (_, index) => node(String(index), "mcp-tool"),
+      Array.from({ length: compactTopologyNodeThreshold - 1 }, (_, index) =>
+        node(String(index), "mcp-tool"),
       ),
       [],
     ),
   ).toBe(false);
   expect(
     shouldUseCompactTopology(
-      Array.from(
-        { length: compactTopologyNodeThreshold },
-        (_, index) => node(String(index), "mcp-tool"),
+      Array.from({ length: compactTopologyNodeThreshold }, (_, index) =>
+        node(String(index), "mcp-tool"),
       ),
       [],
     ),

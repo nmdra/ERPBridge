@@ -429,22 +429,22 @@ export function ToolDetails({
   if (tools.loading) return <Skeleton className="h-48 w-full" />;
   if (tools.error || !tools.data || tools.data.state !== "available") {
     return (
-        <div className="space-y-3">
-          <EmptyState
-            title="Tool manifest is unavailable"
-            message={
-              tools.error ?? "The selected context has no readable tool inventory."
-            }
-          />
-          <button
-            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
-            onClick={tools.refresh}
-            type="button"
-          >
-            Retry
-          </button>
-        </div>
-
+      <div className="space-y-3">
+        <EmptyState
+          title="Tool manifest is unavailable"
+          message={
+            tools.error ??
+            "The selected context has no readable tool inventory."
+          }
+        />
+        <button
+          className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+          onClick={tools.refresh}
+          type="button"
+        >
+          Retry
+        </button>
+      </div>
     );
   }
   if (!tool) {

@@ -31,11 +31,15 @@ test("preserves safe BFF error code and message", async () => {
 test("does not expose an unstructured response body", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(() => Promise.resolve(new Response("secret upstream body", { status: 502 }))),
+    vi.fn(() =>
+      Promise.resolve(new Response("secret upstream body", { status: 502 })),
+    ),
   );
 
   const error = await apiFetch("/contexts").catch((value: unknown) => value);
   expect(error).toBeInstanceOf(ConsoleAPIError);
-  expect((error as Error).message).toBe("Console request failed with status 502");
+  expect((error as Error).message).toBe(
+    "Console request failed with status 502",
+  );
   expect((error as Error).message).not.toContain("secret upstream body");
 });

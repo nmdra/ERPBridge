@@ -88,11 +88,11 @@ export function Overview({ contextName }: { contextName: string }) {
     .reduce((total, sample) => total + sample.perSecond, 0);
   const hasStaleData = Boolean(
     deployment.stale ||
-      health.stale ||
-      cache.stale ||
-      metrics.stale ||
-      serverInfo.stale ||
-      tools.stale,
+    health.stale ||
+    cache.stale ||
+    metrics.stale ||
+    serverInfo.stale ||
+    tools.stale,
   );
 
   return (

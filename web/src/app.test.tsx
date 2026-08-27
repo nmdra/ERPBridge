@@ -9,14 +9,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function mockConsoleFetch(contextItems: Array<{ name: string; current?: boolean }>) {
+function mockConsoleFetch(
+  contextItems: Array<{ name: string; current?: boolean }>,
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL) => {
       const path = String(input);
       if (path.includes("/contexts")) {
         return Promise.resolve(
-          new Response(JSON.stringify({ items: contextItems }), { status: 200 }),
+          new Response(JSON.stringify({ items: contextItems }), {
+            status: 200,
+          }),
         );
       }
       if (path.includes("/deployment")) {
@@ -25,14 +29,22 @@ function mockConsoleFetch(contextItems: Array<{ name: string; current?: boolean 
         );
         return Promise.resolve(
           new Response(
-            JSON.stringify({ context: { name: context }, console: { state: "available" } }),
+            JSON.stringify({
+              context: { name: context },
+              console: { state: "available" },
+            }),
             { status: 200 },
           ),
         );
       }
       return Promise.resolve(
         new Response(
-          JSON.stringify({ state: "available", items: [], cumulative: [], rates: [] }),
+          JSON.stringify({
+            state: "available",
+            items: [],
+            cumulative: [],
+            rates: [],
+          }),
           { status: 200 },
         ),
       );
@@ -115,34 +127,36 @@ test("starts from the context marked current by the BFF", async () => {
 
 test("persists an explicit context selection across app reloads", async () => {
   const user = userEvent.setup();
-  mockConsoleFetch([
-    { name: "local", current: true },
-    { name: "staging" },
-  ]);
+  mockConsoleFetch([{ name: "local", current: true }, { name: "staging" }]);
 
   const first = render(<App />);
-  const selector = await screen.findByRole("combobox", { name: "Select context" });
+  const selector = await screen.findByRole("combobox", {
+    name: "Select context",
+  });
   await user.selectOptions(selector, "staging");
   expect(selector).toHaveValue("staging");
   first.unmount();
 
   render(<App />);
   await waitFor(() =>
-    expect(screen.getByRole("combobox", { name: "Select context" })).toHaveValue(
-      "staging",
-    ),
+    expect(
+      screen.getByRole("combobox", { name: "Select context" }),
+    ).toHaveValue("staging"),
   );
 });
 
 test("falls back when session context is no longer configured", async () => {
-  window.sessionStorage.setItem("erpbridge-console-selected-context", "removed");
+  window.sessionStorage.setItem(
+    "erpbridge-console-selected-context",
+    "removed",
+  );
   mockConsoleFetch([{ name: "local", current: true }]);
 
   render(<App />);
   await waitFor(() =>
-    expect(screen.getByRole("combobox", { name: "Select context" })).toHaveValue(
-      "local",
-    ),
+    expect(
+      screen.getByRole("combobox", { name: "Select context" }),
+    ).toHaveValue("local"),
   );
 });
 
