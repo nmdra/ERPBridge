@@ -2,17 +2,26 @@
 
 ## Inspect before changing
 
-Use `bridgectl api list`, `bridgectl tool get`, and
-`bridgectl tool describe <name>` to identify the current resource and version.
-Read command help or generated CLI docs for the installed release before using
-flags. Use `--context` for a one-off target; changing the saved context is a
-separate confirmed action.
+Run the read-only [onboarding preflight](onboarding.md#preflight) first. Use
+`bridgectl api list`, `bridgectl tool get`, and
+`bridgectl tool describe <name>` with the same explicit `--context` to identify
+the current resource and version. Read command help or generated CLI docs for
+the installed release before using flags. Context-scoped API registries live
+under `~/.bridgectl/registries/`; a legacy global registry is a stop for the
+explicit scrub/migration workflow, not data to ignore. Changing the saved
+context is a separate confirmed action.
 
 ## Tool and API lifecycle
 
-- Test a registered API before changing a dependent tool.
+- Test a registered API before changing a dependent tool. The default
+  `bridgectl api test` is the authenticated server-side, body-free probe;
+  `--local` is only an explicit host-side offline diagnostic.
 - Update a manifest as a new reviewed version, validate it locally, then apply
-  it only after confirmation. Read the registry back after apply.
+  it only after confirmation. Read the registry back after apply. Keep the
+  reviewed source under `manifests/<module>/`; generated YAML is a temporary
+  draft and does not create a parallel `schemas/` or per-tool JSON authority.
+- A quoted Compose environment change needs `--env-file .env` and
+  `--force-recreate`; never source `.env`. Confirm health after recreation.
 - Treat deletion as user-visible impact. Confirm the exact `name@version`
   before deletion. A hard delete permanently removes database state and needs
   an explicit hard-delete confirmation even when `--yes` is available.
@@ -37,8 +46,16 @@ the caller needs. A created token is disclosed once; direct the recipient to a
 secret manager and omit the value from output thereafter.
 
 A tool with `spec.security.allowedRoles` needs a selected role that appears in
-both the caller identity and the tool allow-list. Verify an authorized call and
-a denial. Never use an administrative identity to mask a caller-role failure.
+both the caller identity and the tool allow-list. `pii` and `restricted`
+`dataClass` values require at least one configured role. Use existing opaque,
+non-identifying role slugs; do not use a person's name, email, employee number,
+or ERP record as a role or example. Verify an authorized call and a denial.
+Never use an administrative identity to mask a caller-role failure.
+
+The development-only `system.*_test` tools require `MCP_ENABLE_TEST_TOOLS=true`
+and must be absent from production discovery. RedisInsight is a local
+inspection aid: require a loopback binding or an explicit opt-in, and never
+use it as production evidence.
 
 ## Logs and cache
 

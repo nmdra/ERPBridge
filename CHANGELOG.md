@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Expand `bridgectl-ops` onboarding and diagnosis guidance with deterministic
+  preflight, stable-code recovery branches, safe manifest ownership, and
+  credential-free positive and near-miss evaluations
 - Gate development-only `system.*_test` tools, validate tool data classes, and
   require roles for `pii` and `restricted` tools
 - Reload Console context and inventory snapshots with browser-session context

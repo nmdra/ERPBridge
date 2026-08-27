@@ -1,11 +1,11 @@
 ---
 name: bridgectl-ops
-description: "Use this skill when operating ERPBridge with bridgectl: onboard ERP APIs, manage MCP tools or external plugins and plugin bindings, administer tokens or roles, inspect caches or logs, troubleshoot runtime or SDK integrations, or prepare a redacted bug report. Reach for it even when the user asks indirectly about plugin endpoints, post-response transformations, plugin authentication, or plugin lifecycle."
+description: "Use this skill when operating ERPBridge with bridgectl: run onboarding preflight, register or test ERP APIs, manage context-scoped MCP tools or external plugins and bindings, diagnose stable control-plane errors, administer tokens or roles, inspect caches or logs, troubleshoot runtime or SDK integrations, or prepare a redacted bug report. Reach for it for control-plane URL versus /mcp issues, server-side API probes, legacy registries, generated manifests, plugin endpoints, post-response transformations, plugin authentication, or plugin lifecycle."
 license: MIT
 compatibility: Requires a current bridgectl binary, an authorized ERPBridge context, and network access to the selected ERPBridge server and ERP endpoint. Git is required for repository diagnosis; GitHub CLI is optional for approved issue creation.
 metadata:
   author: ERPBridge Team
-  version: 3.1.0
+  version: 3.2.0
 ---
 
 # Bridgectl Operations
@@ -17,18 +17,30 @@ facts.
 
 ## Establish the operating context
 
-1. Record `bridgectl version`, `bridgectl context list`, and the chosen
+1. Run the deterministic [onboarding preflight](references/onboarding.md#preflight)
+   before any register, apply, delete, token, plugin, binding, or cache-flush
+   action. It checks the selected context, stack health, credential source,
+   quoted Compose input, control-plane root, server-side API-test mode,
+   context-scoped registry, and manifest ownership.
+2. Record `bridgectl version`, `bridgectl context list`, and the chosen
    `--context` value. Prefer `--context` over changing the saved active
-   context.
-2. Identify the required credential and scope before contacting the server.
+   context. Use the same explicit context for every API and tool command.
+3. Identify the required credential and scope before contacting the server.
    `--token`, `BRIDGE_API_TOKEN`, and the context token are resolved in that
-   order. Keep token values out of command output, files, and summaries.
-3. When working from the repository, record `git rev-parse --short HEAD` and
+   order. Keep token values out of command output, files, and summaries. Let
+   Compose read `.env` with `--env-file`; never execute or source that file.
+4. When working from the repository, record `git rev-parse --short HEAD` and
    preserve unrelated working-tree changes.
-4. Read [ecosystem context](references/ecosystem.md) when the task crosses
+5. Read [ecosystem context](references/ecosystem.md) when the task crosses
    the server, MCP client, SDK, source repository, or published docs.
 
 ## Select the workflow
+
+Run the preflight before entering a mutating workflow. A `--force-recreate`
+stack restart is a deliberate configuration refresh, not proof that the stack
+is healthy. `bridgectl api test` uses the server-side probe by default;
+`--local` is an explicit host-side diagnostic and must not become the normal
+path.
 
 | Need | Read |
 | --- | --- |
@@ -58,7 +70,8 @@ output.
 
 ## Verify and hand off
 
-After a workflow, verify the observable result at its highest available seam:
+After a workflow, use the [verification checklist](references/onboarding.md#verification-checklist)
+and verify the observable result at its highest available seam:
 the API test, local schema validation, registry readback, plugin or binding
 readback, MCP discovery/call, or an affected runtime metric/log. State the
 context, versions, commands run, result, and remaining risk. Redact secrets,

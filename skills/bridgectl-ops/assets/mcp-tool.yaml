@@ -26,7 +26,9 @@ spec:
     authType: api-key
     credentialRef: <ERP_CREDENTIAL_ENV_VAR>
     dataClass: internal # public, internal, pii, or restricted
-    allowedRoles: [] # Required for pii/restricted; use opaque verified role names.
+    # pii/restricted require an existing opaque, non-identifying role slug.
+    # Never use a person name, email, employee number, or ERP record as a role.
+    allowedRoles: []
   cache:
     enabled: false
     flushOn: []

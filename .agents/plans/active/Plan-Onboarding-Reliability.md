@@ -425,7 +425,7 @@ archived as completed before this plan is promoted.
     Compose exposure tests show RedisInsight is loopback/opt-in; secret and
     PII audits pass.
 
-- [ ] **Task 8: Improve `bridgectl-ops` onboarding, diagnosis, and evaluations.**
+- [x] **Task 8: Improve `bridgectl-ops` onboarding, diagnosis, and evaluations.**
   - Add a deterministic preflight that checks the selected context, stack
     health, credential source, quoted environment handling, control-plane root,
     server-side API-test mode, context-scoped registry, and generated-manifest

@@ -14,6 +14,35 @@ Make sure that you have the following installed:
 | `curl` | Checks service health after startup |
 | Go 1.26.2+ | Needed to build `bridgectl` (if not pre-built) |
 
+### Preflight before changes
+
+If `bridgectl` is not already installed, build it before this read-only gate.
+Choose the target context first and use `--context <name>` on every CLI
+command below. Run these read-only checks before registration or apply:
+
+```bash
+CTX=local # replace local with the selected configured context
+./bridgectl version
+./bridgectl context list -o json
+./bridgectl api list --context "$CTX" -o json
+curl -fsS --max-time 5 http://localhost:8080/mcp/health >/dev/null
+curl -fsS --max-time 5 http://localhost:8081/health >/dev/null
+```
+
+If an env file exists, validate its quoted Compose input without executing it:
+
+```bash
+docker compose --env-file .env config --quiet
+```
+
+Never source `.env`. Check credential-source presence without printing values.
+The selected `mcp-server` must be a host root or end in only `/mcp` or `/mcp/`;
+those exact suffixes are normalized for control-plane calls. `/mcp/` is the MCP
+transport, not a REST path. A non-empty other path returns
+`CONTROL_PLANE_URL_INVALID`. Confirm that `api test --help` contains `--local`;
+the normal probe is server-side and body-free. A legacy registry, unhealthy
+stack, invalid context, or ambiguous manifest location is a stop condition.
+
 ---
 
 ## Step 1 — Start the ERPBridge Server
@@ -72,14 +101,17 @@ go build -o bridgectl ./tools/bridgectl/main.go
 
 ## Step 3 — Register Your ERP API
 
-Tell ERPBridge how to connect to your ERP system:
+Tell ERPBridge how to connect to your ERP system. The credential flag names an
+environment variable; it does not contain the credential value:
 
 ```bash
 ./bridgectl api register \
+  --context "$CTX" \
   --name erp \
   --url http://localhost:8081 \
   --module erp \
-  --description "Internal Mock ERP for testing"
+  --description "Internal Mock ERP for testing" \
+  --credential-ref ERP_API_KEY
 ```
 
 **What each flag does:**
@@ -90,6 +122,7 @@ Tell ERPBridge how to connect to your ERP system:
 | `--url` | Base URL of your ERP service |
 | `--module` | Logical grouping (for example `finance`, `hr`, `erp`) |
 | `--description` | Human-readable description. This flag is required. |
+| `--credential-ref` | Name of the environment variable resolved by the server. |
 
 > **Tip:** The `--description` flag is mandatory. It helps the LLM layer understand the purpose of the API.
 
@@ -97,7 +130,9 @@ Tell ERPBridge how to connect to your ERP system:
 
 ## Step 4 — Generate Tool Schemas
 
-Convert the pinned MockERP OpenAPI spec into MCP tool schemas:
+Convert the pinned MockERP OpenAPI spec into MCP tool schemas. Keep reviewed
+manifests under `manifests/<module>/`; generated YAML is a temporary draft and
+is not a second `schemas/` or per-tool JSON source of truth:
 
 ```bash
 make generate-tools
@@ -114,12 +149,19 @@ and remove it after review or apply:
 ```bash
 manifest=$(mktemp "${TMPDIR:-/tmp}/erpbridge-draft.XXXXXX.yaml")
 trap 'rm -f "$manifest"' EXIT
-./bridgectl tool generate --api erp --openapi /path/to/openapi.yaml -o yaml > "$manifest"
-./bridgectl tool apply -f "$manifest"
+./bridgectl tool generate --context "$CTX" --api erp --openapi /path/to/openapi.yaml -o yaml > "$manifest"
+# Review the draft, then validate it before the confirmed apply.
+./bridgectl tool validate --context "$CTX" -f "$manifest"
+./bridgectl tool apply --context "$CTX" -f "$manifest"
 ```
 
 Generated output is a draft. Complete and review its intent metadata, schema,
-security, and cache policy before applying it.
+security, and cache policy before applying it. A `pii` or `restricted` tool
+requires an existing non-identifying role slug in `allowedRoles`; do not use a
+person name, email, employee number, or ERP record in roles or examples. The
+`system.*_test` tools are development-only and require
+`MCP_ENABLE_TEST_TOOLS=true`; RedisInsight is for local inspection and must
+remain loopback-only or opt-in.
 
 ---
 
@@ -133,7 +175,7 @@ Keep reviewed, applied manifests as the single source of truth under
 `manifests/<module>/`. For example:
 
 ```bash
-./bridgectl tool apply -f manifests/erp/tools.yaml
+./bridgectl tool apply --context "$CTX" -f manifests/erp/tools.yaml
 ```
 
 The command accepts one YAML sequence or multi-document YAML stream and applies
@@ -150,14 +192,14 @@ own environment and returns only status, content type, latency, and success.
 The ERP response body and headers never cross the probe boundary.
 
 ```bash
-./bridgectl api test erp
+./bridgectl api test --context "$CTX" erp
 ```
 
 Use `--local` only for an explicit offline or legacy host-side diagnostic. It
 resolves the credential in the CLI process and is not the normal workflow:
 
 ```bash
-./bridgectl api test erp --local
+./bridgectl api test --context "$CTX" erp --local
 ```
 
 The `mcp-server` context value is used as a control-plane root by CLI commands.
@@ -171,7 +213,7 @@ MCP clients; do not use it as the REST API path.
 Confirm that your tools are registered:
 
 ```bash
-./bridgectl tool get
+./bridgectl tool get --context "$CTX"
 ```
 
 You see your tools listed with a `READY` status. If any show another status, see the Troubleshooting section below.
@@ -211,6 +253,27 @@ Completely removes the tool from the SQLite database.
 ---
 
 ## Troubleshooting
+
+### Stable error recovery
+
+Control-plane errors return a stable code and a safe suggestion. Use the code
+as the recovery key, not an HTML body or a stack trace:
+
+- `CONTEXT_NOT_FOUND`: list contexts and rerun with a configured `--context`.
+- `LEGACY_REGISTRY`: stop writes; complete the confirmed scrub, then migrate
+  the cleaned global registry to the selected context.
+- `REGISTRY_CONFLICT`: inspect the existing API; use `--force` only for an
+  intentional replacement.
+- `CONTROL_PLANE_URL_INVALID`: use the host root or exact `/mcp` suffix only.
+- `VALIDATION_FAILED`: repair and locally validate the reviewed manifest.
+- `AUTHENTICATION_FAILED` or `AUTHORIZATION_DENIED`: check the intended bridge
+  scope or tool role without displaying credentials or elevating the caller.
+- `UPSTREAM_UNREACHABLE`, `HEALTH_CHECK_FAILED`, or `API_PROBE_FAILED`: check
+  both health endpoints and bounded server-side probe evidence.
+- `INSECURE_TRANSPORT`: use HTTPS, or the exact documented local fixture
+  exception only.
+- `RECONCILIATION_FAILED` or `RESOURCE_NOT_FOUND`: read back exact names and
+  versions before retrying.
 
 ### Connection refused when running CLI commands
 
@@ -311,30 +374,32 @@ docker compose restart redis
 ## Quick Reference
 
 ```bash
+CTX=local # replace local with the selected configured context
+
 # Start services with ephemeral local credentials
 make dev-up
 
-# Or use direct Compose after setting a credential source
-docker compose up --build --force-recreate -d
+# Or use direct Compose with a credential source (never source .env)
+docker compose --env-file .env up --build --force-recreate -d
 
 # Build CLI
 make build
 
 # Register API (make generate-tools also performs this step)
-./bridgectl api register --name erp --url http://localhost:8081 --module erp --description "..."
+./bridgectl api register --context "$CTX" --name erp --url http://localhost:8081 --module erp --description "..."
 
 # Generate one temporary draft, apply it once, and clean it up
 make generate-tools
 
 # Apply the reviewed source manifest
-./bridgectl tool apply -f manifests/erp/tools.yaml
+./bridgectl tool apply --context "$CTX" -f manifests/erp/tools.yaml
 
 # Verify tools are READY
-./bridgectl tool get
+./bridgectl tool get --context "$CTX"
 
 # Delete a tool (Soft - sets to HIDDEN)
-./bridgectl tool delete [tool_name] [version]
+./bridgectl tool delete --context "$CTX" [tool_name] [version]
 
 # Delete a tool (Hard - permanent removal)
-./bridgectl tool delete [tool_name] [version] --hard
+./bridgectl tool delete --context "$CTX" [tool_name] [version] --hard
 ```

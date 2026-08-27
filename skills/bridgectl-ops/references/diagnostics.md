@@ -2,20 +2,32 @@
 
 ## Triage loop
 
-1. Capture the selected context, `bridgectl version`, server/SDK version when
+1. Run the read-only [onboarding preflight](onboarding.md#preflight) with the
+   affected `--context`. It establishes context, stack health, quoted Compose
+   input, credential-reference presence, control-plane root, server-side probe
+   mode, registry scope, and manifest ownership before a retry.
+2. Capture `bridgectl version`, safe context names, server/SDK version when
    available, timestamp with timezone, and the smallest affected API or tool.
-2. Classify the failure: context/authentication, role authorization, API
+   Do not source `.env`; use Compose's `--env-file` and inspect only booleans,
+   names, status codes, and timings.
+3. Classify the failure: context/authentication, role authorization, API
    connectivity, schema/registry, MCP client/SDK protocol handling, cache, or
-   server runtime.
-3. Inspect the narrowest evidence first: API test, tool describe/readback, log
-   stats/tail, cache stats, then the relevant source and tests. Use repository
-   history and `git status` without altering unrelated work.
-4. Reproduce with a minimum safe request. Do not use production personal data,
-   raw tokens, authorization headers, or ERP credentials in reproduction
-   artifacts.
-5. State the observed result, the expected result, and the evidence that
+   server runtime. Route stable onboarding/API codes through the numbered
+   [recovery branches](onboarding.md#recovery-branches).
+4. Inspect the narrowest evidence first: health checks, server-side API probe,
+   tool describe/readback, bounded log stats/tail, then cache stats. Use
+   repository history and `git status` without altering unrelated work.
+5. Reproduce with a minimum safe request. Do not use production personal data,
+   raw tokens, authorization headers, ERP credentials, upstream bodies, or
+   plugin payloads in reproduction artifacts.
+6. State the observed result, expected result, stable code, and evidence that
    separates them. If an operation would alter production state, obtain the
    change gate described in `SKILL.md`.
+
+A changed quoted environment value requires the explicit Compose
+`--force-recreate` path; recreating a container does not prove health. The
+normal `bridgectl api test` is server-side and body-free. Use `--local` only
+when the report explicitly labels a host-side offline diagnostic.
 
 ## Plugin diagnosis
 
@@ -34,6 +46,17 @@ records, and opaque invocation tokens. For repository diagnosis, use the
 existing plugin unit tests and `go test -tags pluginintegration
 ./internal/integration -run TestPluginSystemBlackBox -count=1` when its fixture
 stack is available.
+
+## Stable-code evidence
+
+Keep the machine-readable `error` value and numeric exit code together. Common
+recovery keys are `CONTEXT_NOT_FOUND`, `LEGACY_REGISTRY`,
+`REGISTRY_CONFLICT`, `CONTROL_PLANE_URL_INVALID`, `VALIDATION_FAILED`,
+`AUTHENTICATION_FAILED`, `AUTHORIZATION_DENIED`, `UPSTREAM_UNREACHABLE`,
+`INSECURE_TRANSPORT`, `HEALTH_CHECK_FAILED`, `RECONCILIATION_FAILED`,
+`RESOURCE_NOT_FOUND`, `METHOD_NOT_ALLOWED`, and `API_PROBE_FAILED`. Record the
+code and safe suggestion, then follow the matching onboarding branch. Never
+replace a stable code with an HTML response, stack trace, or upstream body.
 
 ## Bug-report workflow
 
