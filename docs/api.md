@@ -166,6 +166,12 @@ Body:
 ```
 
 The call goes through the middleware chain: rate limiting, cache, and resilience.
+Authenticated direct calls share a limiter bucket by token principal.
+
+Excess direct calls return HTTP `429` with the stable `RATE_LIMITED` error and a
+whole-second `Retry-After` header. Streamable HTTP MCP `tools/call` requests
+remain HTTP `200` responses with `result.isError=true`; `tools/list` is not
+throttled.
 
 This endpoint is admin-only when HTTP authentication is enabled. For a guarded
 tool, pass the verified role in `X-ERPBridge-Role`; do not put `role` in the
@@ -246,7 +252,8 @@ The server uses standard HTTP status codes. Control-plane failures return a
 bounded JSON object with `error`, `message`, `suggestion`, and numeric `code`.
 The `error` value is stable for automation. Common values include
 `VALIDATION_FAILED`, `AUTHENTICATION_FAILED`, `AUTHORIZATION_DENIED`,
-`RESOURCE_NOT_FOUND`, `UPSTREAM_UNREACHABLE`, and `HEALTH_CHECK_FAILED`.
+`RESOURCE_NOT_FOUND`, `UPSTREAM_UNREACHABLE`, `RATE_LIMITED`, and
+`HEALTH_CHECK_FAILED`.
 Messages and suggestions never include upstream bodies, credentials, auth
 headers, or internal stack details.
 

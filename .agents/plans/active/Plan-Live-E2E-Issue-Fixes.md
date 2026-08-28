@@ -163,7 +163,7 @@ External contract references used for the design:
   `python3 -m py_compile ../Erpbridge-demo/scripts/*.py`, and a fresh harness
   dry run records no raw payloads or credential markers.
 
-- [ ] **Task 2: Add a transport-aware rate-limit contract.** Start with failing
+- [x] **Task 2: Add a transport-aware rate-limit contract.** Start with failing
   tests for two direct calls, two MCP sessions, shared authenticated principals,
   separate principals, `Retry-After`, and denied calls not reaching the
   connector/cache. Add a stable `ErrorRateLimited` identifier and an internal

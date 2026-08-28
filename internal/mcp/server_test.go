@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -418,6 +419,51 @@ func TestServer_HttpEndpoints(t *testing.T) {
 	s.handleLogRecent(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "test log msg")
+}
+
+func TestServer_ToolsListIsNotRateLimited(t *testing.T) {
+	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 1, Burst: 1}, ":memory:")
+	s.RegisterTool(&Tool{
+		Metadata: Metadata{Name: "listed-tool", Version: testVersion100},
+		Handler: func(_ context.Context, _ map[string]any) (*ToolResult, error) {
+			return &ToolResult{Result: map[string]any{"ok": true}}, nil
+		},
+	})
+	for id := 1; id <= 2; id++ {
+		response := s.mcpServer.HandleMessage(context.Background(), []byte(fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/list"}`, id)))
+		_, ok := response.(mcp.JSONRPCResponse)
+		assert.True(t, ok, "tools/list response %d should be successful", id)
+	}
+}
+
+func TestServer_DirectInvokeRateLimitUsesStableRESTOutcome(t *testing.T) {
+	t.Setenv(authTokenEnv, "")
+	called := 0
+	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 1}, ":memory:")
+	s.RegisterTool(&Tool{
+		Metadata: Metadata{Name: "rate-limited-invoke", Version: testVersion100},
+		Handler: func(_ context.Context, _ map[string]any) (*ToolResult, error) {
+			called++
+			return &ToolResult{Result: map[string]any{"ok": true}}, nil
+		},
+	})
+
+	invoke := func() *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/tools/invoke", bytes.NewBufferString(`{"name":"rate-limited-invoke","arguments":{}}`))
+		s.handleDirectInvoke(recorder, request)
+		return recorder
+	}
+
+	first := invoke()
+	assert.Equal(t, http.StatusOK, first.Code)
+	second := invoke()
+	assert.Equal(t, http.StatusTooManyRequests, second.Code)
+	assert.Equal(t, "1", second.Header().Get("Retry-After"))
+	var envelope controlPlaneErrorEnvelope
+	assert.NoError(t, json.Unmarshal(second.Body.Bytes(), &envelope))
+	assert.Equal(t, ErrorRateLimited, envelope.Error)
+	assert.Equal(t, 1, called)
 }
 
 func TestServer_DirectInvoke(t *testing.T) {

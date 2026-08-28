@@ -23,6 +23,7 @@ const (
 	ErrorResourceNotFound     = "RESOURCE_NOT_FOUND"
 	ErrorMethodNotAllowed     = "METHOD_NOT_ALLOWED"
 	ErrorAPIProbeFailed       = "API_PROBE_FAILED"
+	ErrorRateLimited          = "RATE_LIMITED"
 )
 
 type controlPlaneErrorEnvelope struct {

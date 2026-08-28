@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -16,7 +15,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// RateLimitMiddleware provides per-session rate limiting for tool execution.
+// RateLimitMiddleware provides principal- or session-scoped rate limiting for tool execution.
 type RateLimitMiddleware struct {
 	limiters map[string]*limiterEntry
 	mutex    sync.Mutex
@@ -72,6 +71,40 @@ func (m *RateLimitMiddleware) getLimiter(sessionID string) *rate.Limiter {
 }
 
 type rateLimitPrincipalKey struct{}
+type rateLimitOutcomeKey struct{}
+
+type rateLimitOutcome struct {
+	limited    bool
+	retryAfter time.Duration
+}
+
+func withRateLimitOutcome(ctx context.Context) (context.Context, *rateLimitOutcome) {
+	outcome := &rateLimitOutcome{}
+	return context.WithValue(ctx, rateLimitOutcomeKey{}, outcome), outcome
+}
+
+func recordRateLimitOutcome(ctx context.Context, retryAfter time.Duration) {
+	outcome, ok := ctx.Value(rateLimitOutcomeKey{}).(*rateLimitOutcome)
+	if !ok || outcome == nil {
+		return
+	}
+	outcome.limited = true
+	outcome.retryAfter = retryAfter
+}
+
+func rateLimitRetryAfterSeconds(delay time.Duration) int64 {
+	if delay <= 0 || delay >= rate.InfDuration {
+		return 1
+	}
+	seconds := int64(delay / time.Second)
+	if delay%time.Second != 0 {
+		seconds++
+	}
+	if seconds < 1 {
+		return 1
+	}
+	return seconds
+}
 
 // WithRateLimitPrincipal attaches an authenticated identity to the limiter context.
 func WithRateLimitPrincipal(ctx context.Context, principal string) context.Context {
@@ -94,9 +127,18 @@ func (m *RateLimitMiddleware) Handle() server.ToolHandlerMiddleware {
 				}
 			}
 			limiter := m.getLimiter(sessionID)
+			now := m.now()
+			reservation := limiter.ReserveN(now, 1)
+			if !reservation.OK() {
+				recordRateLimitOutcome(ctx, time.Second)
+				return mcp.NewToolResultError(ErrorRateLimited + ": rate limit exceeded"), nil
+			}
 
-			if !limiter.Allow() {
-				return mcp.NewToolResultError(fmt.Sprintf("rate limit exceeded for session %s", sessionID)), nil
+			delay := reservation.DelayFrom(now)
+			if delay > 0 {
+				reservation.CancelAt(now)
+				recordRateLimitOutcome(ctx, delay)
+				return mcp.NewToolResultError(ErrorRateLimited + ": rate limit exceeded"), nil
 			}
 
 			return next(ctx, req)

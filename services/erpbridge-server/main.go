@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -56,9 +57,37 @@ func serveHTTP(ctx context.Context, server *http.Server, listener net.Listener) 
 	}
 }
 
+func parseRateLimitConfig() (mcp.RateLimitConfig, error) {
+	config := mcp.RateLimitConfig{RequestsPerSecond: 5, Burst: 10}
+	if value := os.Getenv("RATE_LIMIT_RPS"); value != "" {
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+			return mcp.RateLimitConfig{}, errors.New("invalid RATE_LIMIT_RPS")
+		}
+		config.RequestsPerSecond = parsed
+	}
+	if value := os.Getenv("RATE_LIMIT_BURST"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return mcp.RateLimitConfig{}, errors.New("invalid RATE_LIMIT_BURST")
+		}
+		config.Burst = parsed
+	}
+	if err := config.Validate(); err != nil {
+		return mcp.RateLimitConfig{}, errors.New("invalid rate limit configuration")
+	}
+	return config, nil
+}
+
 func main() {
 	stdioFlag := flag.Bool("stdio", false, "Run in STDIO transport mode")
 	flag.Parse()
+
+	rateConfig, err := parseRateLimitConfig()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "invalid rate limit configuration")
+		os.Exit(1)
+	}
 
 	transport := os.Getenv("MCP_TRANSPORT")
 	useStdio := *stdioFlag || transport == "stdio"
@@ -88,19 +117,6 @@ func main() {
 	}
 
 	redisURL := os.Getenv("REDIS_URL")
-
-	rateRPS := 5.0
-	if v := os.Getenv("RATE_LIMIT_RPS"); v != "" {
-		if _, err := fmt.Sscanf(v, "%f", &rateRPS); err != nil {
-			slog.Warn("failed to parse RATE_LIMIT_RPS")
-		}
-	}
-	rateBurst := 10
-	if v := os.Getenv("RATE_LIMIT_BURST"); v != "" {
-		if _, err := fmt.Sscanf(v, "%d", &rateBurst); err != nil {
-			slog.Warn("failed to parse RATE_LIMIT_BURST")
-		}
-	}
 
 	// In a real scenario, this should be the public URL of the server
 	baseURL := os.Getenv("BASE_URL")
@@ -134,10 +150,7 @@ func main() {
 	}
 
 	conn := connector.NewClient(rootLog)
-	server := mcp.NewServer(conn, cacheMgr, rootLog, mcp.RateLimitConfig{
-		RequestsPerSecond: rateRPS,
-		Burst:             rateBurst,
-	}, dbPath)
+	server := mcp.NewServer(conn, cacheMgr, rootLog, rateConfig, dbPath)
 	server.SetServerInfo(mcp.ServerInfo{Version: version, Commit: commit, Date: date})
 
 	// Setup signal-aware context for background workers

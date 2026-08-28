@@ -81,11 +81,16 @@ For the full endpoint reference, see the [REST API Reference](./api.md).
 
 ERPBridge includes built-in protection for underlying ERP systems.
 
-- **Rate Limiting:** Request throttling is enforced per-session (token bucket).
-- **Default Limits:** 5 requests per second with a burst of 10 (configurable via environment variables).
+- **Rate Limiting:** Tool execution uses a token bucket. Authenticated HTTP
+  requests are keyed by token principal; unauthenticated stateful MCP requests
+  use their session, and stdio uses its process fallback.
+- **Default Limits:** 5 requests per second with a burst of 10 (configurable via
+  `RATE_LIMIT_RPS` and `RATE_LIMIT_BURST`).
 
-Authenticated HTTP requests use the token principal for rate limiting. Open
-HTTP requests and stdio use their existing session or process fallback.
+Excess direct `/api/tools/invoke` calls return HTTP `429`, stable error
+`RATE_LIMITED`, and a whole-second `Retry-After` value. Streamable HTTP MCP
+`tools/call` requests remain HTTP `200` and carry `result.isError=true`.
+`tools/list` is not subject to tool-execution throttling.
 
 ## 5. Monitoring & Health
 

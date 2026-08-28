@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -64,6 +66,18 @@ const (
 type RateLimitConfig struct {
 	RequestsPerSecond float64
 	Burst             int
+}
+
+// Validate checks that rate limiting can make progress without accepting
+// values that would disable or destabilize the limiter.
+func (c RateLimitConfig) Validate() error {
+	if c.RequestsPerSecond <= 0 || math.IsNaN(c.RequestsPerSecond) || math.IsInf(c.RequestsPerSecond, 0) {
+		return errors.New("rate limit requests per second must be positive and finite")
+	}
+	if c.Burst <= 0 {
+		return errors.New("rate limit burst must be positive")
+	}
+	return nil
 }
 
 // NewServer creates a new Server instance with the provided connector, cache manager, and logger.
@@ -1013,8 +1027,16 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 		return s.executeToolRequest(ctx, t, request)
 	})
 
-	// Execute through the middleware chain
-	mcpResult, err := handler(directContext, mcpReq)
+	// Execute through the middleware chain. The outcome pointer lets the
+	// direct compatibility endpoint classify rate limiting without inspecting
+	// the MCP error text returned to protocol clients.
+	rateContext, rateOutcome := withRateLimitOutcome(directContext)
+	mcpResult, err := handler(rateContext, mcpReq)
+	if rateOutcome.limited {
+		w.Header().Set("Retry-After", strconv.FormatInt(rateLimitRetryAfterSeconds(rateOutcome.retryAfter), 10))
+		writeControlPlaneError(w, http.StatusTooManyRequests, ErrorRateLimited, "the tool request rate limit was exceeded", "retry after the indicated delay")
+		return
+	}
 	if err != nil {
 		// Keep the established direct-invoke compatibility response for plugin
 		// processing failures. It contains only a fixed safe message; MCP

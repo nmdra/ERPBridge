@@ -18,6 +18,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestParseRateLimitConfigRejectsInvalidAndTrailingValues(t *testing.T) {
+	for _, value := range []string{"0", "-1", "NaN", "+Inf", "1.0oops"} {
+		t.Run("rps_"+value, func(t *testing.T) {
+			t.Setenv("RATE_LIMIT_RPS", value)
+			t.Setenv("RATE_LIMIT_BURST", "1")
+			_, err := parseRateLimitConfig()
+			require.Error(t, err)
+		})
+	}
+	for _, value := range []string{"0", "-1", "1oops"} {
+		t.Run("burst_"+value, func(t *testing.T) {
+			t.Setenv("RATE_LIMIT_RPS", "0.5")
+			t.Setenv("RATE_LIMIT_BURST", value)
+			_, err := parseRateLimitConfig()
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestParseRateLimitConfigAcceptsSubsecondRate(t *testing.T) {
+	t.Setenv("RATE_LIMIT_RPS", "0.5")
+	t.Setenv("RATE_LIMIT_BURST", "2")
+	config, err := parseRateLimitConfig()
+	require.NoError(t, err)
+	require.Equal(t, 0.5, config.RequestsPerSecond)
+	require.Equal(t, 2, config.Burst)
+}
+
 func TestServeHTTPStopsWhenContextIsCanceled(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)

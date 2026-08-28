@@ -71,6 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Return direct tool rate-limit rejections as HTTP `429` with stable
+  `RATE_LIMITED` errors and `Retry-After`, while MCP `tools/call` keeps its
+  HTTP-successful `isError` result contract; validate rate settings strictly.
 - Scope local API registries to the selected context, require explicit
   credential-safe migration for legacy registries, and require `--force` for
   intentional duplicate replacement

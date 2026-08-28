@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/stretchr/testify/assert"
@@ -41,6 +42,36 @@ func TestRateLimitMiddleware(t *testing.T) {
 	assert.Contains(t, res.Content[0].(mcp.TextContent).Text, "rate limit exceeded")
 }
 
+func TestRateLimitMiddleware_UsesReservationDelayForDirectOutcome(t *testing.T) {
+	m := NewRateLimitMiddleware(100, 1)
+	handler := m.Handle()(func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultText("ok"), nil
+	})
+	ctx, outcome := withRateLimitOutcome(context.Background())
+
+	allowed, err := handler(ctx, mcp.CallToolRequest{})
+	require.NoError(t, err)
+	require.False(t, allowed.IsError)
+	blocked, err := handler(ctx, mcp.CallToolRequest{})
+	require.NoError(t, err)
+	require.True(t, blocked.IsError)
+	require.True(t, outcome.limited)
+	require.GreaterOrEqual(t, rateLimitRetryAfterSeconds(outcome.retryAfter), int64(1))
+}
+
+func TestRateLimitMiddleware_SupportsLowRateReservation(t *testing.T) {
+	m := NewRateLimitMiddleware(0.1, 1)
+	handler := m.Handle()(func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultText("ok"), nil
+	})
+
+	_, err := handler(context.Background(), mcp.CallToolRequest{})
+	require.NoError(t, err)
+	blocked, err := handler(context.Background(), mcp.CallToolRequest{})
+	require.NoError(t, err)
+	require.True(t, blocked.IsError)
+}
+
 func TestRateLimitMiddleware_EvictsIdleEntries(t *testing.T) {
 	m := NewRateLimitMiddleware(2, 1)
 	now := time.Date(2026, time.August, 22, 0, 0, 0, 0, time.UTC)
@@ -55,6 +86,37 @@ func TestRateLimitMiddleware_EvictsIdleEntries(t *testing.T) {
 
 	m.getLimiter("new")
 	assert.Len(t, m.limiters, 1)
+}
+
+type rateLimitTestSession struct {
+	id string
+}
+
+func (s rateLimitTestSession) Initialize()                                         {}
+func (s rateLimitTestSession) Initialized() bool                                   { return true }
+func (s rateLimitTestSession) NotificationChannel() chan<- mcp.JSONRPCNotification { return nil }
+func (s rateLimitTestSession) SessionID() string                                   { return s.id }
+
+func TestRateLimitMiddleware_UsesSessionWhenPrincipalIsAbsent(t *testing.T) {
+	m := NewRateLimitMiddleware(1, 1)
+	handler := m.Handle()(func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultText("ok"), nil
+	})
+	mcpServer := mcpserver.NewMCPServer("rate-test", testVersion100)
+	req := mcp.CallToolRequest{}
+
+	sessionA := mcpServer.WithContext(context.Background(), rateLimitTestSession{id: "session-a"})
+	allowed, err := handler(sessionA, req)
+	require.NoError(t, err)
+	require.False(t, allowed.IsError)
+	blocked, err := handler(sessionA, req)
+	require.NoError(t, err)
+	require.True(t, blocked.IsError)
+
+	sessionB := mcpServer.WithContext(context.Background(), rateLimitTestSession{id: "session-b"})
+	allowed, err = handler(sessionB, req)
+	require.NoError(t, err)
+	require.False(t, allowed.IsError)
 }
 
 func TestRateLimitMiddleware_UsesPrincipalWhenProvided(t *testing.T) {
