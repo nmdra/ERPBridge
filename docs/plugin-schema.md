@@ -45,7 +45,9 @@ reference and sends exactly one header: `Authorization: Bearer <value>` for
 bearer auth, or the raw value in the API-key header. If the reference is
 missing or empty, or a file is invalid, ERPBridge makes no plugin request and
 reports a safe configuration error without exposing the credential.
-File-backed authenticated plugin bindings bypass the tool response cache.
+File-backed authenticated plugin bindings bypass the tool response cache. The
+sample `mock-plugin` service reads `MOCK_PLUGIN_API_KEY`; its ERPBridge resource
+must continue to reference the same runtime value through `PLUGIN_MOCK_API_KEY`.
 
 Plugin JSON and YAML manifests reject unknown fields. This prevents a misspelled
 or raw credential field from changing the authentication behavior.
@@ -88,7 +90,9 @@ bindings run before response normalization; after-response bindings run after a
 successful tool result has passed its output schema. Active bindings use
 ascending priority order within each phase. A raw binding must target an
 HTTP-backed tool with an explicit object-shaped final output schema. The default failure policy is
-`continue`; `fail` returns a generic tool error.
+`continue`; it returns the original schema-valid result when plugin processing
+fails. `fail` returns a generic tool error: direct invocation uses HTTP `500`,
+while MCP keeps HTTP `200` with `result.isError=true`.
 Plugin resources are versioned declarative records. Bindings are named
 declarative records that reference exact plugin and tool versions. A soft delete
 sets `isActive: false` and retains the record. A plugin cannot be hard-deleted

@@ -157,7 +157,16 @@ trap 'rm -f "$manifest"' EXIT
 ```
 
 Generated output is a draft. Complete and review its intent metadata, schema,
-security, and cache policy before applying it. A `pii` or `restricted` tool
+security, and cache policy before applying it. OpenAPI request bodies preserve
+nested objects, arrays, enums, defaults, and required fields. Generated
+`execution.parameterLocations` routes path, query, header, and body arguments;
+primitive or array request bodies use one complete `body` argument. Generated
+path values are escaped, protected headers are rejected, and
+`responsePath: data` is emitted only when the resolved response schema proves a
+top-level `data` property. Successful `HEAD` and `204 No Content` responses return a nil
+result without JSON decoding.
+
+A `pii` or `restricted` tool
 requires an existing non-identifying role slug in `allowedRoles`; do not use a
 person name, email, employee number, or ERP record in roles or examples. The
 `system.*_test` tools are development-only and require
@@ -289,7 +298,11 @@ as the recovery key, not an HTML body or a stack trace:
 - `AUTHENTICATION_FAILED` or `AUTHORIZATION_DENIED`: check the intended bridge
   scope or tool role without displaying credentials or elevating the caller.
 - `UPSTREAM_UNREACHABLE`, `HEALTH_CHECK_FAILED`, or `API_PROBE_FAILED`: check
-  both health endpoints and bounded server-side probe evidence.
+  both health endpoints and bounded server-side probe evidence. A configured
+  but unavailable Redis backend keeps its Redis label; cache health returns
+  `503 HEALTH_CHECK_FAILED` without memory substitution.
+- `RATE_LIMITED`: retry the direct request after the `Retry-After` value. MCP
+  tool calls keep HTTP `200` and expose `result.isError=true`.
 - `INSECURE_TRANSPORT`: use HTTPS, or the exact documented local fixture
   exception only.
 - `RECONCILIATION_FAILED` or `RESOURCE_NOT_FOUND`: read back exact names and

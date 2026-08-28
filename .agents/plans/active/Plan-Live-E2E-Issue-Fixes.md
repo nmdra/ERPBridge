@@ -307,7 +307,7 @@ External contract references used for the design:
   plugin auth results, after-response markers, raw-probe markers, and no
   secret markers.
 
-- [ ] **Task 7: Synchronize contracts, fixture limitations, and release notes.**
+- [x] **Task 7: Synchronize contracts, fixture limitations, and release notes.**
   Update the root API/connectivity/plugin/onboarding/environment guides with
   the final rate-limit status split, initial SSE flush, generator mapping and
   response-path rules, Redis-unavailable behavior, plugin environment names,
