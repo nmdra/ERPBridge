@@ -33,6 +33,9 @@ func TestServer_ToolAPI(t *testing.T) {
 		s.handleToolAPI(w, req)
 		assert.Equal(t, http.StatusCreated, w.Code)
 		assert.Contains(t, w.Body.String(), `"status":"applied"`)
+		applied, err := s.registry.Resolve("test-tool", "1.0.0")
+		require.NoError(t, err)
+		assert.Nil(t, applied.Spec.Annotations)
 	})
 
 	t.Run("Apply Invalid Tool - Bad JSON", func(t *testing.T) {

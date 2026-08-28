@@ -108,6 +108,37 @@ func TestStore(t *testing.T) {
 	})
 }
 
+func TestStore_RoundTripsToolAnnotationsAndGuidance(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "metadata.db")
+	store, err := NewStore(dbPath)
+	require.NoError(t, err)
+	defer func() { _ = store.Close() }()
+
+	destructive := false
+	tool := &Tool{
+		Metadata: Metadata{Name: "persisted-metadata", Version: testVersion100, IsActive: true},
+		Spec: ToolSpec{
+			Description: Description{
+				WhenToUse:    []string{"Use for metadata reads"},
+				WhenNotToUse: []string{"Do not use for writes"},
+				Examples:     []string{"Read metadata"},
+			},
+			Annotations: &ToolAnnotations{DestructiveHint: &destructive},
+			Security:    Security{AllowedRoles: []string{"metadata_reader"}},
+		},
+	}
+	require.NoError(t, store.Save(tool))
+
+	loaded, err := store.Get(tool.Metadata.Name, tool.Metadata.Version)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.Spec.Annotations)
+	assert.Equal(t, false, *loaded.Spec.Annotations.DestructiveHint)
+	assert.Equal(t, tool.Spec.Description.WhenToUse, loaded.Spec.Description.WhenToUse)
+	assert.Equal(t, tool.Spec.Description.WhenNotToUse, loaded.Spec.Description.WhenNotToUse)
+	assert.Equal(t, tool.Spec.Description.Examples, loaded.Spec.Description.Examples)
+	assert.Equal(t, []string{"metadata_reader"}, loaded.Spec.Security.AllowedRoles)
+}
+
 func TestStore_NewStore_Errors(t *testing.T) {
 	// Invalid path (directory instead of file)
 	tempDir := t.TempDir()

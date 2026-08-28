@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/nmdra/ERPBridge/internal/mcp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,6 +124,124 @@ func TestServeHTTPStopsWhenContextIsCanceled(t *testing.T) {
 
 	_, err = client.Get("http://" + listener.Addr().String())
 	require.Error(t, err)
+}
+
+func TestStdioProtocolListsPersistedToolMetadata(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "erpbridge.db")
+	store, err := mcp.NewStore(dbPath)
+	require.NoError(t, err)
+	defer func() { _ = store.Close() }()
+
+	readOnly, destructive := true, false
+	annotated := &mcp.Tool{
+		Metadata: mcp.Metadata{Name: "annotated-stdio", Version: "1.0.0", IsActive: true},
+		Spec: mcp.ToolSpec{
+			Description: mcp.Description{
+				Short:        "Annotated stdio tool",
+				WhenToUse:    []string{"When stdio needs metadata"},
+				WhenNotToUse: []string{"When stdio should not mutate data"},
+				Examples:     []string{"Show stdio metadata"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				Title:           "Annotated stdio tool",
+				ReadOnlyHint:    &readOnly,
+				DestructiveHint: &destructive,
+			},
+			InputSchema: mcp.InputSchema{Type: "object", Properties: map[string]mcp.Property{}},
+			Security:    mcp.Security{AllowedRoles: []string{"stdio_reader"}},
+		},
+	}
+	legacy := &mcp.Tool{
+		Metadata: mcp.Metadata{Name: "legacy-stdio", Version: "1.0.0", IsActive: true},
+		Spec: mcp.ToolSpec{
+			Description: mcp.Description{Short: "Legacy stdio tool"},
+			InputSchema: mcp.InputSchema{Type: "object", Properties: map[string]mcp.Property{}},
+		},
+	}
+	require.NoError(t, store.Save(annotated))
+	require.NoError(t, store.Save(legacy))
+	require.NoError(t, store.Close())
+
+	binaryPath := filepath.Join(t.TempDir(), "erpbridge-server")
+	//nolint:gosec // The test intentionally builds the local server package.
+	build := exec.Command("go", "build", "-o", binaryPath, ".")
+	build.Dir = "."
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build server: %v\n%s", err, output)
+	}
+
+	//nolint:gosec // The test intentionally launches the binary it just built.
+	cmd := exec.Command(binaryPath, "--stdio")
+	cmd.Env = append(os.Environ(),
+		"DATABASE_PATH="+dbPath,
+		"API_AUTH_TOKEN=",
+		"MCP_ENABLE_TEST_TOOLS=",
+		"MCP_PORT=0",
+		"LOG_TO_STDERR=true",
+	)
+	stdin, err := cmd.StdinPipe()
+	require.NoError(t, err)
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	stderr, err := cmd.StderrPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	defer func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}()
+	go func() { _, _ = io.Copy(io.Discard, stderr) }()
+
+	lines := make(chan []byte, 4)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			lines <- append([]byte(nil), scanner.Bytes()...)
+		}
+		close(lines)
+	}()
+	readResponse := func(label string) []byte {
+		select {
+		case line, ok := <-lines:
+			require.True(t, ok, "stdio %s response stream closed", label)
+			return line
+		case <-time.After(10 * time.Second):
+			t.Fatalf("timed out waiting for stdio %s response", label)
+			return nil
+		}
+	}
+
+	_, err = io.WriteString(stdin, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"metadata-stdio-test","version":"1.0"}}}`+"\n")
+	require.NoError(t, err)
+	var initializeResponse map[string]any
+	require.NoError(t, json.Unmarshal(readResponse("initialize"), &initializeResponse))
+	require.Equal(t, float64(1), initializeResponse["id"])
+
+	_, err = io.WriteString(stdin, `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`+"\n")
+	require.NoError(t, err)
+	var listResponse map[string]any
+	require.NoError(t, json.Unmarshal(readResponse("tools/list"), &listResponse))
+	tools := listResponse["result"].(map[string]any)["tools"].([]any)
+	found := make(map[string]map[string]any, 2)
+	for _, rawTool := range tools {
+		tool, ok := rawTool.(map[string]any)
+		if ok && (tool["name"] == annotated.Metadata.Name || tool["name"] == legacy.Metadata.Name) {
+			found[tool["name"].(string)] = tool
+		}
+	}
+
+	annotatedWire := found[annotated.Metadata.Name]
+	require.NotNil(t, annotatedWire)
+	require.Equal(t, "Annotated stdio tool", annotatedWire["title"])
+	require.Equal(t, false, annotatedWire["annotations"].(map[string]any)["destructiveHint"])
+	require.Equal(t, []any{"When stdio needs metadata"}, annotatedWire["_meta"].(map[string]any)["io.erpbridge/whenToUse"])
+	require.Equal(t, []any{"stdio_reader"}, annotatedWire["_meta"].(map[string]any)["io.erpbridge/allowedRoles"])
+	require.NotContains(t, annotatedWire, "endpoint")
+
+	legacyWire := found[legacy.Metadata.Name]
+	require.NotNil(t, legacyWire)
+	require.Empty(t, legacyWire["annotations"].(map[string]any))
+	require.NotContains(t, legacyWire, "_meta")
 }
 
 func TestStdioProtocolKeepsStdoutForJSONRPC(t *testing.T) {

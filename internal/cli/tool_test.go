@@ -321,6 +321,24 @@ func flagValue(t *testing.T, cmd *cobra.Command, name string) string {
 	return value
 }
 
+func TestDecodeToolDocuments_AcceptsLegacyManifestWithoutAnnotations(t *testing.T) {
+	data := []byte(`apiVersion: erpbridge.io/v1
+kind: MCPTool
+metadata:
+  name: legacy-tool
+  version: 1.0.0
+spec:
+  description:
+    short: Legacy tool
+`)
+
+	tools, err := decodeToolDocuments(data, "legacy.yaml")
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	require.Equal(t, "legacy-tool", tools[0].Metadata.Name)
+	require.Nil(t, tools[0].Spec.Annotations)
+}
+
 func TestToolValidateCmd(t *testing.T) {
 	content := `{"metadata":{"name":"t","version":"1"}}`
 	err := os.WriteFile("test_tool.json", []byte(content), 0600)

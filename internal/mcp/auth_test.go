@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -261,6 +262,88 @@ func TestServer_StreamableHTTPPreservesAgentClientContract(t *testing.T) {
 			assert.Equal(t, http.StatusUnauthorized, unauthenticatedRecorder.Code)
 		})
 	}
+}
+
+func TestServer_PersistedToolMetadataSurvivesReconcileAndHTTPDiscovery(t *testing.T) {
+	t.Setenv("API_AUTH_TOKEN", "admin-secret")
+	dbPath := filepath.Join(t.TempDir(), "erpbridge.db")
+	initial := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, dbPath)
+	readOnly, destructive := true, false
+	annotated := &Tool{
+		Metadata: Metadata{Name: "annotated-tool", Version: testVersion100, IsActive: true},
+		Spec: ToolSpec{
+			Description: Description{
+				Short:        "Annotated tool",
+				WhenToUse:    []string{"When the model needs annotated data"},
+				WhenNotToUse: []string{"When the model needs to change data"},
+				Examples:     []string{"Show annotated data"},
+			},
+			Annotations: &ToolAnnotations{
+				Title:           "Annotated tool",
+				ReadOnlyHint:    &readOnly,
+				DestructiveHint: &destructive,
+			},
+			InputSchema: InputSchema{Type: schemaTypeObject, Properties: map[string]Property{}},
+			Security:    Security{AllowedRoles: []string{"agent_reader"}},
+		},
+	}
+	legacy := &Tool{
+		Metadata: Metadata{Name: "legacy-tool", Version: testVersion100, IsActive: true},
+		Spec: ToolSpec{
+			Description: Description{Short: "Legacy tool"},
+			InputSchema: InputSchema{Type: schemaTypeObject, Properties: map[string]Property{}},
+		},
+	}
+	require.NoError(t, initial.store.Save(annotated))
+	require.NoError(t, initial.store.Save(legacy))
+	require.NoError(t, initial.store.Close())
+
+	fresh := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, dbPath)
+	defer func() { _ = fresh.store.Close() }()
+	fresh.Reconcile(context.Background())
+
+	mux := http.NewServeMux()
+	fresh.ServeHTTP(mux, "http://localhost:8080")
+	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"metadata-test","version":"1.0"}}}`
+	initRequest := httptest.NewRequest(http.MethodPost, "/mcp/", strings.NewReader(initialize))
+	setMCPHeaders(initRequest, "admin-secret", "")
+	initRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(initRecorder, initRequest)
+	require.Equal(t, http.StatusOK, initRecorder.Code)
+	sessionID := initRecorder.Header().Get("Mcp-Session-Id")
+	require.NotEmpty(t, sessionID)
+
+	listRequest := httptest.NewRequest(http.MethodPost, "/mcp/", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`))
+	setMCPHeaders(listRequest, "admin-secret", sessionID)
+	listRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(listRecorder, listRequest)
+	require.Equal(t, http.StatusOK, listRecorder.Code)
+	listResponse := decodeMCPResponse(t, listRecorder, 2)
+	tools := listResponse["result"].(map[string]any)["tools"].([]any)
+	found := make(map[string]map[string]any, 2)
+	for _, rawTool := range tools {
+		tool, ok := rawTool.(map[string]any)
+		if ok && (tool["name"] == annotated.Metadata.Name || tool["name"] == legacy.Metadata.Name) {
+			found[tool["name"].(string)] = tool
+		}
+	}
+
+	annotatedWire := found[annotated.Metadata.Name]
+	require.NotNil(t, annotatedWire)
+	assert.Equal(t, "Annotated tool", annotatedWire["title"])
+	assert.Equal(t, "Annotated tool", annotatedWire["annotations"].(map[string]any)["title"])
+	assert.Equal(t, false, annotatedWire["annotations"].(map[string]any)["destructiveHint"])
+	assert.Equal(t, []any{"When the model needs annotated data"}, annotatedWire["_meta"].(map[string]any)["io.erpbridge/whenToUse"])
+	assert.Equal(t, []any{"When the model needs to change data"}, annotatedWire["_meta"].(map[string]any)["io.erpbridge/whenNotToUse"])
+	assert.Equal(t, []any{"Show annotated data"}, annotatedWire["_meta"].(map[string]any)["io.erpbridge/examples"])
+	assert.Equal(t, []any{"agent_reader"}, annotatedWire["_meta"].(map[string]any)["io.erpbridge/allowedRoles"])
+	assert.NotContains(t, annotatedWire, "endpoint")
+	assert.NotContains(t, annotatedWire, "credentialRef")
+
+	legacyWire := found[legacy.Metadata.Name]
+	require.NotNil(t, legacyWire)
+	assert.Empty(t, legacyWire["annotations"].(map[string]any))
+	assert.NotContains(t, legacyWire, "_meta")
 }
 
 func setMCPHeaders(request *http.Request, token, sessionID string) {
