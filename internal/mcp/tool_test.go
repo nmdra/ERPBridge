@@ -70,6 +70,24 @@ func TestServer_RegisterTool(t *testing.T) {
 	assert.Equal(t, testToolName, registered.Metadata.Name)
 }
 
+func TestToolAnnotationsAreOptionalAndPreserveExplicitFalse(t *testing.T) {
+	tool := Tool{Spec: ToolSpec{}}
+	encoded, err := json.Marshal(tool)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &payload))
+	assert.NotContains(t, payload["spec"], "annotations")
+
+	falseValue := false
+	tool.Spec.Annotations = &ToolAnnotations{DestructiveHint: &falseValue}
+	encoded, err = json.Marshal(tool)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(encoded, &payload))
+	spec := payload["spec"].(map[string]any)
+	annotations := spec["annotations"].(map[string]any)
+	assert.Equal(t, false, annotations["destructiveHint"])
+}
+
 func TestTool_CallERP_CapturesResponseBeforeDecoding(t *testing.T) {
 	mockConn := &MockConnector{
 		CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, options connector.CallOptions) (*http.Response, error) {

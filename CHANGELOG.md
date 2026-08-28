@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   method-aware cache defaults, and sanitized-name collision detection
 - Add optional `bridgectl tool generate --output-dir` output with one JSON or YAML
   file per tool, using the tool name as the filename
+- Add optional method-based MCP tool annotation hints to generated manifests
 - Run `bridgectl api test` through an authenticated server-side probe by
   default, with bounded status summaries and an explicit `--local` legacy mode
 - Normalize MCP transport suffixes for unambiguous control-plane CLI calls and

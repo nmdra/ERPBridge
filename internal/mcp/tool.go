@@ -49,14 +49,15 @@ type Metadata struct {
 
 // ToolSpec defines the behavior, interface, and execution details of a tool.
 type ToolSpec struct {
-	Description  Description   `json:"description"`
-	InputSchema  InputSchema   `json:"inputSchema"`
-	OutputSchema *any          `json:"outputSchema,omitempty"`
-	Execution    Execution     `json:"execution"`
-	Cache        *cache.Config `json:"cache,omitempty"`
-	Security     Security      `json:"security"`
-	Routing      *Routing      `json:"routing,omitempty"`
-	Lifecycle    *Lifecycle    `json:"lifecycle,omitempty"`
+	Description  Description      `json:"description"`
+	Annotations  *ToolAnnotations `json:"annotations,omitempty"`
+	InputSchema  InputSchema      `json:"inputSchema"`
+	OutputSchema *any             `json:"outputSchema,omitempty"`
+	Execution    Execution        `json:"execution"`
+	Cache        *cache.Config    `json:"cache,omitempty"`
+	Security     Security         `json:"security"`
+	Routing      *Routing         `json:"routing,omitempty"`
+	Lifecycle    *Lifecycle       `json:"lifecycle,omitempty"`
 }
 
 // Description provides rich semantic information to the LLM.
@@ -65,6 +66,15 @@ type Description struct {
 	WhenToUse    []string `json:"whenToUse"`
 	WhenNotToUse []string `json:"whenNotToUse"`
 	Examples     []string `json:"examples"`
+}
+
+// ToolAnnotations describes the expected behavior of a tool for MCP clients.
+type ToolAnnotations struct {
+	Title           string `json:"title,omitempty"`
+	ReadOnlyHint    *bool  `json:"readOnlyHint,omitempty"`
+	DestructiveHint *bool  `json:"destructiveHint,omitempty"`
+	IdempotentHint  *bool  `json:"idempotentHint,omitempty"`
+	OpenWorldHint   *bool  `json:"openWorldHint,omitempty"`
 }
 
 // InputSchema defines the structure of arguments required by a tool.

@@ -10,6 +10,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/logger"
+	"github.com/nmdra/ERPBridge/internal/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,6 +66,12 @@ paths:
 	assert.Equal(t, []string{"I need help with: Get test data"}, tools[0].Spec.Description.Examples)
 	assert.Equal(t, "ERP_OPENAPI_KEY", tools[0].Spec.Security.CredentialRef)
 	assert.Equal(t, "GET", tools[0].Spec.Execution.Method)
+	assert.Equal(t, &mcp.ToolAnnotations{
+		ReadOnlyHint:    new(true),
+		DestructiveHint: new(false),
+		IdempotentHint:  new(true),
+		OpenWorldHint:   new(true),
+	}, tools[0].Spec.Annotations)
 	assert.Equal(t, &cache.Config{Enabled: true, TTLSeconds: 300, IsReadOnly: true, FlushOn: []string{}}, tools[0].Spec.Cache)
 
 	// Generation is pure. It must not create implicit sibling artifacts.
@@ -121,6 +128,42 @@ func TestGenerator_Generate(t *testing.T) {
 	assert.Equal(t, []string{"Use when the user asks for: A simple test"}, tool.Spec.Description.WhenToUse)
 	assert.Equal(t, []string{"I need help with: A simple test"}, tool.Spec.Description.Examples)
 	assert.Equal(t, &cache.Config{Enabled: true, TTLSeconds: 300, IsReadOnly: true, FlushOn: []string{}}, tool.Spec.Cache)
+}
+
+func TestGenerator_GenerateSetsMethodAnnotations(t *testing.T) {
+	allHints := func(readOnly, destructive, idempotent bool) *mcp.ToolAnnotations {
+		return &mcp.ToolAnnotations{
+			ReadOnlyHint:    new(readOnly),
+			DestructiveHint: new(destructive),
+			IdempotentHint:  new(idempotent),
+			OpenWorldHint:   new(true),
+		}
+	}
+
+	tests := []struct {
+		method   string
+		expected *mcp.ToolAnnotations
+	}{
+		{method: "GET", expected: allHints(true, false, true)},
+		{method: "HEAD", expected: allHints(true, false, true)},
+		{method: "OPTIONS", expected: allHints(true, false, true)},
+		{method: "TRACE", expected: allHints(true, false, true)},
+		{method: "PUT", expected: allHints(false, true, true)},
+		{method: "DELETE", expected: allHints(false, true, true)},
+		{method: "POST", expected: allHints(false, true, false)},
+		{method: "PATCH", expected: allHints(false, true, false)},
+		{method: "CONNECT", expected: &mcp.ToolAnnotations{OpenWorldHint: new(true)}},
+	}
+
+	gen := NewGenerator(t.TempDir(), logger.Init())
+	for _, test := range tests {
+		t.Run(test.method, func(t *testing.T) {
+			tool, err := gen.Generate(API{Name: "method-" + test.method, Method: test.method, URL: "/resource"})
+			require.NoError(t, err)
+			require.Equal(t, test.method, tool.Spec.Execution.Method)
+			require.Equal(t, test.expected, tool.Spec.Annotations)
+		})
+	}
 }
 
 func TestGenerator_MethodAwareCacheDefaults(t *testing.T) {

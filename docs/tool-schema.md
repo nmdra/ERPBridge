@@ -49,6 +49,21 @@ High-signal information to help the LLM select the correct tool.
 OpenAPI operation summary or description. Treat these values as draft evidence
 and review them before applying the manifest.
 
+### `spec.annotations`
+
+Optional MCP behavioral hints. These values are additive and do not change the
+input or output schema.
+
+- **`title`**: (String, optional) Human-readable display title.
+- **`readOnlyHint`**: (Boolean, optional) Whether the tool is expected not to modify its environment.
+- **`destructiveHint`**: (Boolean, optional) Whether a modifying operation may be destructive.
+- **`idempotentHint`**: (Boolean, optional) Whether repeated calls with the same arguments are expected to have no additional effect.
+- **`openWorldHint`**: (Boolean, optional) Whether the tool interacts with external entities.
+
+Generated annotations are method-based draft hints. Review them before
+applying a generated manifest; they do not replace authorization or other
+server-side controls.
+
 ### `spec.inputSchema`
 
 Standard JSON Schema defining the arguments. **Strict typing is mandatory.**
@@ -61,7 +76,7 @@ Standard JSON Schema defining the arguments. **Strict typing is mandatory.**
 
 Technical mapping to the ERP API.
 
-- **`method`**: (String) `GET`, `POST`, `PUT`, `DELETE`.
+- **`method`**: (String) `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, or `TRACE`.
 - **`endpoint`**: (String) The ERP API URL path.
 - **`mapping`**: (Map) Optional. Maps LLM arg names to ERP parameter names.
 - **`parameterLocations`**: (Map) Generated metadata mapping each LLM argument to `path`, `query`, `header`, or `body`. If absent, GET arguments use the query and other methods use one JSON object body for compatibility.
@@ -141,7 +156,9 @@ spec:
 
 Generated GET and HEAD tools default to a shared read-only cache with a
 five-minute TTL. Generated write methods default to `enabled: false`; review
-and change these values only when the operation is safe to cache.
+and change these values only when the operation is safe to cache. Generated
+tools also include method-based annotation hints for all recognized HTTP
+methods. Unknown methods retain only the HTTP-backed open-world hint.
 
 ### Generated drafts and reviewed manifests
 

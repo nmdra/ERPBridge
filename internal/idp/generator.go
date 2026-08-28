@@ -61,6 +61,7 @@ func (g *Generator) Generate(api API) (*mcp.Tool, error) {
 		},
 		Spec: mcp.ToolSpec{
 			Description: intentDescription(api.Description),
+			Annotations: annotationsForHTTPMethod(method),
 			InputSchema: mcp.InputSchema{
 				Type:       generatedObjectType,
 				Properties: make(map[string]mcp.Property),
@@ -244,6 +245,7 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 				},
 				Spec: mcp.ToolSpec{
 					Description: intentDescription(short),
+					Annotations: annotationsForHTTPMethod(method),
 					InputSchema: mcp.InputSchema{
 						Type:       generatedObjectType,
 						Properties: make(map[string]mcp.Property),
@@ -375,6 +377,25 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 }
 
 const generatedReadCacheTTLSeconds = 300
+
+func annotationsForHTTPMethod(method string) *mcp.ToolAnnotations {
+	annotations := &mcp.ToolAnnotations{OpenWorldHint: new(true)}
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace:
+		annotations.ReadOnlyHint = new(true)
+		annotations.DestructiveHint = new(false)
+		annotations.IdempotentHint = new(true)
+	case http.MethodPut, http.MethodDelete:
+		annotations.ReadOnlyHint = new(false)
+		annotations.DestructiveHint = new(true)
+		annotations.IdempotentHint = new(true)
+	case http.MethodPost, http.MethodPatch:
+		annotations.ReadOnlyHint = new(false)
+		annotations.DestructiveHint = new(true)
+		annotations.IdempotentHint = new(false)
+	}
+	return annotations
+}
 
 func defaultCache(method string) *cache.Config {
 	method = strings.ToUpper(strings.TrimSpace(method))
