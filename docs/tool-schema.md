@@ -64,6 +64,21 @@ Generated annotations are method-based draft hints. Review them before
 applying a generated manifest; they do not replace authorization or other
 server-side controls.
 
+### MCP discovery metadata
+
+During MCP `tools/list`, ERPBridge projects existing guidance into namespaced
+`_meta` keys:
+
+- `io.erpbridge/whenToUse`
+- `io.erpbridge/whenNotToUse`
+- `io.erpbridge/examples`
+- `io.erpbridge/allowedRoles`
+
+The values are informational. `allowedRoles` describes the server's tool
+allow-list; it does not grant access or replace server-side authorization. MCP
+clients may show or ignore custom `_meta`, and they may not forward it to the
+model context.
+
 ### `spec.inputSchema`
 
 Standard JSON Schema defining the arguments. **Strict typing is mandatory.**

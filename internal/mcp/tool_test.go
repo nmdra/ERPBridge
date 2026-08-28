@@ -70,6 +70,67 @@ func TestServer_RegisterTool(t *testing.T) {
 	assert.Equal(t, testToolName, registered.Metadata.Name)
 }
 
+func TestServer_RegisterToolProjectsAnnotationsAndMeta(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(&MockConnector{}, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	readOnly, destructive, idempotent, openWorld := true, false, true, true
+	tool := &Tool{
+		Metadata: Metadata{Name: "list-orders", Version: testVersion100},
+		Spec: ToolSpec{
+			Description: Description{
+				Short:        "List customer orders",
+				WhenToUse:    []string{"When the user asks to review orders"},
+				WhenNotToUse: []string{"When the user wants to create an order"},
+				Examples:     []string{"Show my recent orders"},
+			},
+			Annotations: &ToolAnnotations{
+				Title:           "List orders",
+				ReadOnlyHint:    &readOnly,
+				DestructiveHint: &destructive,
+				IdempotentHint:  &idempotent,
+				OpenWorldHint:   &openWorld,
+			},
+			InputSchema: InputSchema{Type: schemaTypeObject, Properties: map[string]Property{}},
+			Security:    Security{AllowedRoles: []string{"sales_read", "sales_manager"}},
+		},
+	}
+	s.RegisterTool(tool)
+
+	registered := s.mcpServer.ListTools()[tool.Metadata.Name].Tool
+	assert.Equal(t, "List orders", registered.Title)
+	require.Equal(t, "List orders", registered.Annotations.Title)
+	require.Equal(t, true, *registered.Annotations.ReadOnlyHint)
+	require.Equal(t, false, *registered.Annotations.DestructiveHint)
+	require.Equal(t, true, *registered.Annotations.IdempotentHint)
+	require.Equal(t, true, *registered.Annotations.OpenWorldHint)
+	require.NotNil(t, registered.Meta)
+
+	encoded, err := json.Marshal(registered)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &payload))
+	meta := payload["_meta"].(map[string]any)
+	assert.Equal(t, []any{"When the user asks to review orders"}, meta["io.erpbridge/whenToUse"])
+	assert.Equal(t, []any{"When the user wants to create an order"}, meta["io.erpbridge/whenNotToUse"])
+	assert.Equal(t, []any{"Show my recent orders"}, meta["io.erpbridge/examples"])
+	assert.Equal(t, []any{"sales_manager", "sales_read"}, meta["io.erpbridge/allowedRoles"])
+}
+
+func TestServer_RegisterToolOmitsEmptyMCPMeta(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(&MockConnector{}, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	tool := &Tool{
+		Metadata: Metadata{Name: "empty-meta-tool", Version: testVersion100},
+		Spec: ToolSpec{
+			Description: Description{Short: "No metadata"},
+			InputSchema: InputSchema{Type: schemaTypeObject, Properties: map[string]Property{}},
+		},
+	}
+	s.RegisterTool(tool)
+
+	assert.Nil(t, s.mcpServer.ListTools()[tool.Metadata.Name].Tool.Meta)
+}
+
 func TestToolAnnotationsAreOptionalAndPreserveExplicitFalse(t *testing.T) {
 	tool := Tool{Spec: ToolSpec{}}
 	encoded, err := json.Marshal(tool)

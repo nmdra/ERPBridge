@@ -46,8 +46,8 @@ spec:
       - Show my recent orders
   security:
     allowedRoles:
-      - sales.read
-      - sales.manager
+      - sales_read
+      - sales_manager
 ```
 
 No new arbitrary metadata map is added in this iteration. The existing description and security fields are projected into `_meta`.
@@ -80,8 +80,8 @@ The MCP `tools/list` tool definition will contain:
       "Show my recent orders"
     ],
     "io.erpbridge/allowedRoles": [
-      "sales.read",
-      "sales.manager"
+      "sales_read",
+      "sales_manager"
     ]
   }
 }
@@ -146,8 +146,8 @@ Out of scope:
 
 Each implementation task follows Red → Green → Refactor and is one atomic Conventional Commit. Behavior-changing tasks include their required documentation and public-documentation sync in the same commit.
 
-- [ ] Task 1 — Manifest field and generation: Add `ToolAnnotations` and optional `ToolSpec.Annotations`, preserving pointer booleans, explicit false values, and whole-object omission. Add one method-inference helper and call it from both `Generator.Generate` and `Generator.GenerateFromOpenAPI`. Cover all recognized methods (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `TRACE`) and unknown methods. Update the canonical schema docs to document the recognized inference methods and unknown-method behavior, update relevant generator docs, and update `CHANGELOG.md` in the same commit. (**Files:** `internal/mcp/tool.go`, `internal/idp/generator.go`, their tests, `docs/tool-schema.md`, relevant CLI docs, `CHANGELOG.md`; **Paired public-doc deliverable:** update `~/Documents/Projects/erpbridge-docs/docs/erpbridge/tool-schema.mdx` and `~/Documents/Projects/erpbridge-docs/docs/bridgectl/bridgectl_tool_generate.md`, then create and record a corresponding Conventional Commit there; **Verify:** targeted `internal/mcp` and `internal/idp` tests plus both repository commit checks.)
-- [ ] Task 2 — MCP projection: Map explicit annotations to `mcp-go` `ToolAnnotation`, project annotation title to top-level `Tool.Title`, and map allowlisted description guidance plus non-empty allowed roles to namespaced `mcp-go` `Meta`. Add the MCP-facing documentation, security/authorization caveat, and model-visibility caveat in the same commit, including the public SDK/client reference. (**Files:** `internal/mcp/server.go`, `internal/mcp/server_test.go`, `docs/onboarding.md`, `docs/tokens.md`, relevant CLI docs, `CHANGELOG.md`; **Paired public-doc deliverable:** update `~/Documents/Projects/erpbridge-docs/docs/sdk/mcp-tools.mdx` and `~/Documents/Projects/erpbridge-docs/docs/erpbridge/api.mdx`, then create and record a corresponding Conventional Commit there; **Verify:** MCP registration tests, documentation review, and explicit commit checks in both repositories.)
+- [x] Task 1 — Manifest field and generation: Add `ToolAnnotations` and optional `ToolSpec.Annotations`, preserving pointer booleans, explicit false values, and whole-object omission. Add one method-inference helper and call it from both `Generator.Generate` and `Generator.GenerateFromOpenAPI`. Cover all recognized methods (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `TRACE`) and unknown methods. Update the canonical schema docs to document the recognized inference methods and unknown-method behavior, update relevant generator docs, and update `CHANGELOG.md` in the same commit. (**Files:** `internal/mcp/tool.go`, `internal/idp/generator.go`, their tests, `docs/tool-schema.md`, relevant CLI docs, `CHANGELOG.md`; **Paired public-doc deliverable:** update `~/Documents/Projects/erpbridge-docs/docs/erpbridge/tool-schema.mdx` and `~/Documents/Projects/erpbridge-docs/docs/bridgectl/bridgectl_tool_generate.md`, then create and record a corresponding Conventional Commit there; **Verify:** targeted `internal/mcp` and `internal/idp` tests plus both repository commit checks.)
+- [x] Task 2 — MCP projection: Map explicit annotations to `mcp-go` `ToolAnnotation`, project annotation title to top-level `Tool.Title`, and map allowlisted description guidance plus non-empty allowed roles to namespaced `mcp-go` `Meta`. Add the MCP-facing documentation, security/authorization caveat, and model-visibility caveat in the same commit, including the public SDK/client reference. (**Files:** `internal/mcp/server.go`, `internal/mcp/server_test.go`, `docs/onboarding.md`, `docs/tokens.md`, relevant CLI docs, `CHANGELOG.md`; **Paired public-doc deliverable:** update `~/Documents/Projects/erpbridge-docs/docs/sdk/mcp-tools.mdx` and `~/Documents/Projects/erpbridge-docs/docs/erpbridge/api.mdx`, then create and record a corresponding Conventional Commit there; **Verify:** MCP registration tests, documentation review, and explicit commit checks in both repositories.)
 - [ ] Task 3 — End-to-end compatibility: Persist two tools in a file-backed SQLite flow: (a) an explicitly annotated tool with `destructiveHint: false`, guidance, and allowed roles, and (b) a legacy tool with `Annotations:nil`. Load both into a fresh server, reconcile, and assert title, annotations, allowlisted `_meta`, explicit false, and the expected empty-wire-annotations behavior separately through both Streamable HTTP and real stdio `tools/list` paths. Also verify old manifests without `spec.annotations` through CLI decode/apply and control-plane apply. Keep role filtering and authorization assertions unchanged. (**Files:** `internal/mcp/auth_test.go`, `internal/mcp/filter_writer` tests as appropriate, `internal/mcp/store_test.go`, `internal/mcp/api_test.go`, `internal/mcp/server_test.go`, `internal/cli/tool_test.go`; **Verify:** targeted end-to-end tests.)
 - [ ] Task 4 — Full verification: Run repository verification and resolve findings before closing the plan. (**Verify:** `make test`, `golangci-lint run ./internal/mcp ./internal/idp`, and `lens_diagnostics mode=full`.)
 

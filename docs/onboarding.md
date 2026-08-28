@@ -180,6 +180,21 @@ path values are escaped, protected headers are rejected, and
 top-level `data` property. Successful `HEAD` and `204 No Content` responses return a nil
 result without JSON decoding.
 
+Generated manifests can include optional method-based MCP annotations. During
+MCP `tools/list`, ERPBridge also exposes the reviewed intent guidance and
+non-empty `allowedRoles` as namespaced `_meta` values:
+
+- `io.erpbridge/whenToUse`
+- `io.erpbridge/whenNotToUse`
+- `io.erpbridge/examples`
+- `io.erpbridge/allowedRoles`
+
+These values help a host or model reference a tool, but custom `_meta` is not
+guaranteed to reach the model through every MCP client. `allowedRoles` is only a
+discovery hint; the authenticated identity, selected role, and server-side
+allow-list remain authoritative. Do not use a role name as permission to call
+a tool.
+
 A `pii` or `restricted` tool
 requires an existing non-identifying role slug in `allowedRoles`; do not use a
 person name, email, employee number, or ERP record in roles or examples. The

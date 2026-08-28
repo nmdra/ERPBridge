@@ -82,6 +82,13 @@ selected role as `arguments.role`; direct callers use `X-ERPBridge-Role`.
 The selected role must be present in both the token identity and the tool
 allow-list. The server removes the MCP selector before the ERP call.
 
+During MCP `tools/list`, a guarded tool also publishes its non-empty role
+allow-list as `io.erpbridge/allowedRoles` in namespaced `_meta`. This is
+informational discovery metadata for the host or model. It does not grant
+permission, and custom `_meta` may not be forwarded into the model context by
+every MCP client. The server's authenticated identity and authorization check
+remain authoritative.
+
 Classify sensitive tools with `spec.security.dataClass: pii` or `restricted`.
 These classes require one or more opaque, verified role names. Use names such
 as `role_alpha`, not employee names, email addresses, or other personal data.

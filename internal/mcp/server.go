@@ -532,6 +532,37 @@ func (s *Server) FilterToolsList(tools []mcp.Tool) []mcp.Tool {
 	return s.filterToolsList(tools)
 }
 
+func projectToolAnnotations(annotations *ToolAnnotations) mcp.ToolAnnotation {
+	if annotations == nil {
+		return mcp.ToolAnnotation{}
+	}
+	return mcp.ToolAnnotation{
+		Title:           annotations.Title,
+		ReadOnlyHint:    annotations.ReadOnlyHint,
+		DestructiveHint: annotations.DestructiveHint,
+		IdempotentHint:  annotations.IdempotentHint,
+		OpenWorldHint:   annotations.OpenWorldHint,
+	}
+}
+
+func projectToolMeta(t *Tool) *mcp.Meta {
+	fields := make(map[string]any)
+	addValues := func(key string, values []string) {
+		if len(values) > 0 {
+			fields[key] = slices.Clone(values)
+		}
+	}
+
+	addValues("io.erpbridge/whenToUse", t.Spec.Description.WhenToUse)
+	addValues("io.erpbridge/whenNotToUse", t.Spec.Description.WhenNotToUse)
+	addValues("io.erpbridge/examples", t.Spec.Description.Examples)
+	addValues("io.erpbridge/allowedRoles", t.Spec.Security.AllowedRoles)
+	if len(fields) == 0 {
+		return nil
+	}
+	return &mcp.Meta{AdditionalFields: fields}
+}
+
 // RegisterTool adds a tool to the server's registry and active MCP server.
 func (s *Server) RegisterTool(t *Tool) {
 	if err := s.validateTool(t); err != nil {
@@ -566,6 +597,11 @@ func (s *Server) RegisterTool(t *Tool) {
 	// Actually, the spec says we should use stable aliases.
 	// For now, we register with the base name and let the handler resolve.
 	mcpTool := mcp.NewToolWithRawSchema(t.Metadata.Name, t.Spec.Description.Short, json.RawMessage(schemaJSON))
+	if t.Spec.Annotations != nil {
+		mcpTool.Title = t.Spec.Annotations.Title
+	}
+	mcpTool.Annotations = projectToolAnnotations(t.Spec.Annotations)
+	mcpTool.Meta = projectToolMeta(t)
 
 	// Explicitly clear structured input fields because RawInputSchema is used.
 	mcpTool.InputSchema = mcp.ToolInputSchema{}
