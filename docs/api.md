@@ -203,6 +203,12 @@ preserve that envelope and must not flatten structured content.
 | `/api/logs/recent` | `GET` | JSON array of the last 1000 log entries. |
 | `/api/logs/stream` | `GET` | Server-sent events stream of log entries. |
 
+OpenAPI-generated tools preserve path, query, header, and JSON body
+parameters through `execution.parameterLocations`; see the [tool schema
+reference](./tool-schema.md) for the legacy fallback and protected-header
+rules. Generated response unwrapping is used only when the resolved top-level
+response schema proves a `data` property.
+
 `/api/logs/stream` flushes its `200` response headers before the first event.
 Each event uses `data: <JSON>\n\n` framing. Closing the client request stops
 subscription. Subscribers use a bounded 100-event channel; new events are

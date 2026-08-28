@@ -71,6 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Preserve OpenAPI request schemas and parameter locations in generated tools,
+  protect connector-managed headers, infer `data` unwrapping from resolved
+  schemas, and accept successful HEAD/204 responses without JSON bodies.
 - Flush REST log-stream headers immediately, stop on client write failures, and
   document bounded subscriber drop behavior separately from Console projection.
 - Return direct tool rate-limit rejections as HTTP `429` with stable

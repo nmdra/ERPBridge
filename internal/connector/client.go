@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/avast/retry-go/v4"
@@ -37,6 +38,7 @@ type EndpointConfig struct {
 	Method  string
 	Path    string
 	BaseURL string
+	Headers map[string]string
 	Auth    AuthConfig
 }
 
@@ -94,6 +96,24 @@ func (c *Client) clientForRequest(credentialPresent bool) *http.Client {
 		return http.ErrUseLastResponse
 	}
 	return &client
+}
+
+func isProtectedGeneratedHeader(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "authorization", "proxy-authorization", "cookie", "host", "connection", "keep-alive", "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade", "content-length", "content-type":
+		return true
+	default:
+		return false
+	}
+}
+
+func applyGeneratedHeaders(req *http.Request, headers map[string]string) {
+	for name, value := range headers {
+		if name == "" || isProtectedGeneratedHeader(name) {
+			continue
+		}
+		req.Header.Set(name, value)
+	}
 }
 
 func (c *Client) applyAuth(req *http.Request, ep EndpointConfig) {
@@ -195,6 +215,7 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 					return retry.Unrecoverable(fmt.Errorf("build request: %w", err))
 				}
 
+				applyGeneratedHeaders(req, ep.Headers)
 				c.applyAuth(req, ep)
 				req.Header.Set("Content-Type", "application/json")
 

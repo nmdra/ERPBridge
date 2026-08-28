@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -75,19 +76,24 @@ type InputSchema struct {
 
 // Property describes a single field in a tool's input schema.
 type Property struct {
-	Type        string   `json:"type"`
-	Description string   `json:"description,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
-	Default     any      `json:"default,omitempty"`
+	Type        string              `json:"type"`
+	Description string              `json:"description,omitempty"`
+	Enum        []string            `json:"enum,omitempty"`
+	Default     any                 `json:"default,omitempty"`
+	Properties  map[string]Property `json:"properties,omitempty"`
+	Items       *Property           `json:"items,omitempty"`
+	Required    []string            `json:"required,omitempty"`
 }
 
 // Execution defines how the tool call is mapped to an ERP API.
 type Execution struct {
-	Type         string            `json:"type"` // "http"
-	Method       string            `json:"method"`
-	Endpoint     string            `json:"endpoint"`
-	Mapping      map[string]string `json:"mapping,omitempty"`      // Maps LLM arg name -> ERP arg name
-	ResponsePath string            `json:"responsePath,omitempty"` // JSONPath to unwrap response
+	Type               string            `json:"type"` // "http"
+	Method             string            `json:"method"`
+	Endpoint           string            `json:"endpoint"`
+	Mapping            map[string]string `json:"mapping,omitempty"`            // Maps LLM arg name -> ERP arg name
+	ParameterLocations map[string]string `json:"parameterLocations,omitempty"` // Maps LLM arg name -> path/query/header/body
+	BodyArgument       string            `json:"bodyArgument,omitempty"`       // Complete primitive/array request-body argument
+	ResponsePath       string            `json:"responsePath,omitempty"`       // JSONPath to unwrap response
 }
 
 // Security defines the authentication requirements for the tool.
@@ -153,32 +159,76 @@ func (t *Tool) prepareERPCall(args map[string]any) (connector.EndpointConfig, ur
 		return connector.EndpointConfig{}, nil, nil, fmt.Errorf("tool %s has no endpoint configuration", t.Metadata.Name)
 	}
 
-	erpArgs := make(map[string]any)
-	for k, v := range args {
-		if mappedKey, ok := t.Spec.Execution.Mapping[k]; ok {
-			erpArgs[mappedKey] = v
-		} else {
-			erpArgs[k] = v
-		}
-	}
-
+	method := strings.ToUpper(strings.TrimSpace(t.Spec.Execution.Method))
 	fullURL := t.Spec.Execution.Endpoint
-	for k, v := range erpArgs {
-		placeholder := "{" + k + "}"
-		if strings.Contains(fullURL, placeholder) {
-			fullURL = strings.ReplaceAll(fullURL, placeholder, fmt.Sprintf("%v", v))
-			delete(erpArgs, k)
+	queryParams := url.Values{}
+	generatedHeaders := make(map[string]string)
+	bodyFields := make(map[string]any)
+	var completeBody any
+	completeBodySet := false
+
+	argumentNames := make([]string, 0, len(args))
+	for name := range args {
+		argumentNames = append(argumentNames, name)
+	}
+	sort.Strings(argumentNames)
+
+	for _, name := range argumentNames {
+		value := args[name]
+		mappedName := name
+		if mapped, ok := t.Spec.Execution.Mapping[name]; ok && mapped != "" {
+			mappedName = mapped
+		}
+		location, hasLocation := t.Spec.Execution.ParameterLocations[name]
+		location = strings.ToLower(strings.TrimSpace(location))
+		if !hasLocation || location == "" {
+			// Manifests written before parameterLocations retain their original
+			// GET-query/non-GET-body behavior.
+			placeholder := "{" + mappedName + "}"
+			if strings.Contains(fullURL, placeholder) {
+				fullURL = strings.ReplaceAll(fullURL, placeholder, url.PathEscape(fmt.Sprintf("%v", value)))
+				continue
+			}
+			if method == http.MethodGet {
+				queryParams.Set(mappedName, fmt.Sprintf("%v", value))
+			} else {
+				bodyFields[mappedName] = value
+			}
+			continue
+		}
+
+		switch location {
+		case "path":
+			placeholder := "{" + mappedName + "}"
+			if !strings.Contains(fullURL, placeholder) {
+				return connector.EndpointConfig{}, nil, nil, fmt.Errorf("path parameter %q is not present in endpoint", mappedName)
+			}
+			fullURL = strings.ReplaceAll(fullURL, placeholder, url.PathEscape(fmt.Sprintf("%v", value)))
+		case "query":
+			queryParams.Set(mappedName, fmt.Sprintf("%v", value))
+		case "header":
+			generatedHeaders[mappedName] = fmt.Sprintf("%v", value)
+		case "body":
+			if t.Spec.Execution.BodyArgument == name {
+				completeBody = value
+				completeBodySet = true
+			} else {
+				bodyFields[mappedName] = value
+			}
+		default:
+			return connector.EndpointConfig{}, nil, nil, fmt.Errorf("unsupported parameter location %q", location)
 		}
 	}
 
-	queryParams := url.Values{}
 	var body io.Reader
-	if t.Spec.Execution.Method == http.MethodGet {
-		for k, v := range erpArgs {
-			queryParams.Set(k, fmt.Sprintf("%v", v))
+	if completeBodySet {
+		data, err := json.Marshal(completeBody)
+		if err != nil {
+			return connector.EndpointConfig{}, nil, nil, fmt.Errorf("marshal request body: %w", err)
 		}
-	} else if len(erpArgs) > 0 {
-		data, err := json.Marshal(erpArgs)
+		body = strings.NewReader(string(data))
+	} else if len(bodyFields) > 0 {
+		data, err := json.Marshal(bodyFields)
 		if err != nil {
 			return connector.EndpointConfig{}, nil, nil, fmt.Errorf("marshal arguments: %w", err)
 		}
@@ -211,9 +261,10 @@ func (t *Tool) prepareERPCall(args map[string]any) (connector.EndpointConfig, ur
 		return connector.EndpointConfig{}, nil, nil, err
 	}
 	return connector.EndpointConfig{
-		Method:  t.Spec.Execution.Method,
+		Method:  method,
 		Path:    fullURL,
 		BaseURL: "",
+		Headers: generatedHeaders,
 		Auth: connector.AuthConfig{
 			Type: t.Spec.Security.AuthType,
 			Key:  cred,
@@ -272,7 +323,17 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 	if err != nil {
 		return nil, fmt.Errorf("erp call failed: %w", err)
 	}
-	if resp == nil || resp.Body == nil {
+	if resp == nil {
+		return nil, errors.New("erp response is unavailable")
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 &&
+		(strings.EqualFold(t.Spec.Execution.Method, http.MethodHead) || resp.StatusCode == http.StatusNoContent) {
+		if resp.Body != nil {
+			defer func() { _ = resp.Body.Close() }()
+		}
+		return &ToolResult{Result: nil}, nil
+	}
+	if resp.Body == nil {
 		return nil, errors.New("erp response body is unavailable")
 	}
 	defer func() { _ = resp.Body.Close() }()

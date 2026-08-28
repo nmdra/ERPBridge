@@ -54,6 +54,7 @@ and review them before applying the manifest.
 Standard JSON Schema defining the arguments. **Strict typing is mandatory.**
 
 - Use `properties` to define fields and `required` to enforce them.
+- Nested objects use nested `properties` and `required`; arrays use `items`.
 - **Avoid "filters" strings**: Break down complex query requirements into individual typed properties.
 
 ### `spec.execution`
@@ -63,7 +64,16 @@ Technical mapping to the ERP API.
 - **`method`**: (String) `GET`, `POST`, `PUT`, `DELETE`.
 - **`endpoint`**: (String) The ERP API URL path.
 - **`mapping`**: (Map) Optional. Maps LLM arg names to ERP parameter names.
-- **`responsePath`**: (String) JSON key to extract from the ERP response (e.g., `"data"` or `"message"`).
+- **`parameterLocations`**: (Map) Generated metadata mapping each LLM argument to `path`, `query`, `header`, or `body`. If absent, GET arguments use the query and other methods use one JSON object body for compatibility.
+- **`bodyArgument`**: (String) Generated complete-body argument for primitive or array JSON request bodies. Its value is serialized as the complete body instead of an object property.
+- **`responsePath`**: (String) Optional JSON key to extract from the ERP response. OpenAPI generation emits `data` only when the resolved top-level response schema is an object with a top-level `data` property; the output schema then describes that unwrapped value.
+
+Generated path values are URL-escaped. Generated headers are allowlisted and
+cannot replace connector authentication or transport headers. `Authorization`,
+`Proxy-Authorization`, `Cookie`, `Host`, connection, transfer, upgrade,
+`Content-Length`, and `Content-Type` parameters are rejected during generation.
+A successful `HEAD` or `204 No Content` response returns a successful nil
+result without JSON decoding.
 
 ### `spec.security`
 

@@ -124,6 +124,67 @@ func TestTool_CallERP_RejectsOversizedResponse(t *testing.T) {
 	assert.Nil(t, response)
 }
 
+func TestTool_PrepareERPCallRoutesGeneratedParameterLocations(t *testing.T) {
+	t.Setenv("ERP_BASE_URL", "")
+	tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{
+		Execution: Execution{
+			Method:             http.MethodPost,
+			Endpoint:           "https://erp.example/items/{id}",
+			Mapping:            map[string]string{"item_id": "id", "search": "q", "trace": "X-Trace"},
+			ParameterLocations: map[string]string{"item_id": "path", "search": "query", "trace": "header", "details": "body"},
+		},
+	}}
+
+	ep, query, body, err := tool.prepareERPCall(map[string]any{
+		"item_id": "a/b",
+		"search":  "open items",
+		"trace":   "trace-1",
+		"details": map[string]any{"enabled": true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://erp.example/items/a%2Fb", ep.Path)
+	require.Equal(t, "open items", query.Get("q"))
+	require.Equal(t, "trace-1", ep.Headers["X-Trace"])
+	require.NotNil(t, body)
+	encoded, readErr := io.ReadAll(body)
+	require.NoError(t, readErr)
+	var bodyValue map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &bodyValue))
+	require.Equal(t, map[string]any{"enabled": true}, bodyValue["details"])
+}
+
+func TestTool_PrepareERPCallUsesLegacyFallbackWithoutLocationMetadata(t *testing.T) {
+	t.Setenv("ERP_BASE_URL", "")
+	tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{
+		Execution: Execution{Method: http.MethodPost, Endpoint: "https://erp.example/items"},
+	}}
+
+	_, query, body, err := tool.prepareERPCall(map[string]any{"name": "item-1"})
+	require.NoError(t, err)
+	require.Empty(t, query)
+	require.NotNil(t, body)
+}
+
+func TestTool_PrepareERPCallSerializesCompletePrimitiveBody(t *testing.T) {
+	t.Setenv("ERP_BASE_URL", "")
+	tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{
+		Execution: Execution{
+			Method:       http.MethodPost,
+			Endpoint:     "https://erp.example/items",
+			BodyArgument: "body",
+			ParameterLocations: map[string]string{
+				"body": "body",
+			},
+		},
+	}}
+
+	_, _, body, err := tool.prepareERPCall(map[string]any{"body": []any{"item-1", "item-2"}})
+	require.NoError(t, err)
+	encoded, readErr := io.ReadAll(body)
+	require.NoError(t, readErr)
+	require.JSONEq(t, `["item-1","item-2"]`, string(encoded))
+}
+
 func TestTool_Execute(t *testing.T) {
 	mockConn := &MockConnector{
 		CallFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader) (*http.Response, error) {
@@ -155,6 +216,44 @@ func TestTool_Execute(t *testing.T) {
 	resultMap, ok := result.Result.(map[string]any)
 	assert.True(t, ok)
 	assert.Equal(t, "success", resultMap["status"])
+}
+
+func TestTool_Execute_SuccessfulHeadAndNoContentSkipDecoding(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		method string
+		status int
+	}{
+		{name: "head", method: http.MethodHead, status: http.StatusOK},
+		{name: "no content", method: http.MethodGet, status: http.StatusNoContent},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			mockConn := &MockConnector{CallFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader) (*http.Response, error) {
+				return &http.Response{StatusCode: test.status, Body: io.NopCloser(bytes.NewBufferString("not-json"))}, nil
+			}}
+			tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{
+				Execution: Execution{Method: test.method, Endpoint: testEndpoint},
+			}}
+
+			result, err := tool.Execute(context.Background(), nil, mockConn)
+			require.NoError(t, err)
+			require.False(t, result.IsError)
+			require.Nil(t, result.Result)
+		})
+	}
+}
+
+func TestTool_Execute_MalformedNonEmptyResponseRemainsError(t *testing.T) {
+	mockConn := &MockConnector{CallFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString("not-json"))}, nil
+	}}
+	tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{
+		Execution: Execution{Method: http.MethodGet, Endpoint: testEndpoint},
+	}}
+
+	_, err := tool.Execute(context.Background(), nil, mockConn)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "decode erp response")
 }
 
 func TestTool_Execute_Error(t *testing.T) {

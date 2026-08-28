@@ -21,6 +21,7 @@ import (
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -193,6 +194,43 @@ func TestServer_RegisterToolMarshaling(t *testing.T) {
 	data, err := json.Marshal(mcpTool)
 	assert.NoError(t, err, "Tool marshaling should not fail")
 	assert.Contains(t, string(data), "\"inputSchema\":{\"type\":\"object\"")
+}
+
+func TestServer_RegisterToolMarshalsRecursiveInputSchema(t *testing.T) {
+	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	schema := InputSchema{
+		Type: schemaTypeObject,
+		Properties: map[string]Property{
+			"details": {
+				Type:       schemaTypeObject,
+				Properties: map[string]Property{"code": {Type: schemaTypeString}},
+				Required:   []string{"code"},
+			},
+			"tags": {
+				Type:  "array",
+				Items: &Property{Type: schemaTypeString, Enum: []string{"new", "old"}},
+			},
+		},
+		Required: []string{"details"},
+	}
+	s.RegisterTool(&Tool{
+		Metadata: Metadata{Name: "recursive-schema", Version: testVersion100},
+		Spec:     ToolSpec{InputSchema: schema},
+	})
+
+	registered := s.mcpServer.ListTools()["recursive-schema"]
+	encoded, err := json.Marshal(registered.Tool)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &payload))
+	inputSchema := payload["inputSchema"].(map[string]any)
+	properties := inputSchema["properties"].(map[string]any)
+	details := properties["details"].(map[string]any)
+	require.Equal(t, []any{"code"}, details["required"])
+	tags := properties["tags"].(map[string]any)
+	require.Equal(t, []any{"new", "old"}, tags["items"].(map[string]any)["enum"])
+	require.Equal(t, []any{"details"}, inputSchema["required"])
+	require.NotContains(t, string(encoded), "parameterLocations")
 }
 
 func TestServer_RegisterToolInitializesMetrics(t *testing.T) {

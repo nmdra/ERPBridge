@@ -12,6 +12,7 @@ import (
 
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/security"
+	"github.com/stretchr/testify/require"
 )
 
 const transportTestCredential = "test-value" // #nosec G101 -- test-only credential value.
@@ -109,6 +110,35 @@ func TestClient_CallWithOptions_DisablesRedirectsForRawCapture(t *testing.T) {
 	if finalCalls != 0 {
 		t.Fatalf("redirect target calls = %d, want 0", finalCalls)
 	}
+}
+
+func TestClient_Call_ProtectsConnectorHeadersFromGeneratedOverrides(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Trace"); got != "trace-1" {
+			t.Errorf("X-Trace = %q, want trace-1", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "test-key" {
+			t.Errorf("Authorization = %q, want connector value", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("Content-Type = %q, want connector value", got)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+	allowInsecureAuthHost(t, ts.URL)
+
+	client := NewClient(slog.Default())
+	ep := EndpointConfig{
+		Method:  http.MethodGet,
+		Path:    "/test",
+		BaseURL: ts.URL,
+		Headers: map[string]string{"X-Trace": "trace-1", "Authorization": "evil", "Content-Type": "text/plain"},
+		Auth:    AuthConfig{Type: "api-key", Key: "test-key"},
+	}
+	resp, err := client.Call(context.Background(), ep, nil, nil)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
 }
 
 func TestClient_Call_APIKey(t *testing.T) {

@@ -208,7 +208,7 @@ External contract references used for the design:
   `go test ./internal/mcp ./internal/logger ./internal/cli -run 'Log|SSE|Stream' -count=1`
   and a real HTTP client receives headers within one second on an idle stream.
 
-- [ ] **Task 4: Preserve OpenAPI request and response schemas.** Add failing
+- [x] **Task 4: Preserve OpenAPI request and response schemas.** Add failing
   generator/tool tests for `$ref` request bodies, nested objects, arrays,
   enums, defaults, required fields, path/query/header parameters, HEAD and
   non-HEAD `204 No Content` behavior, top-level non-`data` responses, and the

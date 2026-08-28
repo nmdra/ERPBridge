@@ -242,7 +242,7 @@ paths:
 	require.Equal(t, "http", get.Spec.Execution.Type)
 	require.Equal(t, "GET", get.Spec.Execution.Method)
 	require.Equal(t, "http://localhost:8081/orders/{id}", get.Spec.Execution.Endpoint)
-	require.Equal(t, "data", get.Spec.Execution.ResponsePath)
+	require.Empty(t, get.Spec.Execution.ResponsePath)
 	require.Equal(t, "string", get.Spec.InputSchema.Properties["id"].Type)
 	require.Equal(t, []string{"id"}, get.Spec.InputSchema.Required)
 	require.NotNil(t, get.Spec.OutputSchema)
@@ -256,6 +256,169 @@ paths:
 	require.False(t, create.Spec.Cache.IsReadOnly)
 	require.NotEmpty(t, create.Spec.Description.WhenToUse)
 	require.NotEmpty(t, create.Spec.Description.Examples)
+}
+
+func TestGenerator_OpenAPIPreservesRequestSchemaAndParameterLocations(t *testing.T) {
+	spec := `
+openapi: 3.0.0
+info: {title: Mapping API, version: 1.0.0}
+paths:
+  /items/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: string}
+      - name: filter
+        in: query
+        schema: {type: string}
+    post:
+      operationId: createItem
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema: {type: string}
+        - name: filter
+          in: query
+          description: operation filter
+          schema: {type: string}
+        - name: trace
+          in: header
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ItemInput'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ItemResponse'}
+components:
+  schemas:
+    ItemInput:
+      type: object
+      required: [details, tags]
+      properties:
+        details:
+          type: object
+          required: [code]
+          properties:
+            code: {type: string}
+        tags:
+          type: array
+          items:
+            type: string
+            enum: [new, old]
+    ItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          properties:
+            id: {type: string}
+`
+	path := filepath.Join(t.TempDir(), "openapi.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(spec), 0600))
+	api := API{Module: "sales", AuthType: "bearer", CredentialRef: "ERP_API_KEY"} // #nosec G101 -- test-only credential reference.
+
+	tools, err := NewGenerator(t.TempDir(), logger.Init()).GenerateFromOpenAPI(context.Background(), api, path)
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	tool := tools[0]
+
+	require.Equal(t, "operation filter", tool.Spec.InputSchema.Properties["filter"].Description)
+	require.Contains(t, tool.Spec.InputSchema.Required, "id__path")
+	require.Contains(t, tool.Spec.InputSchema.Required, "id__query")
+	require.Contains(t, tool.Spec.InputSchema.Required, "details")
+	require.Contains(t, tool.Spec.InputSchema.Required, "tags")
+	require.Equal(t, "id", tool.Spec.Execution.Mapping["id__path"])
+	require.Equal(t, "id", tool.Spec.Execution.Mapping["id__query"])
+	require.Equal(t, "path", tool.Spec.Execution.ParameterLocations["id__path"])
+	require.Equal(t, "query", tool.Spec.Execution.ParameterLocations["id__query"])
+	require.Equal(t, "header", tool.Spec.Execution.ParameterLocations["trace"])
+	require.Equal(t, "string", tool.Spec.InputSchema.Properties["details"].Properties["code"].Type)
+	require.Equal(t, []string{"new", "old"}, tool.Spec.InputSchema.Properties["tags"].Items.Enum)
+	require.Equal(t, []string{"code"}, tool.Spec.InputSchema.Properties["details"].Required)
+	require.Equal(t, "data", tool.Spec.Execution.ResponsePath)
+	output, ok := (*tool.Spec.OutputSchema).(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "object", output["type"])
+}
+
+func TestGenerator_OpenAPIRejectsProtectedHeaderParameter(t *testing.T) {
+	spec := `
+openapi: 3.0.0
+info: {title: Header API, version: 1.0.0}
+paths:
+  /items:
+    get:
+      operationId: listItems
+      parameters:
+        - name: Authorization
+          in: header
+          schema: {type: string}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {type: object, properties: {items: {type: array, items: {type: string}}}}
+`
+	path := filepath.Join(t.TempDir(), "openapi.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(spec), 0600))
+	api := API{Module: "sales", AuthType: "bearer", CredentialRef: "ERP_API_KEY"} // #nosec G101 -- test-only credential reference.
+
+	_, err := NewGenerator(t.TempDir(), logger.Init()).GenerateFromOpenAPI(context.Background(), api, path)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "protected header")
+}
+
+func TestGenerator_OpenAPIUsesCompletePrimitiveBodyAndDoesNotInferNestedData(t *testing.T) {
+	spec := `
+openapi: 3.0.0
+info: {title: Primitive API, version: 1.0.0}
+paths:
+  /items:
+    post:
+      operationId: submitItems
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: {type: string}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metadata:
+                    type: object
+                    properties:
+                      data: {type: string}
+`
+	path := filepath.Join(t.TempDir(), "openapi.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(spec), 0600))
+	api := API{Module: "sales", AuthType: "bearer", CredentialRef: "ERP_API_KEY"} // #nosec G101 -- test-only credential reference.
+
+	tools, err := NewGenerator(t.TempDir(), logger.Init()).GenerateFromOpenAPI(context.Background(), api, path)
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	tool := tools[0]
+	require.Equal(t, "", tool.Spec.Execution.ResponsePath)
+	require.Equal(t, "body", tool.Spec.Execution.BodyArgument)
+	require.Equal(t, "array", tool.Spec.InputSchema.Properties["body"].Type)
+	require.Equal(t, "string", tool.Spec.InputSchema.Properties["body"].Items.Type)
 }
 
 func TestDereferenceSchema_RemovesRefsAndRejectsUnknownRefs(t *testing.T) {
