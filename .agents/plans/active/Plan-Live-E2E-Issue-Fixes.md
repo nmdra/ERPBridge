@@ -141,7 +141,7 @@ External contract references used for the design:
 
 ## Tasks
 
-- [ ] **Task 1: Correct the regression harness and classify observed outcomes.**
+- [x] **Task 1: Correct the regression harness and classify observed outcomes.**
   Update the live test workspace so it tests the real contracts before changing
   server code: send rate-limit bursts through healthy `tools/call` and direct
   probes, map `PLUGIN_MOCK_API_KEY` into the sample plugin service while using
