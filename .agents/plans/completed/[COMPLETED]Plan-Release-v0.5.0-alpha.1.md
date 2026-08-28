@@ -116,25 +116,29 @@ matrix and local release gates.
   `make web-test`, `make web-lint`, `make lint`, `make build`,
   `./scripts/verify-console-assets.sh`, and `goreleaser check` all passed.
 
-- [ ] **Task 4: Cut and synchronize release notes.** Move the accumulated
+- [x] **Task 4: Cut and synchronize release notes.** Move the accumulated
   `Unreleased` entries into `v0.5.0-alpha.1` with the verified release date,
   retain an empty `Unreleased` section, and update comparison links. Keep the
   root developer documentation and the public documentation checkout aligned
   for the user-visible MCP and CLI behavior. **Seam:** Keep a Changelog and
   paired documentation review. **Files:** `CHANGELOG.md`, relevant `docs/`
   pages, `/home/nimendra/Documents/Projects/erpbridge-docs/CHANGELOG.md`, and
-  affected public pages; **Verify:** changelog link checks, a clean Docusaurus
-  `npm run build`, and `git diff --check` in both repositories.
+  affected public pages; **Verify:** `CHANGELOG.md` was cut on 2026-08-29;
+  the public docs checkout was clean after its successful Docusaurus build;
+  and `git diff --check` passed in both repositories.
 
-- [ ] **Task 5: Execute the approved release.** After all prior tasks are
+- [x] **Task 5: Execute the approved release.** After all prior tasks are
   green, create the annotated `v0.5.0-alpha.1` tag at the reviewed commit and
   push only the tag. Confirm the GitHub Actions release workflow publishes the
   expected archives, binaries, multi-platform image, checksums, SBOMs, and
   signatures, then verify artifact checksums and version/commit/date metadata.
   **Seam:** Git tag trigger and GoReleaser publication workflow. **Files:** no
-  source files; Git tag and release artifacts only. **Verify:** workflow is
-  green, GitHub release assets are complete, GHCR image tags resolve, and
-  published checksums/signatures verify locally.
+  source files; Git tag and release artifacts only. **Verify:** tag `v0.5.0-alpha.1`
+  points to `1bb1b3dd`; workflow run `33210187842` completed successfully;
+  GitHub published 18 assets; all 16 archives/SBOMs passed checksum validation;
+  the checksum bundle passed cosign verification; GHCR tag `0.5.0-alpha.1`
+  exposes Linux amd64 and arm64 images; and published `bridgectl` reports
+  version `0.5.0-alpha.1`.
 
 ## Verification
 
@@ -147,8 +151,9 @@ matrix and local release gates.
 - Changelog and public documentation builds are synchronized.
 - No credentials, ERP bodies, plugin payloads, token values, raw logs, or
   runtime state are committed or retained after cleanup.
-- Release publication is not attempted until the candidate checklist is
-  reviewed and approved.
+- Release `v0.5.0-alpha.1` is published at
+  `https://github.com/nmdra/ERPBridge/releases/tag/v0.5.0-alpha.1`; the
+  release workflow and artifact checks completed successfully.
 
 ## Open Questions
 
