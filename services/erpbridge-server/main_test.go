@@ -193,11 +193,13 @@ func TestStdioProtocolListsPersistedToolMetadata(t *testing.T) {
 	go func() { _, _ = io.Copy(io.Discard, stderr) }()
 
 	lines := make(chan []byte, 4)
+	scannerErr := make(chan error, 1)
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			lines <- append([]byte(nil), scanner.Bytes()...)
 		}
+		scannerErr <- scanner.Err()
 		close(lines)
 	}()
 	readResponse := func(label string) []byte {
@@ -242,6 +244,14 @@ func TestStdioProtocolListsPersistedToolMetadata(t *testing.T) {
 	require.NotNil(t, legacyWire)
 	require.Empty(t, legacyWire["annotations"].(map[string]any))
 	require.NotContains(t, legacyWire, "_meta")
+
+	require.NoError(t, stdin.Close())
+	select {
+	case scanErr := <-scannerErr:
+		require.NoError(t, scanErr)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for stdio response stream to close")
+	}
 }
 
 func TestStdioProtocolKeepsStdoutForJSONRPC(t *testing.T) {
