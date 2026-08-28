@@ -203,6 +203,12 @@ You can use the local `bridgectl` binary to interact with the server running in 
   ./bridgectl log tail
   ```
 
+The REST `/api/logs/stream` endpoint flushes authenticated SSE headers before
+its first event and sends `data: <JSON>\n\n` frames. Closing the client stops
+its subscription. Each subscriber has a bounded 100-event channel; new events
+are dropped when a slow subscriber's channel is full. This raw stream is not
+the redacted Console BFF projection.
+
 - **Metrics:**
   Prometheus metrics are available at `http://localhost:8080/metrics`.
 

@@ -20,6 +20,8 @@ var (
 )
 
 // Subscribe adds a new log channel subscriber to receive raw JSON log lines.
+// Subscribers have a bounded 100-entry buffer; new messages are dropped when
+// a slow subscriber's buffer is full.
 func Subscribe() chan []byte {
 	listenersMu.Lock()
 	defer listenersMu.Unlock()

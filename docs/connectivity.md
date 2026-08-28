@@ -99,6 +99,12 @@ Standard endpoints for system health and observability.
 - **Health Check:** `GET /mcp/health` (Returns `{"status": "ok"}`)
 - **Metrics:** `GET /metrics` (Prometheus formatted metrics)
 
+Authenticated clients can open `/api/logs/stream` for SSE events. The server
+flushes headers before the first event and frames each event as
+`data: <JSON>\n\n`. The raw stream is distinct from the redacted Console BFF
+projection. A slow subscriber uses a bounded 100-event channel; new events are
+dropped when it is full.
+
 ## Summary Table
 
 | Client Type | Recommended Transport | Base URL / Method |

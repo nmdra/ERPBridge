@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -88,6 +89,24 @@ func TestBroadcastHandler(t *testing.T) {
 		}
 	default:
 		t.Error("Subscriber did not receive the broadcast message")
+	}
+}
+
+func TestBroadcastHandlerDropsWhenSubscriberBufferIsFull(t *testing.T) {
+	listenersMu.Lock()
+	logListeners = nil
+	logBuffer = nil
+	listenersMu.Unlock()
+
+	ch := Subscribe()
+	defer Unsubscribe(ch)
+	log := slog.New(&broadcastHandler{Handler: newHandler(io.Discard, slog.LevelInfo, true)})
+	for i := 0; i < cap(ch)+1; i++ {
+		log.Info(fmt.Sprintf("drop-policy-%d", i))
+	}
+
+	if got := len(ch); got != cap(ch) {
+		t.Fatalf("subscriber buffer length = %d, want %d", got, cap(ch))
 	}
 }
 

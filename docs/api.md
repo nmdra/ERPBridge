@@ -203,6 +203,12 @@ preserve that envelope and must not flatten structured content.
 | `/api/logs/recent` | `GET` | JSON array of the last 1000 log entries. |
 | `/api/logs/stream` | `GET` | Server-sent events stream of log entries. |
 
+`/api/logs/stream` flushes its `200` response headers before the first event.
+Each event uses `data: <JSON>\n\n` framing. Closing the client request stops
+subscription. Subscribers use a bounded 100-event channel; new events are
+dropped for a slow subscriber when that channel is full. The raw stream is
+separate from the Console BFF, which applies its own projection and redaction.
+
 ## MCP Endpoints
 
 | Endpoint | Method | Description |

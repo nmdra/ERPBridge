@@ -188,7 +188,7 @@ External contract references used for the design:
   fresh live phase where direct bursts contain `429` and a reservation-derived
   `Retry-After`, while MCP tool calls remain protocol `200` with `isError=true`.
 
-- [ ] **Task 3: Make REST SSE connections establish and terminate cleanly.**
+- [x] **Task 3: Make REST SSE connections establish and terminate cleanly.**
   Write failing real-client tests that receive response headers before any log
   event, receive one correctly framed event, cancel the request, and detect a
   client write failure. Flush after setting headers, stop on `fmt.Fprintf`

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -359,6 +361,85 @@ func TestServer_MCPCORSPreflightRunsBeforeAuthentication(t *testing.T) {
 	recorder = httptest.NewRecorder()
 	mux.ServeHTTP(recorder, request)
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+}
+
+type failingLogStreamWriter struct {
+	header http.Header
+}
+
+func (w *failingLogStreamWriter) Header() http.Header { return w.header }
+func (w *failingLogStreamWriter) WriteHeader(int)     {}
+func (w *failingLogStreamWriter) Write([]byte) (int, error) {
+	return 0, fmt.Errorf("synthetic log stream write failure")
+}
+func (w *failingLogStreamWriter) Flush() {}
+
+func TestServer_LogStreamFlushesHeadersAndFramesEvents(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/logs", s.handleLogStream)
+	httpServer := httptest.NewServer(mux)
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, httpServer.URL+"/logs", nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+	client := &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: time.Second}}
+	response, err := client.Do(request)
+	if !assert.NoError(t, err) {
+		return
+	}
+	defer func() { _ = response.Body.Close() }()
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "text/event-stream", response.Header.Get("Content-Type"))
+
+	lines := make(chan string, 1)
+	reader := bufio.NewReader(response.Body)
+	go func() {
+		first, firstErr := reader.ReadString('\n')
+		second, secondErr := reader.ReadString('\n')
+		if firstErr != nil || secondErr != nil {
+			lines <- ""
+			return
+		}
+		lines <- first + second
+	}()
+	log.Info("real client stream event")
+
+	select {
+	case event := <-lines:
+		assert.Contains(t, event, "data: ")
+		assert.True(t, strings.HasSuffix(event, "\n\n"))
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for SSE event")
+	}
+	cancel()
+}
+
+func TestServer_LogStreamStopsOnWriteFailure(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request := httptest.NewRequest(http.MethodGet, "/api/logs/stream", nil).WithContext(ctx)
+	writer := &failingLogStreamWriter{header: make(http.Header)}
+	done := make(chan struct{})
+	go func() {
+		s.handleLogStream(writer, request)
+		close(done)
+	}()
+	time.Sleep(10 * time.Millisecond)
+	log.Info("failing stream event")
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("log stream did not stop after a write failure")
+	}
 }
 
 func TestServer_LogStream(t *testing.T) {

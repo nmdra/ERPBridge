@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Flush REST log-stream headers immediately, stop on client write failures, and
+  document bounded subscriber drop behavior separately from Console projection.
 - Return direct tool rate-limit rejections as HTTP `429` with stable
   `RATE_LIMITED` errors and `Retry-After`, while MCP `tools/call` keeps its
   HTTP-successful `isError` result contract; validate rate settings strictly.
