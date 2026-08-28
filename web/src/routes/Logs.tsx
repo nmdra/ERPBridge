@@ -1,5 +1,5 @@
 import { Radio, RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PageHeader } from "../components/layout/PageHeader";
 import { Card, CardContent } from "../components/ui/card";
@@ -7,8 +7,14 @@ import { EmptyState } from "../components/ui/empty-state";
 import { FilterToolbar } from "../components/ui/filter-toolbar";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
+import { Pagination } from "../components/ui/pagination";
 import { StateBanner } from "../components/ui/state-banner";
-import { useFilteredLogs, useLogs } from "../hooks/useObservability";
+import {
+  useFilteredLogs,
+  useLogs,
+  type LogEvent,
+} from "../hooks/useObservability";
+import { usePagination } from "../hooks/usePagination";
 
 const emptyFilters = {
   level: "",
@@ -17,10 +23,69 @@ const emptyFilters = {
   requestId: "",
 };
 
+type LogFilters = typeof emptyFilters;
+
+function useStreamingLogPagination(items: LogEvent[], filters: LogFilters) {
+  const basePagination = usePagination(items, 50);
+  const [selectedPage, setSelectedPage] = useState(1);
+  const previousItems = useRef(items);
+  const previousFilters = useRef(filters);
+  const page = Math.min(
+    Math.max(1, selectedPage),
+    Math.max(1, basePagination.pageCount),
+  );
+
+  useEffect(() => {
+    const collectionChanged = previousItems.current !== items;
+    const filtersChanged = previousFilters.current !== filters;
+    previousItems.current = items;
+    previousFilters.current = filters;
+
+    if (filtersChanged) {
+      setSelectedPage(1);
+    } else if (collectionChanged) {
+      setSelectedPage((currentPage) =>
+        Math.min(
+          Math.max(1, currentPage),
+          Math.max(1, basePagination.pageCount),
+        ),
+      );
+    }
+  }, [basePagination.pageCount, filters, items]);
+
+  const setPage = useCallback(
+    (nextPage: number) => {
+      setSelectedPage(
+        Math.min(
+          Math.max(1, Math.floor(nextPage)),
+          Math.max(1, basePagination.pageCount),
+        ),
+      );
+    },
+    [basePagination.pageCount],
+  );
+  const previous = useCallback(() => setPage(page - 1), [page, setPage]);
+  const next = useCallback(() => setPage(page + 1), [page, setPage]);
+  const start = (page - 1) * 50;
+  const pageItems = items.slice(start, start + 50);
+
+  return {
+    ...basePagination,
+    page,
+    firstItem: pageItems.length === 0 ? 0 : start + 1,
+    lastItem: pageItems.length === 0 ? 0 : start + pageItems.length,
+    pageItems,
+    next,
+    previous,
+    setPage,
+  };
+}
+
 export function Logs({ contextName }: { contextName: string }) {
   const logs = useLogs(contextName);
   const [filters, setFilters] = useState(emptyFilters);
   const filtered = useFilteredLogs(logs.data, filters);
+  const pagination = useStreamingLogPagination(filtered, filters);
   const options = useMemo(
     () => ({
       levels: [
@@ -208,7 +273,7 @@ export function Logs({ contextName }: { contextName: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((event, index) => (
+                  {pagination.pageItems.map((event, index) => (
                     <tr
                       className="border-b border-border last:border-0 hover:bg-muted/30"
                       key={`${event.requestId ?? "event"}-${index}`}
@@ -228,6 +293,18 @@ export function Logs({ contextName }: { contextName: string }) {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="px-5 pb-4">
+              <Pagination
+                label="Logs pagination"
+                firstItem={pagination.firstItem}
+                lastItem={pagination.lastItem}
+                onNext={pagination.next}
+                onPrevious={pagination.previous}
+                page={pagination.page}
+                pageCount={pagination.pageCount}
+                totalItems={pagination.totalItems}
+              />
             </div>
           </CardContent>
         </Card>

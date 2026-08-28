@@ -7,6 +7,7 @@ import { EmptyState } from "../components/ui/empty-state";
 import { Freshness } from "../components/ui/freshness";
 import { FilterToolbar } from "../components/ui/filter-toolbar";
 import { Skeleton } from "../components/ui/skeleton";
+import { Pagination } from "../components/ui/pagination";
 import { StatusBadge } from "../components/status/StatusBadge";
 import {
   usePluginBindings,
@@ -14,6 +15,7 @@ import {
   type PluginBindingProjection,
   type PluginProjection,
 } from "../hooks/useObservability";
+import { usePagination } from "../hooks/usePagination";
 
 function activeStatus(active: boolean) {
   return active ? "Active" : "Inactive";
@@ -35,6 +37,8 @@ const linkClassName =
   "text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function PluginTable({ plugins }: { plugins: PluginProjection[] }) {
+  const pagination = usePagination(plugins, 25);
+
   return (
     <Card>
       <CardContent className="overflow-x-auto p-0">
@@ -50,7 +54,7 @@ function PluginTable({ plugins }: { plugins: PluginProjection[] }) {
             </tr>
           </thead>
           <tbody>
-            {plugins.map((plugin) => (
+            {pagination.pageItems.map((plugin) => (
               <tr
                 className="border-b border-border last:border-0"
                 key={`${plugin.name}@${plugin.version}`}
@@ -87,12 +91,26 @@ function PluginTable({ plugins }: { plugins: PluginProjection[] }) {
             ))}
           </tbody>
         </table>
+        <div className="px-5 pb-4">
+          <Pagination
+            label="External plugins pagination"
+            firstItem={pagination.firstItem}
+            lastItem={pagination.lastItem}
+            onNext={pagination.next}
+            onPrevious={pagination.previous}
+            page={pagination.page}
+            pageCount={pagination.pageCount}
+            totalItems={pagination.totalItems}
+          />
+        </div>
       </CardContent>
     </Card>
   );
 }
 
 function BindingTable({ bindings }: { bindings: PluginBindingProjection[] }) {
+  const pagination = usePagination(bindings, 25);
+
   return (
     <Card>
       <CardContent className="overflow-x-auto p-0">
@@ -108,7 +126,7 @@ function BindingTable({ bindings }: { bindings: PluginBindingProjection[] }) {
             </tr>
           </thead>
           <tbody>
-            {bindings.map((binding) => (
+            {pagination.pageItems.map((binding) => (
               <tr
                 className="border-b border-border last:border-0"
                 key={binding.name}
@@ -146,6 +164,18 @@ function BindingTable({ bindings }: { bindings: PluginBindingProjection[] }) {
             ))}
           </tbody>
         </table>
+        <div className="px-5 pb-4">
+          <Pagination
+            label="External plugin bindings pagination"
+            firstItem={pagination.firstItem}
+            lastItem={pagination.lastItem}
+            onNext={pagination.next}
+            onPrevious={pagination.previous}
+            page={pagination.page}
+            pageCount={pagination.pageCount}
+            totalItems={pagination.totalItems}
+          />
+        </div>
       </CardContent>
     </Card>
   );

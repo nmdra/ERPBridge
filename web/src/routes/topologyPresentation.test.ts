@@ -2,9 +2,9 @@ import { expect, test } from "vitest";
 
 import type { TopologyEdge, TopologyNode } from "../hooks/useTopology";
 import {
+  buildCompactTopologyOverview,
   buildEndpointComponents,
   componentSummary,
-  compactTopologyNodeThreshold,
   compactTopologyComponentLimit,
   focusedComponentGraph,
   shouldUseCompactTopology,
@@ -29,30 +29,10 @@ function edge(
   };
 }
 
-test("switches to compact mode only for large filtered graphs", () => {
+test("uses a compact overview whenever the filtered graph has selectable components", () => {
   expect(shouldUseCompactTopology([], [])).toBe(false);
-  expect(
-    shouldUseCompactTopology(
-      Array.from({ length: compactTopologyNodeThreshold - 1 }, (_, index) =>
-        node(String(index), "mcp-tool"),
-      ),
-      [],
-    ),
-  ).toBe(false);
-  expect(
-    shouldUseCompactTopology(
-      Array.from({ length: compactTopologyNodeThreshold }, (_, index) =>
-        node(String(index), "mcp-tool"),
-      ),
-      [],
-    ),
-  ).toBe(true);
-  expect(
-    shouldUseCompactTopology(
-      [],
-      Array.from({ length: 30 }, (_, index) => edge(String(index), "a", "b")),
-    ),
-  ).toBe(true);
+  expect(shouldUseCompactTopology([node("api", "erp-api")], [])).toBe(true);
+  expect(shouldUseCompactTopology([node("tool", "mcp-tool")], [])).toBe(true);
 });
 
 test("groups an endpoint with its MCP and plugin relationship chain", () => {
@@ -103,6 +83,35 @@ test("ranks unresolved and ambiguous endpoint components before exact ones", () 
   expect(
     buildEndpointComponents(nodes, edges).map((item) => item.endpoint.id),
   ).toEqual(["unresolved", "ambiguous-api", "exact-api"]);
+});
+
+test("builds a connected transport-to-component overview", () => {
+  const nodes = [
+    node("transport", "mcp-transport"),
+    node("tool", "mcp-tool"),
+    node("api", "erp-api", "Invoices"),
+    node("ambiguous", "ambiguous-endpoint", "/invoices"),
+  ];
+  const edges = [
+    edge("transport-tool", "transport", "tool"),
+    edge("tool-api", "tool", "api"),
+    edge("tool-ambiguous", "tool", "ambiguous", "ambiguous"),
+  ];
+
+  const overview = buildCompactTopologyOverview(
+    buildEndpointComponents(nodes, edges),
+    nodes,
+  );
+
+  expect(overview.nodes.map((item) => item.id)).toEqual([
+    "transport",
+    "api",
+    "ambiguous",
+  ]);
+  expect(overview.edges).toEqual([
+    expect.objectContaining({ source: "transport", target: "api" }),
+    expect.objectContaining({ source: "transport", target: "ambiguous" }),
+  ]);
 });
 
 test("keeps compact display bounded while preserving the full model", () => {

@@ -37,16 +37,17 @@ type TopologyOmitted struct {
 	Edges int `json:"edges"`
 }
 
-// TopologyNode represents a transport, tool, API, plugin, binding, or unresolved endpoint.
+// TopologyNode represents a transport, tool, API, plugin, binding, unresolved endpoint, or ambiguous endpoint.
 type TopologyNode struct {
-	ID           string                   `json:"id"`
-	Kind         string                   `json:"kind"`
-	Label        string                   `json:"label"`
-	ContextState string                   `json:"contextState,omitempty"`
-	Tool         *ToolProjection          `json:"tool,omitempty"`
-	API          *TopologyAPIDetails      `json:"api,omitempty"`
-	Plugin       *PluginProjection        `json:"plugin,omitempty"`
-	Binding      *PluginBindingProjection `json:"binding,omitempty"`
+	ID               string                   `json:"id"`
+	Kind             string                   `json:"kind"`
+	Label            string                   `json:"label"`
+	DiagnosticReason string                   `json:"diagnosticReason,omitempty"`
+	ContextState     string                   `json:"contextState,omitempty"`
+	Tool             *ToolProjection          `json:"tool,omitempty"`
+	API              *TopologyAPIDetails      `json:"api,omitempty"`
+	Plugin           *PluginProjection        `json:"plugin,omitempty"`
+	Binding          *PluginBindingProjection `json:"binding,omitempty"`
 }
 
 // TopologyAPIDetails contains an API registry projection without credentials.
@@ -60,12 +61,13 @@ type TopologyAPIDetails struct {
 
 // TopologyEdge represents one graph relationship and its match confidence.
 type TopologyEdge struct {
-	ID            string `json:"id"`
-	Source        string `json:"source"`
-	Target        string `json:"target"`
-	MatchKind     string `json:"matchKind"`
-	ContextState  string `json:"contextState,omitempty"`
-	Authoritative bool   `json:"authoritative"`
+	ID               string `json:"id"`
+	Source           string `json:"source"`
+	Target           string `json:"target"`
+	MatchKind        string `json:"matchKind"`
+	DiagnosticReason string `json:"diagnosticReason,omitempty"`
+	ContextState     string `json:"contextState,omitempty"`
+	Authoritative    bool   `json:"authoritative"`
 }
 
 type normalizedEndpoint struct {
@@ -78,8 +80,7 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 	if !onlyGet(w, r) {
 		return
 	}
-	ctxName := r.URL.Query().Get("context")
-	ctx, ok := h.contextForRequest(w, r)
+	ctxName, ctx, ok := h.contextNameForRequest(w, r)
 	if !ok {
 		return
 	}
@@ -101,13 +102,10 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 
 	plugins, bindings, pluginsAvailable := h.fetchPluginResources(r, ctx)
 
-	registry := h.registry
-	if registry == nil {
-		registry, err = idp.NewRegistry("", slog.Default())
-		if err != nil {
-			writeJSON(w, http.StatusOK, TopologyResponse{State: stateUnavailable, Nodes: []TopologyNode{}, Edges: []TopologyEdge{}})
-			return
-		}
+	registry, err := h.registryForContext(ctxName)
+	if err != nil {
+		writeJSON(w, http.StatusOK, TopologyResponse{State: stateUnavailable, Nodes: []TopologyNode{}, Edges: []TopologyEdge{}})
+		return
 	}
 	apis := registry.List()
 	sort.Slice(apis, func(i, j int) bool { return apis[i].Name < apis[j].Name })
@@ -146,19 +144,24 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 		if len(graph.Edges) < maxTopologyEdges {
 			graph.Edges = append(graph.Edges, TopologyEdge{ID: "edge:" + transportID + ":" + toolID, Source: transportID, Target: toolID, MatchKind: matchExact, Authoritative: true})
 		}
-		kind, matched := matchAPI(tool, apis, ctx.ERPBase)
+		kind, matched, diagnosticReason := matchAPI(tool, apis, ctx.ERPBase)
 		if matched != nil {
 			apiID := "api:" + stableID(matched.ID, matched.Name)
 			if len(graph.Edges) < maxTopologyEdges {
 				graph.Edges = append(graph.Edges, TopologyEdge{ID: "edge:" + toolID + ":" + apiID, Source: toolID, Target: apiID, MatchKind: kind, ContextState: apiContextState(matched.URL, ctx.ERPBase), Authoritative: kind == matchExact})
 			}
 		} else {
-			unresolvedID := "unresolved:" + stableID(tool.Metadata.Name, tool.Metadata.Version)
+			endpointKind := "unresolved-endpoint"
+			endpointID := "unresolved:" + stableID(tool.Metadata.Name, tool.Metadata.Version)
+			if kind == "ambiguous" {
+				endpointKind = "ambiguous-endpoint"
+				endpointID = "ambiguous:" + stableID(tool.Metadata.Name, tool.Metadata.Version)
+			}
 			if len(graph.Nodes) < maxTopologyNodes {
-				graph.Nodes = append(graph.Nodes, TopologyNode{ID: unresolvedID, Kind: "unresolved-endpoint", Label: projection.EndpointPath})
+				graph.Nodes = append(graph.Nodes, TopologyNode{ID: endpointID, Kind: endpointKind, Label: projection.EndpointPath, DiagnosticReason: diagnosticReason})
 			}
 			if len(graph.Edges) < maxTopologyEdges {
-				graph.Edges = append(graph.Edges, TopologyEdge{ID: "edge:" + toolID + ":" + unresolvedID, Source: toolID, Target: unresolvedID, MatchKind: kind, Authoritative: false})
+				graph.Edges = append(graph.Edges, TopologyEdge{ID: "edge:" + toolID + ":" + endpointID, Source: toolID, Target: endpointID, MatchKind: kind, DiagnosticReason: diagnosticReason, Authoritative: false})
 			}
 		}
 	}
@@ -247,10 +250,23 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, graph)
 }
 
+func (h *consoleHandler) registryForContext(contextName string) (*idp.Registry, error) {
+	if h.registryProvider != nil {
+		return h.registryProvider(contextName)
+	}
+	if h.registry != nil {
+		cfg, _, _, _ := h.configSnapshot(false)
+		if cfg != nil && cfg.CurrentContext == contextName {
+			return h.registry, nil
+		}
+	}
+	return idp.NewRegistryForContext(contextName, slog.Default())
+}
+
 func topologyCandidateCounts(tools []mcp.Tool, apis []idp.API, plugins []mcp.Plugin, bindings []mcp.PluginBinding, pluginsAvailable bool, base string) (int, int) {
 	unresolved := 0
 	for _, tool := range tools {
-		_, matched := matchAPI(tool, apis, base)
+		_, matched, _ := matchAPI(tool, apis, base)
 		if matched == nil {
 			unresolved++
 		}
@@ -334,19 +350,38 @@ func stableID(primary, fallback string) string {
 	return strings.NewReplacer("/", "_", " ", "_", "@", "_").Replace(value)
 }
 
-func matchAPI(tool mcp.Tool, apis []idp.API, base string) (string, *idp.API) {
+const (
+	diagnosticMissingEndpoint = "The tool has no endpoint."
+	diagnosticEmptyRegistry   = "No ERP APIs are registered."
+	diagnosticHostMismatch    = "No registered ERP API matches the endpoint host."
+	diagnosticMethodMismatch  = "Registered ERP APIs use a different method."
+	diagnosticNoCandidate     = "No registered ERP API matches this endpoint."
+	diagnosticAmbiguous       = "More than one registered ERP API matches this endpoint."
+	matchKindUnresolved       = "unresolved"
+)
+
+func matchAPI(tool mcp.Tool, apis []idp.API, base string) (string, *idp.API, string) {
+	if strings.TrimSpace(tool.Spec.Execution.Endpoint) == "" {
+		return matchKindUnresolved, nil, diagnosticMissingEndpoint
+	}
+	if len(apis) == 0 {
+		return matchKindUnresolved, nil, diagnosticEmptyRegistry
+	}
 	target := normalizeEndpoint(tool.Spec.Execution.Method, tool.Spec.Execution.Endpoint, base)
 	if target.Path == "" {
-		return "unresolved", nil
+		return matchKindUnresolved, nil, diagnosticMissingEndpoint
 	}
 	exact := make([]*idp.API, 0)
 	prefix := make([]*idp.API, 0)
+	hostMatches := false
+	methodMatches := false
 	for index := range apis {
 		api := &apis[index]
 		candidate := normalizeEndpoint(api.Method, api.URL, base)
 		if candidate.Host != target.Host {
 			continue
 		}
+		hostMatches = true
 		if candidate.Method != target.Method {
 			// A root API registration describes a base URL, so it can infer
 			// paths for generated tools with other HTTP methods. Keep this
@@ -356,6 +391,7 @@ func matchAPI(tool mcp.Tool, apis []idp.API, base string) (string, *idp.API) {
 			}
 			continue
 		}
+		methodMatches = true
 		if candidate.Path == target.Path {
 			exact = append(exact, api)
 			continue
@@ -365,15 +401,21 @@ func matchAPI(tool mcp.Tool, apis []idp.API, base string) (string, *idp.API) {
 		}
 	}
 	if len(exact) == 1 {
-		return matchExact, exact[0]
+		return matchExact, exact[0], ""
 	}
 	if len(exact) > 1 || len(prefix) > 1 {
-		return "ambiguous", nil
+		return "ambiguous", nil, diagnosticAmbiguous
 	}
 	if len(prefix) == 1 {
-		return "base-prefix", prefix[0]
+		return "base-prefix", prefix[0], ""
 	}
-	return "unresolved", nil
+	if !hostMatches {
+		return matchKindUnresolved, nil, diagnosticHostMismatch
+	}
+	if !methodMatches {
+		return matchKindUnresolved, nil, diagnosticMethodMismatch
+	}
+	return matchKindUnresolved, nil, diagnosticNoCandidate
 }
 
 func normalizeEndpoint(method, raw, base string) normalizedEndpoint {

@@ -7,12 +7,14 @@ import { FilterToolbar } from "../components/ui/filter-toolbar";
 import { EmptyState } from "../components/ui/empty-state";
 import { Freshness } from "../components/ui/freshness";
 import { Skeleton } from "../components/ui/skeleton";
+import { Pagination } from "../components/ui/pagination";
 import { StatusBadge } from "../components/status/StatusBadge";
 import {
   useTools,
   type ToolManifest,
   type ToolProjection,
 } from "../hooks/useObservability";
+import { usePagination } from "../hooks/usePagination";
 
 function decodeToolName(value: string) {
   try {
@@ -277,6 +279,7 @@ export function Tools({ contextName }: { contextName: string }) {
         .includes(query),
     );
   }, [filter, tools.data?.items]);
+  const pagination = usePagination(visibleTools, 25);
 
   if (tools.loading) {
     return (
@@ -369,7 +372,7 @@ export function Tools({ contextName }: { contextName: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleTools.map((tool) => (
+                  {pagination.pageItems.map((tool) => (
                     <tr
                       className="border-b border-border last:border-0"
                       key={`${tool.name}@${tool.version}`}
@@ -402,6 +405,18 @@ export function Tools({ contextName }: { contextName: string }) {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="px-5 pb-4">
+              <Pagination
+                label="Tools pagination"
+                firstItem={pagination.firstItem}
+                lastItem={pagination.lastItem}
+                onNext={pagination.next}
+                onPrevious={pagination.previous}
+                page={pagination.page}
+                pageCount={pagination.pageCount}
+                totalItems={pagination.totalItems}
+              />
             </div>
           </CardContent>
         </Card>

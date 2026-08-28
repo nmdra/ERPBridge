@@ -3,7 +3,9 @@ import type {
   TopologyNode,
   TopologySelection,
 } from "../../hooks/useTopology";
+import { usePagination } from "../../hooks/usePagination";
 import { Card, CardContent } from "../ui/card";
+import { Pagination } from "../ui/pagination";
 
 const actionClassName =
   "text-left text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -21,6 +23,7 @@ export function TopologyList({
   onSelectNode: (id: string) => void;
   onSelectEdge: (id: string) => void;
 }) {
+  const pagination = usePagination(edges, 25);
   const byID = new Map(nodes.map((node) => [node.id, node]));
   return (
     <Card>
@@ -41,7 +44,7 @@ export function TopologyList({
             </thead>
             <tbody>
               {edges.length ? (
-                edges.map((edge) => {
+                pagination.pageItems.map((edge) => {
                   const source = byID.get(edge.source);
                   const target = byID.get(edge.target);
                   const selected =
@@ -112,6 +115,18 @@ export function TopologyList({
               )}
             </tbody>
           </table>
+        </div>
+        <div className="px-5 pb-4">
+          <Pagination
+            label="Topology relationships pagination"
+            firstItem={pagination.firstItem}
+            lastItem={pagination.lastItem}
+            onNext={pagination.next}
+            onPrevious={pagination.previous}
+            page={pagination.page}
+            pageCount={pagination.pageCount}
+            totalItems={pagination.totalItems}
+          />
         </div>
       </CardContent>
     </Card>

@@ -173,9 +173,11 @@ MCP client -> MCP tool -> ERP API endpoint
                     `-> plugin binding -> external plugin -> result
 ```
 
-The server matches a tool execution method and endpoint against sanitized local
-API registry entries. It normalizes methods, trailing slashes, default ports,
-and configured ERP base substitutions before matching.
+The server resolves the local API registry for the selected Console context,
+then matches each tool execution method and endpoint against that registry. It
+normalizes methods, trailing slashes, default ports, and configured ERP base
+substitutions before matching. A registry entry from another context is not
+used for the selected context.
 
 Each relationship has one match state:
 
@@ -183,23 +185,41 @@ Each relationship has one match state:
 - `base-prefix`: the server inferred a match from a configured base prefix.
   A root API registration can infer paths across HTTP methods, but the edge is
   not authoritative.
-- `ambiguous`: more than one API entry matches.
+- `ambiguous`: more than one API entry matches. No API is selected as the
+  winner.
 - `unresolved`: no safe API match exists.
 
-The console marks local registry entries as `context matched` or `unassigned`.
-The registry has no deployment context field, so the console does not claim
-cross-environment ownership. It shows an endpoint path and selected-context
-label, not a full upstream URL.
+Unresolved and ambiguous relationships include a safe diagnostic reason when
+available: missing endpoint, empty registry, host mismatch, method mismatch,
+no candidate, or multiple matching registrations. The console marks registry
+entries as `context matched` or `unassigned`. The registry has no deployment
+context field, so the console does not claim cross-environment ownership. It
+shows endpoint paths and selected-context labels, not full upstream URLs.
 
 The topology includes MCP transport, MCP tool, ERP API, plugin binding,
-external plugin, and unresolved endpoint nodes. Plugin relationships appear only
-when both plugin list routes are available. When a filtered graph has at least
-24 nodes or 30 edges, the canvas starts with a compact endpoint-component
-overview. Each component shows one safe ERP
-endpoint identity, its MCP tool count, and a match-state summary. Select a
-component to show its related MCP tools, endpoint, bindings, and plugins; use
-Escape or the back control to return to the overview. The raw accessible
+external plugin, ambiguous endpoint, and unresolved endpoint nodes. Plugin
+relationships appear only when both plugin list routes are available. When any
+endpoint component exists, including a standalone MCP tool, the canvas starts
+with a compact connected overview. It connects the MCP transport
+to bounded component summaries. Each summary shows one safe endpoint identity,
+its MCP tool count, and its match-state summary. The overview displays at most
+24 components; the component menu, search, and filters expose additional
+components.
+
+The component menu provides buttons for each ERP endpoint, including ambiguous
+or unresolved diagnostic endpoints, and for each MCP tool. Select one to drill
+down to its connected MCP tools, endpoint, bindings, plugins, and
+relationships. Selecting a node in the
+canvas or relationship list shares the same selection and inspector; Escape or
+Back to compact overview returns to the overview. The raw accessible
 relationship list remains available for the complete filtered graph.
+
+React Flow uses distinct shapes for transports, tools, APIs, ambiguous and
+unresolved endpoints, bindings, and plugins. Directional labelled handles,
+arrowed edges, selected/dimmed states, fit-to-view behavior, zoom controls, and
+a minimap support diagram navigation. Nodes, edges, component buttons, and
+controls have keyboard focus and accessible labels; the relationship table and
+inspector provide a non-canvas alternative.
 
 Use the search field and the node kind, match-confidence, and context-state
 filters to narrow the graph. The canvas and accessible relationship list share
@@ -207,27 +227,31 @@ selection state: selecting a node highlights its immediate relationships, while
 selecting an edge shows its source, target, match confidence, authority, context
 state, and safe endpoint paths. The BFF reports when safety caps omit nodes or
 edges, so an incomplete graph is not mistaken for a complete one. The BFF reads
-the local registry server-side and strips all registry authentication fields.
-The canvas loads on demand so the list view remains available on small or
-keyboard-only clients.
+the selected context's local registry server-side and strips all registry
+authentication fields. The canvas loads on demand so the list view remains
+available on small or keyboard-only clients.
 
 ## Logs and metrics
 
 The console projects log events into a fixed safe shape. The shape contains a
 timestamp, level, component, tool name, request ID, and redacted summary. The
 Logs page sorts events by timestamp with the most recent events first; events
-without a valid timestamp appear last. It
-omits unknown fields, raw payloads, credentials, personal data, and malformed
-or oversized events. Live streams use a capability-protected fetch stream and
-stop when the browser disconnects. The server limits concurrent streams.
+without a valid timestamp appear last. It filters first, then paginates the
+bounded client-side result at 50 events per page. The page range and Previous /
+Next controls show the current range, and live-log updates keep the current
+page when it remains valid while filters reset to page 1. It omits unknown
+fields, raw payloads, credentials, personal data, and malformed or oversized
+events. Live streams use a capability-protected fetch stream and stop when the
+browser disconnects. The server limits concurrent streams.
 
 Metrics are live scrape samples. The console preserves cumulative totals and
 calculates rates only from successive samples during the current browser
 session. It joins each rate to the complete metric label set, shows compact
 responsive session trends, and keeps a labeled table and text summary as the
-accessible alternative. It uses histogram sum and count for average latency.
-It does not claim percentile latency or historical Prometheus data. Unknown
-metric families do not fail the snapshot.
+accessible alternative. The metric table shows 25 samples per page after the
+source list is prepared and includes its current page range. It uses histogram
+sum and count for average latency. It does not claim percentile latency or
+historical Prometheus data. Unknown metric families do not fail the snapshot.
 
 ## Plugins
 
@@ -239,17 +263,23 @@ metadata is kept out of the Tools inventory. A deployment that returns `404`
 for either route shows an unavailable feature state instead of a failed
 console.
 
-The plugin view exposes only `endpointConfigured` and
-`configurationPresent` booleans. It does not expose plugin endpoints, static
-binding configuration, credentials, or invocation payloads. It reports plugin
-health as `unknown` unless the final plugin API provides an approved health
-field.
+The plugin and binding tables paginate their bounded client-side lists at 25
+rows per page. Filtering or source changes reset or clamp the page, and each
+table shows its page range with accessible Previous and Next controls. The
+plugin view exposes only `endpointConfigured` and `configurationPresent`
+booleans. It does not expose plugin endpoints, static binding configuration,
+credentials, or invocation payloads. It reports plugin health as `unknown`
+unless the final plugin API provides an approved health field.
 
 ## Limitations
 
 The console has no persistent log or metric store. It keeps a bounded sample
-window in browser memory while it runs. Historical dashboards require a future
-Prometheus query integration.
+window in browser memory while it runs. Tools, plugins, bindings, topology
+relationships, and metric samples use client-side pagination after filtering or
+sorting: 25 rows per page for tools, plugins, bindings, topology relationships,
+and metrics, and 50 events per page for logs. Each table shows its current page
+range and accessible Previous and Next controls. Historical dashboards require
+a future Prometheus query integration.
 
 The console does not change the active persistent `bridgectl` context when a
 user selects a deployment in the browser. The selection applies only to the

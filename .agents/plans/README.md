@@ -21,6 +21,7 @@ promotion to `active/`.
 
 ## Completed
 
+- [`[COMPLETED]Plan-Console-Topology-and-Pagination.md`](./completed/%5BCOMPLETED%5DPlan-Console-Topology-and-Pagination.md) — context-correct topology, compact React Flow redesign, and operational-table pagination.
 - [`[COMPLETED]Plan-Agentic-Tools-MCP-Integration.md`](./completed/%5BCOMPLETED%5DPlan-Agentic-Tools-MCP-Integration.md)
   — backward-compatible Stdio hardening, agent interoperability verification,
   and Codex/OpenCode/OpenClaw/Hermes documentation.

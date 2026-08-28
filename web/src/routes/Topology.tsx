@@ -24,8 +24,11 @@ import {
   type TopologySelection,
 } from "../hooks/useTopology";
 import {
+  buildCompactTopologyOverview,
   buildEndpointComponents,
+  canDrillIntoNode,
   compactTopologyComponentLimit,
+  componentForNode,
   componentSummary,
   focusedComponentGraph,
   shouldUseCompactTopology,
@@ -44,6 +47,7 @@ const nodeKindLabels: Record<TopologyNodeKind, string> = {
   "plugin-binding": "Bindings",
   "external-plugin": "Plugins",
   "unresolved-endpoint": "Unresolved endpoints",
+  "ambiguous-endpoint": "Ambiguous endpoints",
 };
 
 const matchKindLabels: Record<TopologyMatchKind, string> = {
@@ -60,6 +64,18 @@ const matchKinds: TopologyMatchKind[] = [
   "unresolved",
 ];
 const contextStates = ["context matched", "unassigned"] as const;
+const safeDiagnosticReasons = new Set([
+  "The tool has no endpoint.",
+  "No ERP APIs are registered.",
+  "No registered ERP API matches the endpoint host.",
+  "Registered ERP APIs use a different method.",
+  "No registered ERP API matches this endpoint.",
+  "More than one registered ERP API matches this endpoint.",
+]);
+
+function safeDiagnosticReason(reason?: string) {
+  return reason && safeDiagnosticReasons.has(reason) ? reason : null;
+}
 
 type FilterCheckboxProps = {
   label: string;
@@ -175,6 +191,12 @@ function TopologyInspector({
               <dt className="text-muted-foreground">Context state</dt>
               <dd>{selectedEdge.contextState || "Unassigned"}</dd>
             </div>
+            {safeDiagnosticReason(selectedEdge.diagnosticReason) ? (
+              <div>
+                <dt className="text-muted-foreground">Diagnostic reason</dt>
+                <dd>{safeDiagnosticReason(selectedEdge.diagnosticReason)}</dd>
+              </div>
+            ) : null}
             <div>
               <dt className="text-muted-foreground">Source path</dt>
               <dd className="break-words [overflow-wrap:anywhere]">
@@ -218,6 +240,12 @@ function TopologyInspector({
               <dt className="text-muted-foreground">Context state</dt>
               <dd>{nodeContextState(selectedNode)}</dd>
             </div>
+            {safeDiagnosticReason(selectedNode.diagnosticReason) ? (
+              <div>
+                <dt className="text-muted-foreground">Diagnostic reason</dt>
+                <dd>{safeDiagnosticReason(selectedNode.diagnosticReason)}</dd>
+              </div>
+            ) : null}
             {selectedNode.tool ? (
               <div>
                 <dt className="text-muted-foreground">Endpoint path</dt>
@@ -304,7 +332,7 @@ export function Topology({ contextName }: { contextName: string }) {
   );
   const [selectedContexts, setSelectedContexts] = useState<string[]>([]);
   const [selection, setSelection] = useState<TopologySelection>(null);
-  const [focusedEndpointID, setFocusedEndpointID] = useState<string | null>(
+  const [focusedComponentID, setFocusedComponentID] = useState<string | null>(
     null,
   );
 
@@ -363,28 +391,30 @@ export function Topology({ contextName }: { contextName: string }) {
     [visibleEdges, visibleNodes],
   );
   const compactMode =
-    !focusedEndpointID &&
-    endpointComponents.length > 0 &&
-    shouldUseCompactTopology(visibleNodes, visibleEdges);
+    !focusedComponentID && shouldUseCompactTopology(visibleNodes, visibleEdges);
   const compactComponents = endpointComponents.slice(
     0,
     compactTopologyComponentLimit,
   );
   const focusedComponent = allEndpointComponents.find(
-    (component) => component.endpoint.id === focusedEndpointID,
+    (component) => component.endpoint.id === focusedComponentID,
   );
   const focusedGraph = focusedComponent
     ? focusedComponentGraph(focusedComponent, allNodes, allEdges)
     : null;
+  const compactOverview = buildCompactTopologyOverview(
+    compactComponents,
+    visibleNodes,
+  );
   const canvasNodes = focusedGraph
     ? focusedGraph.nodes
     : compactMode
-      ? compactComponents.map((component) => component.endpoint)
+      ? compactOverview.nodes
       : visibleNodes;
   const canvasEdges = focusedGraph
     ? focusedGraph.edges
     : compactMode
-      ? []
+      ? compactOverview.edges
       : visibleEdges;
   const canvasSummaries = Object.fromEntries(
     compactComponents.map((component) => [
@@ -404,20 +434,20 @@ export function Topology({ contextName }: { contextName: string }) {
 
   useEffect(() => {
     setSelection(null);
-    setFocusedEndpointID(null);
+    setFocusedComponentID(null);
   }, [contextName]);
 
   useEffect(() => {
     if (
-      focusedEndpointID &&
-      !endpointComponents.some(
-        (component) => component.endpoint.id === focusedEndpointID,
+      focusedComponentID &&
+      !allEndpointComponents.some(
+        (component) => component.endpoint.id === focusedComponentID,
       )
     ) {
-      setFocusedEndpointID(null);
+      setFocusedComponentID(null);
       setSelection(null);
     }
-  }, [endpointComponents, focusedEndpointID]);
+  }, [allEndpointComponents, focusedComponentID]);
 
   useEffect(() => {
     if (!selection) return;
@@ -432,23 +462,26 @@ export function Topology({ contextName }: { contextName: string }) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setSelection(null);
-      setFocusedEndpointID(null);
+      setFocusedComponentID(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const focusComponent = useCallback((componentID: string, nodeID: string) => {
+    setFocusedComponentID(componentID);
+    setSelection({ kind: "node", id: nodeID });
+  }, []);
   const selectNode = useCallback(
     (id: string) => {
+      const component = componentForNode(allEndpointComponents, id);
+      const selected = allNodes.find((node) => node.id === id);
       setSelection({ kind: "node", id });
-      if (
-        compactMode &&
-        endpointComponents.some((component) => component.endpoint.id === id)
-      ) {
-        setFocusedEndpointID(id);
+      if (component && canDrillIntoNode(selected)) {
+        setFocusedComponentID(component.endpoint.id);
       }
     },
-    [compactMode, endpointComponents],
+    [allEndpointComponents, allNodes],
   );
   const selectEdge = useCallback((id: string) => {
     setSelection({ kind: "edge", id });
@@ -458,7 +491,7 @@ export function Topology({ contextName }: { contextName: string }) {
     setSelectedKinds([]);
     setSelectedMatches([]);
     setSelectedContexts([]);
-    setFocusedEndpointID(null);
+    setFocusedComponentID(null);
     setSelection(null);
   }, []);
   const filterCount =
@@ -694,8 +727,8 @@ export function Topology({ contextName }: { contextName: string }) {
         >
           <span>
             Compact overview: showing {compactComponents.length} of{" "}
-            {endpointComponents.length} endpoint components. Select a component
-            to show its related MCP graph.
+            {endpointComponents.length} components. Select a component to show
+            its related MCP graph.
           </span>
           {endpointComponents.length > compactTopologyComponentLimit ? (
             <span className="text-muted-foreground">
@@ -713,7 +746,7 @@ export function Topology({ contextName }: { contextName: string }) {
           <button
             className="text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => {
-              setFocusedEndpointID(null);
+              setFocusedComponentID(null);
               setSelection(null);
             }}
             type="button"
@@ -731,7 +764,7 @@ export function Topology({ contextName }: { contextName: string }) {
             nodeSummaries={compactMode ? canvasSummaries : {}}
             onClearSelection={() => {
               setSelection(null);
-              setFocusedEndpointID(null);
+              setFocusedComponentID(null);
             }}
             onSelectEdge={selectEdge}
             onSelectNode={selectNode}
@@ -745,6 +778,67 @@ export function Topology({ contextName }: { contextName: string }) {
           selectedNode={selectedNode}
         />
       </div>
+      {endpointComponents.length ? (
+        <Card aria-labelledby="topology-components-heading">
+          <CardContent>
+            <h2 className="font-medium" id="topology-components-heading">
+              Topology components
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Select an ERP endpoint or MCP tool to show its connected nodes and
+              relationships.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {endpointComponents.map((component) => (
+                <button
+                  aria-label={`Show component for ${component.endpoint.label}`}
+                  aria-pressed={
+                    focusedComponentID === component.endpoint.id &&
+                    selection?.kind === "node" &&
+                    selection.id === component.endpoint.id
+                  }
+                  className="rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  key={component.endpoint.id}
+                  onClick={() =>
+                    focusComponent(component.endpoint.id, component.endpoint.id)
+                  }
+                  type="button"
+                >
+                  {component.endpoint.label}
+                </button>
+              ))}
+              {visibleNodes
+                .filter((node) => node.kind === "mcp-tool")
+                .map((tool) => {
+                  const component = componentForNode(
+                    endpointComponents,
+                    tool.id,
+                  );
+                  if (!component) return null;
+                  return (
+                    <button
+                      aria-label={`Show component for ${tool.label}`}
+                      aria-pressed={
+                        focusedComponentID === component.endpoint.id &&
+                        selection?.kind === "node" &&
+                        selection.id === tool.id
+                      }
+                      className="rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      key={`tool:${tool.id}`}
+                      onClick={() =>
+                        focusComponent(component.endpoint.id, tool.id)
+                      }
+                      type="button"
+                    >
+                      {tool.label}
+                    </button>
+                  );
+                })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <TopologyList
         edges={visibleEdges}
         nodes={visibleNodes}

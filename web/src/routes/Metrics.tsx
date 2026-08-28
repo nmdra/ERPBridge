@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader } from "../components/ui/card";
 import { EmptyState } from "../components/ui/empty-state";
 import { MetricCard } from "../components/ui/metric-card";
 import { Skeleton } from "../components/ui/skeleton";
+import { Pagination } from "../components/ui/pagination";
 import { StateBanner } from "../components/ui/state-banner";
 import {
   metricSeriesKey,
@@ -21,6 +22,7 @@ import {
   type MetricSample,
   type MetricsHistoryPoint,
 } from "../hooks/useObservability";
+import { usePagination } from "../hooks/usePagination";
 
 function formatNumber(value: number) {
   return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(3);
@@ -152,6 +154,8 @@ function MetricTrend({ history }: { history: MetricsHistoryPoint[] }) {
 
 export function Metrics({ contextName }: { contextName: string }) {
   const metrics = useMetrics(contextName);
+  const pagination = usePagination(metrics.data?.cumulative ?? [], 25);
+
   if (metrics.loading && !metrics.data) {
     return (
       <div className="space-y-6" aria-busy="true">
@@ -289,7 +293,7 @@ export function Metrics({ contextName }: { contextName: string }) {
               </tr>
             </thead>
             <tbody>
-              {snapshot.cumulative.map((sample, index) => {
+              {pagination.pageItems.map((sample, index) => {
                 const rate = ratesBySeries.get(
                   metricSeriesKey(sample.name, sample.labels),
                 );
@@ -311,6 +315,18 @@ export function Metrics({ contextName }: { contextName: string }) {
               })}
             </tbody>
           </table>
+          <div className="px-5 pb-4">
+            <Pagination
+              label="Metrics pagination"
+              firstItem={pagination.firstItem}
+              lastItem={pagination.lastItem}
+              onNext={pagination.next}
+              onPrevious={pagination.previous}
+              page={pagination.page}
+              pageCount={pagination.pageCount}
+              totalItems={pagination.totalItems}
+            />
+          </div>
         </CardContent>
       </Card>
       <p className="text-xs text-muted-foreground">

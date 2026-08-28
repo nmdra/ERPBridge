@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
 import { ToolDetails, Tools } from "./Tools";
@@ -64,6 +65,40 @@ test("renders the safe MCP tool inventory", async () => {
     "/tools/list-employees",
   );
   expect(screen.getByText(/\/api\/resource\/Employee/)).toBeInTheDocument();
+});
+
+test("paginates filtered tools and resets to the first page for a new filter", async () => {
+  const user = userEvent.setup();
+  const items = Array.from({ length: 26 }, (_, index) => ({
+    name: `tool-${String(index).padStart(2, "0")}`,
+    version: "1.0.0",
+    active: true,
+  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ state: "available", items }), {
+          status: 200,
+        }),
+      ),
+    ),
+  );
+
+  render(<Tools contextName="local" />);
+
+  expect(await screen.findByText("Showing 1–25 of 26")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Next page" }));
+  expect(screen.getByText("Showing 26–26 of 26")).toBeInTheDocument();
+  expect(screen.getByText("tool-25")).toBeInTheDocument();
+
+  await user.type(
+    screen.getByRole("textbox", { name: "Search tools" }),
+    "tool-0",
+  );
+  expect(screen.getByText("Showing 1–10 of 10")).toBeInTheDocument();
+  expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
+  expect(screen.queryByText("tool-25")).not.toBeInTheDocument();
 });
 
 test("renders a user-friendly tool manifest", async () => {

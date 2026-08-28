@@ -174,10 +174,22 @@ test("renders a bounded 100-node and 200-edge topology", async () => {
     .find((element) => element.textContent?.includes("100 of 100 nodes"));
   expect(countStatus).toHaveTextContent("100 of 100 nodes");
   expect(countStatus).toHaveTextContent("200 of 200 edges");
-  expect(screen.getAllByRole("button", { name: "Inspect" })).toHaveLength(200);
+  expect(screen.getByText("Showing 1–25 of 200")).toBeInTheDocument();
+  expect(screen.getByText("Page 1 of 8")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Inspect" })).toHaveLength(25);
+
+  const user = userEvent.setup();
+  for (let page = 1; page < 8; page += 1) {
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+  }
+  expect(screen.getByText("Showing 176–200 of 200")).toBeInTheDocument();
+  await user.click(screen.getAllByRole("button", { name: "Inspect" })[0]);
+  expect(
+    screen.getByRole("heading", { name: "Selected relationship" }),
+  ).toBeInTheDocument();
 });
 
-test("collapses a large graph and drills into one endpoint component", async () => {
+test("uses the compact overview by default and drills into one endpoint component", async () => {
   const user = userEvent.setup();
   const nodes = [
     {
@@ -239,9 +251,13 @@ test("collapses a large graph and drills into one endpoint component", async () 
   });
 
   expect(
-    screen.getByText(/Compact overview: showing 1 of 1 endpoint components/),
+    screen.getByText(/Compact overview: showing 1 of 1 components/),
   ).toBeInTheDocument();
-  await screen.findByLabelText("Interactive API to MCP topology");
+  expect(
+    screen.getByRole("application", {
+      name: "Interactive API to MCP topology",
+    }),
+  ).toBeInTheDocument();
   await user.click(screen.getAllByRole("button", { name: "Invoices" })[0]);
   expect(
     screen.getByText(/Showing related nodes for Invoices/),
@@ -253,7 +269,128 @@ test("collapses a large graph and drills into one endpoint component", async () 
     screen.getByRole("button", { name: "Back to compact overview" }),
   );
   expect(
-    screen.getByText(/Compact overview: showing 1 of 1 endpoint components/),
+    screen.getByText(/Compact overview: showing 1 of 1 components/),
+  ).toBeInTheDocument();
+});
+
+test("component menu drills into ERP API, ambiguous, unresolved, and MCP tool components", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            state: "available",
+            nodes: [
+              {
+                id: "transport",
+                kind: "mcp-transport",
+                label: "MCP transport",
+              },
+              { id: "api", kind: "erp-api", label: "Invoices" },
+              { id: "ambiguous", kind: "ambiguous-endpoint", label: "/orders" },
+              {
+                id: "unresolved",
+                kind: "unresolved-endpoint",
+                label: "/reports",
+              },
+              {
+                id: "invoices-tool",
+                kind: "mcp-tool",
+                label: "list-invoices",
+                tool: { name: "list-invoices", version: "1.0.0" },
+              },
+              {
+                id: "orders-tool",
+                kind: "mcp-tool",
+                label: "list-orders",
+                tool: { name: "list-orders", version: "1.0.0" },
+              },
+              {
+                id: "reports-tool",
+                kind: "mcp-tool",
+                label: "list-reports",
+                tool: { name: "list-reports", version: "1.0.0" },
+              },
+            ],
+            edges: [
+              {
+                id: "transport-invoices",
+                source: "transport",
+                target: "invoices-tool",
+                matchKind: "exact",
+                authoritative: true,
+              },
+              {
+                id: "invoices-api",
+                source: "invoices-tool",
+                target: "api",
+                matchKind: "exact",
+                authoritative: true,
+              },
+              {
+                id: "transport-orders",
+                source: "transport",
+                target: "orders-tool",
+                matchKind: "exact",
+                authoritative: true,
+              },
+              {
+                id: "orders-ambiguous",
+                source: "orders-tool",
+                target: "ambiguous",
+                matchKind: "ambiguous",
+                authoritative: false,
+              },
+              {
+                id: "transport-reports",
+                source: "transport",
+                target: "reports-tool",
+                matchKind: "exact",
+                authoritative: true,
+              },
+              {
+                id: "reports-unresolved",
+                source: "reports-tool",
+                target: "unresolved",
+                matchKind: "unresolved",
+                authoritative: false,
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    ),
+  );
+
+  render(<Topology contextName="local" />);
+  await screen.findByRole("table", {
+    name: "Accessible topology relationships",
+  });
+
+  expect(
+    screen.getByText(/Compact overview: showing 3 of 3 components/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Show component for Invoices" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Show component for /orders" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Show component for /reports" }),
+  ).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Show component for list-invoices" }),
+  );
+
+  expect(
+    screen.getByText(/Showing related nodes for Invoices/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "list-invoices" }),
   ).toBeInTheDocument();
 });
 
@@ -274,4 +411,78 @@ test("selects an edge and exposes safe match details", async () => {
   expect(
     screen.queryByText("https://plugin.internal.example"),
   ).not.toBeInTheDocument();
+});
+
+test("renders safe diagnostics when unresolved and ambiguous nodes are selected", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            state: "available",
+            nodes: [
+              {
+                id: "transport",
+                kind: "mcp-transport",
+                label: "MCP transport",
+              },
+              {
+                id: "ambiguous",
+                kind: "ambiguous-endpoint",
+                label: "/ambiguous",
+                diagnosticReason:
+                  "More than one registered ERP API matches this endpoint.",
+              },
+              {
+                id: "unresolved",
+                kind: "unresolved-endpoint",
+                label: "/unresolved",
+                diagnosticReason:
+                  "No registered ERP API matches this endpoint.",
+              },
+              { id: "tool-a", kind: "mcp-tool", label: "ambiguous-tool" },
+              { id: "tool-u", kind: "mcp-tool", label: "unresolved-tool" },
+            ],
+            edges: [
+              {
+                id: "ambiguous-edge",
+                source: "tool-a",
+                target: "ambiguous",
+                matchKind: "ambiguous",
+                diagnosticReason:
+                  "More than one registered ERP API matches this endpoint.",
+                authoritative: false,
+              },
+              {
+                id: "unresolved-edge",
+                source: "tool-u",
+                target: "unresolved",
+                matchKind: "unresolved",
+                diagnosticReason:
+                  "No registered ERP API matches this endpoint.",
+                authoritative: false,
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    ),
+  );
+
+  render(<Topology contextName="local" />);
+  await screen.findByRole("table", {
+    name: "Accessible topology relationships",
+  });
+
+  await user.click(screen.getByRole("button", { name: "/ambiguous" }));
+  expect(
+    screen.getByText("More than one registered ERP API matches this endpoint."),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "/unresolved" }));
+  expect(
+    screen.getByText("No registered ERP API matches this endpoint."),
+  ).toBeInTheDocument();
 });

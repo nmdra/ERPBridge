@@ -7,6 +7,7 @@ export const topologyNodeKinds = [
   "plugin-binding",
   "external-plugin",
   "unresolved-endpoint",
+  "ambiguous-endpoint",
 ] as const;
 
 export type TopologyNodeKind = (typeof topologyNodeKinds)[number];
@@ -19,6 +20,7 @@ export type TopologyNode = {
   id: string;
   kind: TopologyNodeKind | string;
   label: string;
+  diagnosticReason?: string;
   contextState?: string;
   tool?: {
     name: string;
@@ -62,6 +64,7 @@ export type TopologyEdge = {
   source: string;
   target: string;
   matchKind: TopologyMatchKind | string;
+  diagnosticReason?: string;
   contextState?: string;
   authoritative: boolean;
 };

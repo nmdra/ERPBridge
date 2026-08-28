@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nmdra/ERPBridge/internal/config"
+	"github.com/nmdra/ERPBridge/internal/idp"
 	"github.com/nmdra/ERPBridge/internal/web"
 	"github.com/spf13/cobra"
 )
@@ -62,6 +63,9 @@ func runWeb(cmd *cobra.Command, _ []string) error {
 			ConfigProvider: configProvider,
 			TokenOverride:  tokenOverride,
 			Assets:         web.NewAssetHandler(assetOptions),
+			RegistryProvider: func(contextName string) (*idp.Registry, error) {
+				return idp.NewRegistryForContext(contextName, RootLog)
+			},
 		}),
 	})
 	if err != nil {

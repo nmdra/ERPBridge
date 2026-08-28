@@ -140,18 +140,26 @@ func (h *consoleHandler) cache(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *consoleHandler) contextForRequest(w http.ResponseWriter, r *http.Request) (config.Context, bool) {
+	_, ctx, ok := h.contextNameForRequest(w, r)
+	return ctx, ok
+}
+
+func (h *consoleHandler) contextNameForRequest(w http.ResponseWriter, r *http.Request) (string, config.Context, bool) {
 	name := r.URL.Query().Get("context")
 	cfg, _, _, _ := h.configSnapshot(refreshRequested(r))
 	if cfg == nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "config_unavailable", "configured contexts are temporarily unavailable")
-		return config.Context{}, false
+		return "", config.Context{}, false
+	}
+	if name == "" {
+		name = cfg.CurrentContext
 	}
 	ctx, err := cfg.ResolveContext(name)
 	if err != nil {
 		writeAPIError(w, http.StatusNotFound, "context_not_found", "the selected context is not configured")
-		return config.Context{}, false
+		return "", config.Context{}, false
 	}
-	return ctx, true
+	return name, ctx, true
 }
 
 func (h *consoleHandler) upstreamRequest(r *http.Request, ctx config.Context, target bridgeclient.Target, path string) (*http.Response, error) {

@@ -18,6 +18,10 @@ import (
 // after returning it.
 type ConfigProvider func() (*config.Config, error)
 
+// RegistryProvider loads the API registry for a specific Console context.
+// Implementations must keep registry data isolated by context name.
+type RegistryProvider func(contextName string) (*idp.Registry, error)
+
 const (
 	defaultConfigRefreshInterval = 15 * time.Second
 	maxConfigRefreshInterval     = 5 * time.Minute
@@ -30,22 +34,26 @@ type HandlerOptions struct {
 	ConfigRefreshInterval time.Duration
 	TokenOverride         string
 	Assets                http.Handler
-	Registry              *idp.Registry
+	// Registry is a test seam for the configured current context. Production
+	// callers should use RegistryProvider so each request selects its registry.
+	Registry         *idp.Registry
+	RegistryProvider RegistryProvider
 }
 
 type consoleHandler struct {
-	config          *config.Config
-	configMu        sync.RWMutex
-	configRefreshMu sync.Mutex
-	configProvider  ConfigProvider
-	configRefreshed time.Time
-	configErr       error
-	refreshInterval time.Duration
-	tokenOverride   string
-	logStreams      chan struct{}
-	metricsMu       sync.Mutex
-	metricBaselines map[string]metricsBaseline
-	registry        *idp.Registry
+	config           *config.Config
+	configMu         sync.RWMutex
+	configRefreshMu  sync.Mutex
+	configProvider   ConfigProvider
+	configRefreshed  time.Time
+	configErr        error
+	refreshInterval  time.Duration
+	tokenOverride    string
+	registryProvider RegistryProvider
+	logStreams       chan struct{}
+	metricsMu        sync.Mutex
+	metricBaselines  map[string]metricsBaseline
+	registry         *idp.Registry
 }
 
 // NewConsoleHandler creates the read-only local BFF and frontend handler.
@@ -63,14 +71,15 @@ func NewConsoleHandler(options HandlerOptions) http.Handler {
 		interval = maxConfigRefreshInterval
 	}
 	console := &consoleHandler{
-		config:          initialConfig,
-		configProvider:  provider,
-		refreshInterval: interval,
-		configRefreshed: time.Now().UTC(),
-		tokenOverride:   options.TokenOverride,
-		logStreams:      make(chan struct{}, maxLogStreams),
-		metricBaselines: make(map[string]metricsBaseline),
-		registry:        options.Registry,
+		config:           initialConfig,
+		configProvider:   provider,
+		refreshInterval:  interval,
+		configRefreshed:  time.Now().UTC(),
+		tokenOverride:    options.TokenOverride,
+		logStreams:       make(chan struct{}, maxLogStreams),
+		metricBaselines:  make(map[string]metricsBaseline),
+		registry:         options.Registry,
+		registryProvider: options.RegistryProvider,
 	}
 	if provider != nil {
 		console.refreshConfig(true)
