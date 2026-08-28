@@ -1,6 +1,8 @@
 ## bridgectl tool generate
 
-Auto-generate an MCP tool schema from a registered API or OpenAPI spec
+Auto-generate an MCP tool schema from a registered API or OpenAPI spec.
+Use `--output-dir` to write one file per generated tool, named from the tool
+name. Use `-o yaml` for `.yaml` files; JSON is used otherwise.
 
 ```
 bridgectl tool generate [flags]
@@ -12,6 +14,7 @@ bridgectl tool generate [flags]
       --api string       Name of the registered API to generate from
   -h, --help             help for generate
       --openapi string   URL or path to an OpenAPI spec
+      --output-dir string   Write one tool file per generated tool to this directory
 ```
 
 ### Options inherited from parent commands

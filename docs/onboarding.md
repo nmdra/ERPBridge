@@ -132,8 +132,8 @@ credential value. Environment resolution is the default:
 ## Step 4 — Generate Tool Schemas
 
 Convert the pinned MockERP OpenAPI spec into MCP tool schemas. Keep reviewed
-manifests under `manifests/<module>/`; generated YAML is a temporary draft and
-is not a second `schemas/` or per-tool JSON source of truth:
+manifests under `manifests/<module>/`; generated output is a temporary draft and
+must not become a second source of truth:
 
 ```bash
 make generate-tools
@@ -141,8 +141,22 @@ make generate-tools
 
 The target creates one bounded YAML draft stream, applies that stream once, and
 removes both temporary files when it exits. It does not create `schemas/`,
-per-tool JSON files, or another generated artifact. Set `MOCK_ERP_VERSION` and
+per-tool files, or another generated artifact. Set `MOCK_ERP_VERSION` and
 `MOCK_ERP_OPENAPI_URL` together when upgrading the pinned MockERP contract.
+
+To create one reviewed file per tool, use `--output-dir`. The directory is
+created when needed, and each file uses the exact tool name:
+
+```bash
+./bridgectl tool generate \
+  --context "$CTX" \
+  --api erp \
+  --openapi /path/to/openapi.yaml \
+  --output-dir manifests/erp \
+  -o yaml
+# Creates manifests/erp/<tool-name>.yaml for each generated tool.
+./bridgectl tool apply --context "$CTX" -f manifests/erp
+```
 
 For a review-only draft, write the explicit CLI output seam to a temporary file
 and remove it after review or apply:

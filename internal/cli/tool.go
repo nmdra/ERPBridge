@@ -86,6 +86,59 @@ func toolServerBase() (string, error) {
 	return controlPlaneRoot(ctx.MCPServer, cfg.CurrentContext)
 }
 
+func toolGenerateOutputFormat(cmd *cobra.Command) string {
+	format, err := cmd.Flags().GetString("output")
+	if err != nil || format == "" {
+		format = outputFormat
+	}
+	if format == "" || format == string(output.FormatTable) {
+		return string(output.FormatJSON)
+	}
+	return format
+}
+
+func writeGeneratedToolFiles(tools []*mcp.Tool, outputDir, format string) error {
+	var extension string
+	switch format {
+	case string(output.FormatJSON):
+		extension = ".json"
+	case string(output.FormatYAML):
+		extension = ".yaml"
+	default:
+		return fmt.Errorf("unsupported output format %q for --output-dir; use json or yaml", format)
+	}
+
+	if err := os.MkdirAll(outputDir, 0750); err != nil {
+		return fmt.Errorf("create output directory: %w", err)
+	}
+
+	for _, tool := range tools {
+		if tool == nil || tool.Metadata.Name == "" {
+			return fmt.Errorf("generated tool has no metadata.name")
+		}
+		if filepath.Base(tool.Metadata.Name) != tool.Metadata.Name || tool.Metadata.Name == "." || tool.Metadata.Name == ".." {
+			return fmt.Errorf("generated tool name %q cannot be used as a filename", tool.Metadata.Name)
+		}
+
+		var data []byte
+		var err error
+		if format == string(output.FormatYAML) {
+			data, err = yaml.Marshal(tool)
+		} else {
+			data, err = json.MarshalIndent(tool, "", "  ")
+		}
+		if err != nil {
+			return fmt.Errorf("marshal tool %q: %w", tool.Metadata.Name, err)
+		}
+
+		path := filepath.Join(outputDir, tool.Metadata.Name+extension)
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			return fmt.Errorf("write tool %q: %w", tool.Metadata.Name, err)
+		}
+	}
+	return nil
+}
+
 var toolApplyCmd = &cobra.Command{
 	Use:   cliApplyFileUse,
 	Short: "Apply a tool schema to the registry (declarative)",
@@ -405,35 +458,43 @@ var toolGenerateCmd = &cobra.Command{
 
 		gen := idp.NewGenerator("", RootLog)
 
+		var tools []*mcp.Tool
 		if openapiURL != "" {
-			tools, err := gen.GenerateFromOpenAPI(cmd.Context(), api, openapiURL)
+			tools, err = gen.GenerateFromOpenAPI(cmd.Context(), api, openapiURL)
 			if err != nil {
 				return err
 			}
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "generated %d tools from OpenAPI spec\n", len(tools))
-
-			outputFormat, _ := cmd.Flags().GetString("output")
-			var out []byte
-			if outputFormat == "yaml" {
-				out, _ = yaml.Marshal(tools)
-			} else {
-				out, _ = json.MarshalIndent(tools, "", "  ")
+		} else {
+			tool, generateErr := gen.Generate(api)
+			if generateErr != nil {
+				return generateErr
 			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+			tools = []*mcp.Tool{tool}
+		}
+
+		outputDir, _ := cmd.Flags().GetString("output-dir")
+		format := toolGenerateOutputFormat(cmd)
+		if outputDir != "" {
+			if err := writeGeneratedToolFiles(tools, filepath.Clean(outputDir), format); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "wrote %d tool files to %s\n", len(tools), filepath.Clean(outputDir))
 			return nil
 		}
 
-		tool, err := gen.Generate(api)
-		if err != nil {
-			return err
+		generated := any(tools)
+		if openapiURL == "" {
+			generated = tools[0]
 		}
-
-		outputFormat, _ := cmd.Flags().GetString("output")
 		var out []byte
-		if outputFormat == "yaml" {
-			out, _ = yaml.Marshal(tool)
+		if format == string(output.FormatYAML) {
+			out, err = yaml.Marshal(generated)
 		} else {
-			out, _ = json.MarshalIndent(tool, "", "  ")
+			out, err = json.MarshalIndent(generated, "", "  ")
+		}
+		if err != nil {
+			return fmt.Errorf("marshal generated tools: %w", err)
 		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 		return nil
@@ -507,6 +568,7 @@ func init() {
 	toolValidateCmd.Flags().StringP("file", "f", "", "Path to the tool schema file")
 	toolGenerateCmd.Flags().String("api", "", "Name of the registered API to generate from")
 	toolGenerateCmd.Flags().String("openapi", "", "URL or path to an OpenAPI spec")
+	toolGenerateCmd.Flags().String("output-dir", "", "Write one tool file per generated tool to this directory")
 	_ = toolGenerateCmd.MarkFlagRequired("api")
 
 	toolDeleteCmd.Flags().Bool("hard", false, "Permanently delete the tool from the database")

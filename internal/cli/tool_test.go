@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/goccy/go-yaml"
 	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/idp"
 	"github.com/nmdra/ERPBridge/internal/mcp"
@@ -209,6 +210,108 @@ paths:
 	require.NoError(t, toolGenerateCmd.RunE(toolGenerateCmd, nil))
 	require.Contains(t, output.String(), "list_departments")
 	require.Contains(t, output.String(), "ERP_ONBOARDING_CREDENTIAL")
+}
+
+func TestToolGenerateCmdWritesOneFilePerTool(t *testing.T) {
+	setupTest()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
+	require.NoError(t, err)
+	require.NoError(t, reg.Register(&idp.API{
+		Name:        "orders-api",
+		URL:         "http://mock-erp:8081",
+		Method:      http.MethodGet,
+		Module:      "erp",
+		Description: "Orders API",
+	}))
+
+	spec := filepath.Join(t.TempDir(), "openapi.yaml")
+	require.NoError(t, os.WriteFile(spec, []byte(`openapi: 3.0.3
+info:
+  title: orders fixture
+  version: 1.0.0
+servers:
+  - url: http://mock-erp:8081/api
+paths:
+  /orders:
+    get:
+      operationId: list_orders
+      summary: List orders
+      responses:
+        '200':
+          description: OK
+    post:
+      operationId: create_order
+      summary: Create an order
+      responses:
+        '201':
+          description: Created
+`), 0600))
+
+	oldAPI := flagValue(t, toolGenerateCmd, "api")
+	oldOpenAPI := flagValue(t, toolGenerateCmd, "openapi")
+	oldOutputDir := flagValue(t, toolGenerateCmd, "output-dir")
+	oldOutputFormat := outputFormat
+	t.Cleanup(func() {
+		_ = toolGenerateCmd.Flags().Set("api", oldAPI)
+		_ = toolGenerateCmd.Flags().Set("openapi", oldOpenAPI)
+		_ = toolGenerateCmd.Flags().Set("output-dir", oldOutputDir)
+		outputFormat = oldOutputFormat
+		toolGenerateCmd.SetOut(nil)
+		toolGenerateCmd.SetErr(nil)
+	})
+	require.NoError(t, toolGenerateCmd.Flags().Set("api", "orders-api"))
+	require.NoError(t, toolGenerateCmd.Flags().Set("openapi", spec))
+	outputFormat = "yaml"
+
+	outputDir := filepath.Join(t.TempDir(), "manifests", "erp")
+	require.NoError(t, toolGenerateCmd.Flags().Set("output-dir", outputDir))
+	var stdout, stderr bytes.Buffer
+	toolGenerateCmd.SetOut(&stdout)
+	toolGenerateCmd.SetErr(&stderr)
+	toolGenerateCmd.SetContext(context.Background())
+
+	require.NoError(t, toolGenerateCmd.RunE(toolGenerateCmd, nil))
+	require.Empty(t, stdout.String())
+	require.Contains(t, stderr.String(), "wrote 2 tool files")
+
+	for _, name := range []string{"list_orders", "create_order"} {
+		path := filepath.Join(outputDir, name+".yaml")
+		// #nosec G304 -- path is created within the test's temporary directory.
+		data, readErr := os.ReadFile(path)
+		require.NoError(t, readErr)
+		var tool mcp.Tool
+		require.NoError(t, yaml.Unmarshal(data, &tool))
+		require.Equal(t, name, tool.Metadata.Name)
+	}
+
+	jsonOutputDir := filepath.Join(t.TempDir(), "manifests", "erp")
+	outputFormat = string(output.FormatJSON)
+	require.NoError(t, toolGenerateCmd.Flags().Set("output-dir", jsonOutputDir))
+	stdout.Reset()
+	stderr.Reset()
+	require.NoError(t, toolGenerateCmd.RunE(toolGenerateCmd, nil))
+	require.Empty(t, stdout.String())
+	for _, name := range []string{"list_orders", "create_order"} {
+		path := filepath.Join(jsonOutputDir, name+".json")
+		// #nosec G304 -- path is created within the test's temporary directory.
+		data, readErr := os.ReadFile(path)
+		require.NoError(t, readErr)
+		var tool mcp.Tool
+		require.NoError(t, json.Unmarshal(data, &tool))
+		require.Equal(t, name, tool.Metadata.Name)
+	}
+
+	outputFormat = string(output.FormatJSON)
+	require.NoError(t, toolGenerateCmd.Flags().Set("openapi", ""))
+	require.NoError(t, toolGenerateCmd.Flags().Set("output-dir", ""))
+	stdout.Reset()
+	require.NoError(t, toolGenerateCmd.RunE(toolGenerateCmd, nil))
+	var singleTool mcp.Tool
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &singleTool))
+	require.Equal(t, "orders-api", singleTool.Metadata.Name)
 }
 
 func flagValue(t *testing.T, cmd *cobra.Command, name string) string {
