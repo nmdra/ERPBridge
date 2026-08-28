@@ -336,7 +336,7 @@ External contract references used for the design:
   done'` return clean without printing matched content; any scanner error or
   match fails the task, and all linked reports exist.
 
-- [ ] **Task 8: Re-run the complete live matrix and close the remediation plan.**
+- [x] **Task 8: Re-run the complete live matrix and close the remediation plan.**
   Build from the fixed ERPBridge revision, use a new Erpbridge-demo workspace
   and unique Compose projects, execute onboarding, REST, HTTP MCP, stdio,
   authz, cache, resilience, CORS, and plugin checks, and retain only aggregate
