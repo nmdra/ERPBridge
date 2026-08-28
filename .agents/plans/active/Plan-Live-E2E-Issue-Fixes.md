@@ -280,7 +280,7 @@ External contract references used for the design:
   phase showing health `200`, cache stats `503`, tool execution bounded, and no
   memory backend substitution.
 
-- [ ] **Task 6: Close plugin authentication and phase-coverage gaps.** Add a
+- [x] **Task 6: Close plugin authentication and phase-coverage gaps.** Add a
   black-box regression to the existing plugin integration test that asserts
   missing/wrong/correct `X-API-Key` statuses without printing the key. Correct
   the disposable demo Compose mapping to `MOCK_PLUGIN_API_KEY`, use a

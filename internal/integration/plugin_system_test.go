@@ -48,6 +48,7 @@ func TestPluginSystemBlackBox(t *testing.T) {
 			},
 		},
 	}
+	assertPluginAuthentication(t, client)
 	applyJSON(t, client, baseURL+"/apis/erpbridge.io/v1/plugins", plugin)
 
 	boundTool := integrationTool("plugin-fixture-bound")
@@ -166,6 +167,32 @@ func integrationTool(name string) mcp.Tool {
 			Execution:   mcp.Execution{Type: "http", Method: http.MethodGet, Endpoint: "/api/resource/Plugin Fixture", ResponsePath: "data"},
 			Security:    mcp.Security{AuthType: "api-key", CredentialRef: integrationCredential},
 		},
+	}
+}
+
+func assertPluginAuthentication(t *testing.T, client *http.Client) {
+	t.Helper()
+	pluginURL := "http://127.0.0.1:18090/v1/process"
+	payload := []byte(`{"protocolVersion":"v1","tool":{"name":"auth-check","version":"1.0.0"},"result":{}}`)
+	statuses := make([]int, 0, 3)
+	for _, key := range []string{"", "wrong-plugin-key", os.Getenv(pluginCredentialRef)} {
+		request, err := http.NewRequest(http.MethodPost, pluginURL, bytes.NewReader(payload)) //nolint:gosec // The endpoint is the isolated integration fixture.
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		if key != "" {
+			request.Header.Set("X-API-Key", key)
+		}
+		response, err := client.Do(request) //nolint:gosec // The endpoint is the isolated integration fixture.
+		if err != nil {
+			t.Fatal(err)
+		}
+		statuses = append(statuses, response.StatusCode)
+		_ = response.Body.Close()
+	}
+	if !reflect.DeepEqual(statuses, []int{http.StatusUnauthorized, http.StatusUnauthorized, http.StatusOK}) {
+		t.Fatalf("plugin API-key statuses = %v, want 401/401/200", statuses)
 	}
 }
 
