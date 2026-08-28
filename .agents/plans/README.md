@@ -4,7 +4,7 @@ This directory is organized by execution state. Read this index before
 starting implementation work.
 
 ## Active
-- [`Plan-Live-E2E-Issue-Fixes.md`](./active/Plan-Live-E2E-Issue-Fixes.md) — remediation of the live E2E product gaps and fixture classifications.
+- [`Plan-Release-v0.5.0-alpha.1.md`](./active/Plan-Release-v0.5.0-alpha.1.md) — candidate validation, release-note cut, and approved prerelease publication.
 
 ## Upcoming
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP

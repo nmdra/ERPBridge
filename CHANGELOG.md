@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.0-alpha.1] - 2026-08-29
+
 ### Added
 
 - Add environment-default credential resolution with explicit per-resource
@@ -432,7 +434,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - chore: prepare for versioning and release
 - chore: rename middleware to erpbridge-server
 
-[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.4.0-alpha.1...HEAD
+[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.1...HEAD
+[v0.5.0-alpha.1]: https://github.com/nmdra/ERPBridge/compare/v0.4.0-alpha.3...v0.5.0-alpha.1
 [v0.4.0-alpha.1]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.4...v0.4.0-alpha.1
 [v0.3.0-alpha.4]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.3...v0.3.0-alpha.4
 [v0.3.0-alpha.3]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.2...v0.3.0-alpha.3
