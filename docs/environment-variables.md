@@ -12,12 +12,12 @@ The server reads these variables directly from the environment. It does not load
 | `MCP_TRANSPORT` | (unset) | `stdio` runs the server in stdio mode. Any other value runs the HTTP server. |
 | `MCP_ENABLE_TEST_TOOLS` | `false` | Development-only opt-in for `system.*_test` demo tools. `make dev-up` sets it; do not enable it in production. |
 | `DATABASE_PATH` | `data/erpbridge.db` | Path of the SQLite tool registry. The parent directory is created automatically. |
-| `REDIS_URL` | (empty) | Redis URL (for example `redis://localhost:6379`). If empty, the server uses the bounded in-memory cache. |
+| `REDIS_URL` | (empty) | Redis URL (for example `redis://localhost:6379`). If empty, the server uses the bounded in-memory cache. A malformed value stops startup; a valid but unavailable Redis backend remains selected and reports degraded cache health. |
 | `REDIS_INSIGHT_BIND_ADDRESS` | `127.0.0.1` | Host address for the RedisInsight binding in Compose. |
 | `REDIS_INSIGHT_HOST_PORT` | `8001` | Host port for RedisInsight in Compose. |
 | `CACHE_MEMORY_MAX_ENTRIES` | `10000` | Maximum number of entries in the in-memory cache when `REDIS_URL` is empty. `0` disables memory-cache storage. Invalid or negative values use the default. |
-| `RATE_LIMIT_RPS` | `5.0` | Per-session requests per second (token bucket). |
-| `RATE_LIMIT_BURST` | `10` | Token bucket burst size. |
+| `RATE_LIMIT_RPS` | `5.0` | Positive finite tool-execution requests per second (token bucket). |
+| `RATE_LIMIT_BURST` | `10` | Positive token bucket burst size. Invalid values stop startup. |
 | `BASE_URL` | `http://localhost:<MCP_PORT>` | Public URL of the server. Used for log lines and telemetry only. |
 | `ERP_BASE_URL` | `http://localhost:8081` | Base URL of the underlying ERP system. Used by tool execution. |
 | `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, or `error`. |

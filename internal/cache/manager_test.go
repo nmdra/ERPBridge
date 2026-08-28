@@ -6,7 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/nmdra/ERPBridge/internal/logger"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,6 +71,30 @@ func TestNewManager(t *testing.T) {
 	log := logger.Init()
 	m := NewManager(nil, log)
 	assert.NotNil(t, m)
+}
+
+func TestManager_RedisBackendRemainsSelectedWhenClosed(t *testing.T) {
+	mini := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mini.Addr(), MaxRetries: 0})
+	manager := NewManager(client, logger.Init())
+	cfg := Config{Enabled: true, TTLSeconds: 60}
+	ctx := context.Background()
+
+	require.Equal(t, "redis", manager.BackendName())
+	require.NoError(t, manager.Set(ctx, "tool", "", map[string]any{"id": 1}, []byte(`{"ok":true}`), cfg))
+	mini.Close()
+
+	entry, err := manager.Get(ctx, "tool", "", map[string]any{"id": 1}, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, entry)
+	require.Equal(t, "miss", entry.HitType)
+	require.Error(t, manager.Set(ctx, "tool", "", map[string]any{"id": 2}, []byte(`{"ok":true}`), cfg))
+	_, err = manager.Stats(ctx)
+	require.Error(t, err)
+}
+
+func TestManager_MemoryBackendLabel(t *testing.T) {
+	require.Equal(t, "memory", NewMemoryManager(10, logger.Init()).BackendName())
 }
 
 func TestMemoryBackend_BoundedLRU(t *testing.T) {

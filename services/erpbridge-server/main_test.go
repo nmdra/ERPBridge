@@ -15,8 +15,47 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/require"
 )
+
+func TestInitializeCacheSelectsConfiguredBackend(t *testing.T) {
+	t.Run("redis", func(t *testing.T) {
+		mini := miniredis.RunT(t)
+		t.Setenv("REDIS_URL", "redis://"+mini.Addr())
+		manager, err := initializeCache(nil)
+		require.NoError(t, err)
+		require.NotNil(t, manager)
+		require.Equal(t, "redis", manager.BackendName())
+	})
+
+	t.Run("memory", func(t *testing.T) {
+		t.Setenv("REDIS_URL", "")
+		t.Setenv("CACHE_MEMORY_MAX_ENTRIES", "10")
+		manager, err := initializeCache(nil)
+		require.NoError(t, err)
+		require.NotNil(t, manager)
+		require.Equal(t, "memory", manager.BackendName())
+	})
+
+	t.Run("invalid redis", func(t *testing.T) {
+		t.Setenv("REDIS_URL", "://not-a-redis-url")
+		manager, err := initializeCache(nil)
+		require.Error(t, err)
+		require.Nil(t, manager)
+	})
+}
+
+func TestInvalidRedisURLStopsBeforeListenerStartup(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", "run", ".") // #nosec G204 -- test launches the local server package.
+	cmd.Env = append(os.Environ(), "REDIS_URL=://not-a-redis-url", "MCP_PORT=0", "LOG_TO_STDERR=true")
+	output, err := cmd.CombinedOutput()
+	require.Error(t, err)
+	require.False(t, ctx.Err() == context.DeadlineExceeded, "server did not reject invalid Redis URL before startup: %s", output)
+	require.NotContains(t, string(output), "listening")
+}
 
 func TestParseRateLimitConfigRejectsInvalidAndTrailingValues(t *testing.T) {
 	for _, value := range []string{"0", "-1", "NaN", "+Inf", "1.0oops"} {

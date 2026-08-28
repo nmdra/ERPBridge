@@ -30,8 +30,9 @@ type limiterEntry struct {
 }
 
 const (
-	maxLimiterEntries = 10000
-	limiterIdleTTL    = 15 * time.Minute
+	maxLimiterEntries            = 10000
+	limiterIdleTTL               = 15 * time.Minute
+	cacheBackendOperationTimeout = time.Second
 )
 
 // NewRateLimitMiddleware initializes a new RateLimitMiddleware with the given rate and burst.
@@ -229,7 +230,9 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 				// Read the cache and lifecycle generation as one short critical section.
 				s.pluginLifecycleMu.RLock()
 				cacheGeneration = s.lifecycleGeneration
-				entry, err := s.cache.Get(ctx, t.Metadata.Name, role, args, *t.Spec.Cache)
+				cacheContext, cacheCancel := context.WithTimeout(ctx, cacheBackendOperationTimeout)
+				entry, err := s.cache.Get(cacheContext, t.Metadata.Name, role, args, *t.Spec.Cache)
+				cacheCancel()
 				s.pluginLifecycleMu.RUnlock()
 				if err == nil && entry != nil && entry.HitType != "miss" {
 					var cachedResult mcp.CallToolResult
@@ -258,7 +261,10 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 				} else {
 					s.pluginLifecycleMu.RLock()
 					if cacheGeneration == s.lifecycleGeneration {
-						if cacheErr := s.cache.Set(ctx, t.Metadata.Name, role, args, respJSON, *t.Spec.Cache); cacheErr != nil {
+						cacheContext, cacheCancel := context.WithTimeout(ctx, cacheBackendOperationTimeout)
+						cacheErr := s.cache.Set(cacheContext, t.Metadata.Name, role, args, respJSON, *t.Spec.Cache)
+						cacheCancel()
+						if cacheErr != nil {
 							s.log.Warn("failed to cache result", slog.String("error", cacheErr.Error()))
 						}
 					}
@@ -268,8 +274,11 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 
 			// Invalidation (Auto-Flush)
 			if len(t.Spec.Cache.FlushOn) > 0 {
-				if err := s.cache.AutoFlush(ctx, t.Spec.Cache.FlushOn); err != nil {
-					s.log.Warn("auto-flush failed", slog.String("error", err.Error()))
+				cacheContext, cacheCancel := context.WithTimeout(ctx, cacheBackendOperationTimeout)
+				autoFlushErr := s.cache.AutoFlush(cacheContext, t.Spec.Cache.FlushOn)
+				cacheCancel()
+				if autoFlushErr != nil {
+					s.log.Warn("auto-flush failed", slog.String("error", autoFlushErr.Error()))
 				}
 			}
 

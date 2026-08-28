@@ -10,10 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/logger"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
@@ -166,6 +168,35 @@ func TestLoggingMiddlewareRedactsToolArguments(t *testing.T) {
 	if !strings.Contains(output, "[REDACTED]") {
 		t.Fatalf("tool argument log does not contain redaction marker: %s", output)
 	}
+}
+
+func TestCacheMiddleware_RedisFailureRemainsBestEffortWithoutFalseHit(t *testing.T) {
+	mini := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mini.Addr(), MaxRetries: 0})
+	log := logger.Init()
+	s := NewServer(nil, cache.NewManager(client, log), log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	tool := &Tool{
+		Metadata: Metadata{Name: "redis-failure-tool", Version: testVersion100},
+		Spec:     ToolSpec{Cache: &cache.Config{Enabled: true, TTLSeconds: 60}},
+	}
+	calls := 0
+	handler := s.CacheMiddleware(tool)(func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls++
+		return mcp.NewToolResultText("fresh"), nil
+	})
+	req := mcp.CallToolRequest{}
+	req.Params.Name = tool.Metadata.Name
+	req.Params.Arguments = map[string]any{"id": "1"}
+	require.NoError(t, s.cache.Set(context.Background(), "seed", "", map[string]any{"id": 0}, []byte(`{"ok":true}`), *tool.Spec.Cache))
+	mini.Close()
+
+	first, err := handler(context.Background(), req)
+	require.NoError(t, err)
+	second, err := handler(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	require.NotNil(t, second)
+	require.Equal(t, 2, calls)
 }
 
 func TestCacheMiddleware_PreservesMCPResult(t *testing.T) {

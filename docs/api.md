@@ -193,7 +193,7 @@ preserve that envelope and must not flatten structured content.
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/cache/stats` | `GET` | Cache key counts and memory usage. Works with Redis and the bounded in-memory backend. |
+| `/api/cache/stats` | `GET` | Cache key counts and memory usage. Works with Redis and the bounded in-memory backend; returns `503 HEALTH_CHECK_FAILED` when configured Redis is unavailable. |
 | `/api/cache/flush` | `GET` | Flush cache entries. Query params: `tool`, `module`, `all=true`. A module flush covers all stored versions, including inactive versions. |
 
 ## Logs
@@ -271,7 +271,10 @@ headers, or internal stack details.
 
 A configured Redis backend remains the selected backend when Redis is
 unreachable; the server does not silently fall back to memory in that case.
-MCP tool execution errors retain the MCP result envelope and set `isError: true`.
+Cache reads continue as misses and failed writes do not fail the tool call or
+create a false cache hit. Cache health returns bounded `503 HEALTH_CHECK_FAILED`
+while `/mcp/health` remains available. MCP tool execution errors retain the MCP
+result envelope and set `isError: true`.
 
 ### API probe
 

@@ -15,11 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/connector"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -670,6 +672,37 @@ func TestServer_HandleToolDelete(t *testing.T) {
 		_, err := s.store.Get("delete-me", testVersion100)
 		assert.Error(t, err)
 	})
+}
+
+func TestServer_CacheHealthReportsUnavailableRedisSafely(t *testing.T) {
+	t.Setenv(authTokenEnv, "")
+	mini := miniredis.RunT(t)
+	redisAddr := mini.Addr()
+	client := redis.NewClient(&redis.Options{Addr: redisAddr, MaxRetries: 0})
+	log := logger.Init()
+	s := NewServer(nil, cache.NewManager(client, log), log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	mux := http.NewServeMux()
+	s.ServeHTTP(mux, "")
+	mini.Close()
+
+	statsRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(statsRecorder, httptest.NewRequest(http.MethodGet, "/api/cache/stats", nil))
+	require.Equal(t, http.StatusServiceUnavailable, statsRecorder.Code)
+	var envelope controlPlaneErrorEnvelope
+	require.NoError(t, json.Unmarshal(statsRecorder.Body.Bytes(), &envelope))
+	require.Equal(t, ErrorHealthCheckFailed, envelope.Error)
+	require.NotContains(t, statsRecorder.Body.String(), redisAddr)
+
+	healthRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(healthRecorder, httptest.NewRequest(http.MethodGet, "/mcp/health", nil))
+	require.Equal(t, http.StatusOK, healthRecorder.Code)
+
+	infoRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(infoRecorder, httptest.NewRequest(http.MethodGet, "/api/info", nil))
+	require.Equal(t, http.StatusOK, infoRecorder.Code)
+	var info ServerInfo
+	require.NoError(t, json.Unmarshal(infoRecorder.Body.Bytes(), &info))
+	require.Equal(t, "redis", info.CacheBackend)
 }
 
 func TestServer_HandleCacheFlushModuleIncludesInactiveTools(t *testing.T) {

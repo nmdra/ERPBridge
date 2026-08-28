@@ -1139,9 +1139,11 @@ func (s *Server) handleCacheStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats, err := s.cache.Stats(r.Context())
+	statsContext, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+	stats, err := s.cache.Stats(statsContext)
 	if err != nil {
-		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check cache health and retry")
+		writeControlPlaneInternalError(w, http.StatusServiceUnavailable, ErrorHealthCheckFailed, "check cache health and retry")
 		return
 	}
 

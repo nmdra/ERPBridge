@@ -71,6 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Keep configured Redis selected when unavailable, degrade cache reads/writes
+  without false hits, return safe `503 HEALTH_CHECK_FAILED` cache health, and
+  reject malformed Redis URLs before server startup.
 - Preserve OpenAPI request schemas and parameter locations in generated tools,
   protect connector-managed headers, infer `data` unwrapping from resolved
   schemas, and accept successful HEAD/204 responses without JSON bodies.

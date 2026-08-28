@@ -256,7 +256,7 @@ External contract references used for the design:
   followed by a fresh MockERP generation/apply/call where the reviewed POST
   probe succeeds and generated body properties are non-empty.
 
-- [ ] **Task 5: Make Redis health failure explicit without silent fallback.**
+- [x] **Task 5: Make Redis health failure explicit without silent fallback.**
   Add failing `miniredis` tests for closed-backend stats, cache GET/SET errors,
   cache-miss continuation, no cache population after backend failure, and
   memory/Redis backend labels. Return HTTP `503` plus safe

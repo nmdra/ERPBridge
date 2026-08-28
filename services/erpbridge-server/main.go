@@ -79,6 +79,40 @@ func parseRateLimitConfig() (mcp.RateLimitConfig, error) {
 	return config, nil
 }
 
+func initializeCache(rootLog *slog.Logger) (*cache.Manager, error) {
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL != "" {
+		options, err := redis.ParseURL(redisURL)
+		if err != nil {
+			return nil, errors.New("invalid REDIS_URL")
+		}
+		if options.DialTimeout == 0 {
+			options.DialTimeout = time.Second
+		}
+		if options.ReadTimeout == 0 {
+			options.ReadTimeout = time.Second
+		}
+		if options.WriteTimeout == 0 {
+			options.WriteTimeout = time.Second
+		}
+		// Cache health must fail promptly when Redis is unavailable; tool
+		// execution already treats this backend as best-effort.
+		options.MaxRetries = 0
+		return cache.NewManager(redis.NewClient(options), rootLog), nil
+	}
+
+	maxEntries := 10000
+	if value := os.Getenv("CACHE_MEMORY_MAX_ENTRIES"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			slog.Warn("invalid CACHE_MEMORY_MAX_ENTRIES; using default")
+		} else {
+			maxEntries = parsed
+		}
+	}
+	return cache.NewMemoryManager(maxEntries, rootLog), nil
+}
+
 func main() {
 	stdioFlag := flag.Bool("stdio", false, "Run in STDIO transport mode")
 	flag.Parse()
@@ -116,37 +150,23 @@ func main() {
 		dbPath = "data/erpbridge.db"
 	}
 
-	redisURL := os.Getenv("REDIS_URL")
-
 	// In a real scenario, this should be the public URL of the server
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
 		baseURL = fmt.Sprintf("http://localhost:%s", mcpPort)
 	}
 
-	// Initialize Cache
-	var cacheMgr *cache.Manager
-	if redisURL != "" {
-		opt, err := redis.ParseURL(redisURL)
-		if err != nil {
-			slog.Error("failed to parse redis url")
-		} else {
-			rdb := redis.NewClient(opt)
-			cacheMgr = cache.NewManager(rdb, rootLog)
-			slog.Info("cache initialized", slog.String("backend", "redis"))
-		}
+	// Initialize Cache. An invalid configured Redis URL is a startup error;
+	// an unreachable but valid Redis URL remains selected and degrades at use.
+	cacheMgr, err := initializeCache(rootLog)
+	if err != nil {
+		slog.Error("invalid cache configuration")
+		os.Exit(1)
+	}
+	if cacheMgr.BackendName() == "redis" {
+		slog.Info("cache initialized", slog.String("backend", "redis"))
 	} else {
-		maxEntries := 10000
-		if value := os.Getenv("CACHE_MEMORY_MAX_ENTRIES"); value != "" {
-			parsed, err := strconv.Atoi(value)
-			if err != nil || parsed < 0 {
-				slog.Warn("invalid CACHE_MEMORY_MAX_ENTRIES; using default")
-			} else {
-				maxEntries = parsed
-			}
-		}
-		cacheMgr = cache.NewMemoryManager(maxEntries, rootLog)
-		slog.Info("cache initialized", slog.String("backend", "memory"), slog.Int("max_entries", maxEntries))
+		slog.Info("cache initialized", slog.String("backend", "memory"))
 	}
 
 	conn := connector.NewClient(rootLog)
