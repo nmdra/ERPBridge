@@ -6,6 +6,7 @@ starting implementation work.
 ## Active
 
 - [`Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md`](./active/Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md) — portable completion checkpoint for redacted operational knowledge records.
+- [`Plan-Live-E2E-Issue-Fixes.md`](./active/Plan-Live-E2E-Issue-Fixes.md) — remediation of the live E2E product gaps and fixture classifications.
 
 ## Upcoming
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
@@ -26,6 +27,8 @@ promotion to `active/`.
 - [`[COMPLETED]Plan-Bridgectl-Ops-Skill-Refresh.md`](./completed/%5BCOMPLETED%5DPlan-Bridgectl-Ops-Skill-Refresh.md) — refreshed bundled operations guidance, mounted credential handling, MCP discovery hints, and embedded-skill delivery.
 - [`[COMPLETED]Plan-Topology-Selection-Focus.md`](./completed/%5BCOMPLETED%5DPlan-Topology-Selection-Focus.md) — selected MCP tools render only their direct execution paths.
 - [`[COMPLETED]Plan-Topology-Collapsible-Filters.md`](./completed/%5BCOMPLETED%5DPlan-Topology-Collapsible-Filters.md) — topology filters collapse until requested.
+- [`[COMPLETED]Plan-Rate-Limit-Defaults.md`](./completed/%5BCOMPLETED%5DPlan-Rate-Limit-Defaults.md) — default tool-execution limit increased to 10 RPS / burst 20.
+- [`[COMPLETED]Plan-MCP-2025-11-25-Error-Resilience.md`](./completed/%5BCOMPLETED%5DPlan-MCP-2025-11-25-Error-Resilience.md) — MCP protocol errors, tool execution failures, retry safety, and bounded concurrency.
 - [`[COMPLETED]Plan-Release-v0.5.0-alpha.1.md`](./completed/%5BCOMPLETED%5DPlan-Release-v0.5.0-alpha.1.md) — live candidate validation, release-note cut, and prerelease publication.
 - [`[COMPLETED]Plan-Console-Topology-and-Pagination.md`](./completed/%5BCOMPLETED%5DPlan-Console-Topology-and-Pagination.md) — context-correct topology, compact React Flow redesign, and operational-table pagination.
 - [`[COMPLETED]Plan-Agentic-Tools-MCP-Integration.md`](./completed/%5BCOMPLETED%5DPlan-Agentic-Tools-MCP-Integration.md)
