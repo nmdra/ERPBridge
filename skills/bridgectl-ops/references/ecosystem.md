@@ -5,7 +5,7 @@
 | Component | Role | Use it when |
 | --- | --- | --- |
 | `erpbridge-server` | Runtime that exposes MCP and authenticated HTTP endpoints, executes registered tools, enforces roles, and owns cache/log behavior. | Diagnosing server behavior or MCP availability. |
-| `bridgectl` | Control CLI for contexts, API registration/testing, tool resources, tokens, logs, and cache. | Performing supported operations against an ERPBridge environment. |
+| `bridgectl` | Control CLI for contexts, API registration/testing, tool resources, tokens, logs, cache, and bundled skill installation. | Performing supported operations against an ERPBridge environment or refreshing the local operations skill. |
 | MCP client | Discovers and calls tools through stdio or `/mcp/`. | Verifying user-visible tool discovery and calls. |
 | `@erpbridge/sdk` | TypeScript facade for MCP tools, registry/direct invoke, logs, metrics, health, and cache. | Diagnosing application integration or envelope-handling behavior. |
 | External plugin process | Separately operated HTTP process or container that receives the bounded `/v1/process` contract and returns a result envelope. | Verifying post-response processing or diagnosing plugin endpoint behavior. ERPBridge stores and invokes it but does not deploy it. |
@@ -27,6 +27,34 @@ the current checkout; the site owns published user guidance. If the versions
 do not match, state that fact and do not transfer destructive instructions
 between versions without verification. If the site is unavailable, use the
 local `erpbridge-docs` checkout, then in-repo docs and source.
+
+## Bundled skill distribution
+
+The repository copy under `skills/bridgectl-ops/` is authoritative. The
+`bridgectl` binary embeds its `SKILL.md`, references, and assets; it does not
+embed local evaluation files. Installation is local and does not contact an
+ERPBridge server.
+
+Use `bridgectl skill install --project` for the current project, omit selectors
+for the default global destination, or pass `--dir <path>` to inspect or
+materialize a specific destination. `--force` replaces the existing skill tree;
+confirm the exact destination before using it. Rebuild `bridgectl` after source
+changes, then refresh any derived installation. Never hand-edit the installed
+copy or treat it as the source of truth.
+
+## Project-local operational knowledge
+
+`.agents/skill-memory/bridgectl-ops/` is optional project-local operational
+and evaluation state. Its append-only execution evidence, maintained knowledge
+entries, and append-only skill-impact history are not authoritative skill
+content and are not included by the normal `bridgectl skill install` bundle.
+The repository tree under `skills/bridgectl-ops/` remains the source of truth.
+
+Memory can support a repository skill-change proposal, but only an accepted,
+validated source change enters the normal build, embedding, and installation
+process. Never hand-edit an installed skill to apply a memory lesson, and do
+not persist credentials, authorization headers, ERP/plugin bodies, personal
+data, unrestricted logs, or private reasoning in the memory tree.
 
 ## Protocol boundary
 

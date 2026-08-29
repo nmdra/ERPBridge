@@ -19,8 +19,10 @@ Before a plugin change:
    request, even when the plugin has no `spec.auth`.
 3. Confirm the separately operated plugin endpoint, exact plugin version, exact
    target tool version, timeout, failure policy, and expected cache impact.
-4. Keep credentials in environment variables. A manifest contains a
-   `PLUGIN_*` `credentialRef`, never a credential value.
+4. Keep credentials in environment variables or a mounted credential directory.
+   A manifest contains a `PLUGIN_*` logical `credentialRef` and optional
+   `credentialSource: file`, never a credential value. File mode requires
+   `ERPBRIDGE_CREDENTIALS_DIR` and a reference-named file.
 
 The complete resource and wire contract is in
 [the plugin schema](../../../docs/plugin-schema.md). Use the field guides
@@ -44,8 +46,14 @@ A plugin identifies one exact release and an endpoint:
 - `spec.auth` is optional. It supports `bearer` or `api-key`. API-key auth uses
   the declared `header`, or `X-API-Key` when omitted. Bearer auth uses
   `Authorization: Bearer <value>` and cannot declare a custom header.
-- `spec.auth.credentialRef` must name a `PLUGIN_*` environment variable. The
-  resolved value is not persisted or placed in the plugin JSON payload.
+- `spec.auth.credentialRef` must name a `PLUGIN_*` logical reference. The
+  optional `spec.auth.credentialSource` is `env` by default or `file` when
+  `ERPBRIDGE_CREDENTIALS_DIR` supplies the reference-named file. File content
+  is resolved immediately before each invocation, never falls back to the
+  environment, and fails closed when missing, empty, invalid, non-regular, or
+  larger than 64 KiB. The resolved value is not persisted or placed in the
+  plugin JSON payload. Authenticated file-backed plugin bindings bypass the
+  response cache.
 
 Manifests are strict. Unknown JSON/YAML fields, including guessed token or
 password fields, must be removed rather than ignored. Validate before any
@@ -176,9 +184,14 @@ receives the generic plugin-processing error rather than the endpoint, payload,
 or plugin response body.
 
 Applying, updating, or deleting a plugin or binding flushes cache entries for
-affected tools. A credential rotation therefore needs the normal deployment
-refresh and the narrow authenticated cache flush required to force a new
-miss.
+affected tools. For environment-backed credential rotation, refresh the
+provider process and perform the narrow authenticated cache flush required to
+force a new miss. File-backed authenticated plugin bindings bypass the cache;
+replace a local file atomically or wait for the provider-managed mount to
+refresh, with no process restart or cache flush needed merely to observe the
+new value. Mount the directory rather than a Kubernetes `subPath`; projected
+secret updates are eventual and replicas can observe different generations
+briefly.
 
 ## Deletion and diagnosis
 
@@ -195,8 +208,9 @@ Classify failures before changing state:
 - admission failure: check inbound admin authentication,
   `PLUGIN_ENDPOINT_ALLOWLIST`, and server environment configuration;
 - binding reference failure: read back exact active plugin and tool versions;
-- credential failure: check only whether the named environment reference is
-  configured, never its value;
+- credential failure: check only whether the named environment reference or
+  mounted file source is configured and readable, never its value; file-backed
+  resources fail closed and do not fall back to the environment;
 - timeout, non-2xx, malformed, missing-result, or oversized response: inspect
   bounded status and timing evidence without copying plugin bodies;
 - transformed-output failure: check the tool output schema and binding order;

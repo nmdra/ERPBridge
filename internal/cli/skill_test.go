@@ -17,8 +17,13 @@ func TestSkillEmbeddedFiles(t *testing.T) {
 	files := embeddedSkillFiles(t)
 	require.Contains(t, files, "SKILL.md")
 	require.Contains(t, files, "references/ecosystem.md")
+	require.Contains(t, files, "references/knowledge.md")
 	require.Contains(t, files, "assets/plugin.yaml")
+	require.Contains(t, files, "assets/execution-record.json")
+	require.Contains(t, files, "assets/knowledge-pattern.md")
+	require.Contains(t, files, "assets/skill-proposal.md")
 	require.NotContains(t, files, "evals/evals.json")
+	require.NotContains(t, files, ".agents/skill-memory/bridgectl-ops/index.md")
 }
 
 func TestResolveSkillDestination(t *testing.T) {

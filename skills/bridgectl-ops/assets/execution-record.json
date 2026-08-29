@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "exec-<RFC3339-timestamp>-<short-id>",
+  "timestamp": "<RFC3339 with timezone>",
+  "skill_version": "<version-or-unknown>",
+  "bridgectl_version": "<version-or-unknown>",
+  "server_version": "<version-or-unknown>",
+  "area": "<api|tools|plugins|auth|cache|runtime|diagnostics>",
+  "operation": "<operation>",
+  "resource_kind": "<kind>",
+  "context": "<safe context name>",
+  "outcome": "<resolved|success|unresolved|blocked|abandoned>",
+  "error_codes": [],
+  "resolution_codes": [],
+  "actions": [],
+  "ruled_out": [],
+  "lesson_candidates": [],
+  "knowledge_refs": [],
+  "contradictions": [],
+  "current_authority_evidence": [],
+  "retrieval": {
+    "knowledge_entries_read": 0,
+    "execution_records_read": 0
+  },
+  "redaction_review": "passed"
+}

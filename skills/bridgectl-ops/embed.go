@@ -5,7 +5,8 @@ import "embed"
 
 // Files contains the skill instructions and supporting reference assets.
 //
-// Evaluation files are intentionally excluded from the distributable skill.
+// Evaluation files and project-local operational memory are intentionally
+// excluded from the distributable skill.
 //
 //go:embed SKILL.md references assets
 var Files embed.FS

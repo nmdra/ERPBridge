@@ -11,4 +11,5 @@ spec:
   auth:
     type: api-key
     credentialRef: PLUGIN_RESPONSE_TRANSFORMER_KEY
+    # credentialSource: file # Reads ERPBRIDGE_CREDENTIALS_DIR/<credentialRef>.
     header: X-API-Key

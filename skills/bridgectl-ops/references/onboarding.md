@@ -26,7 +26,10 @@ stack state. Set `CTX` to the intended configured context; use the same explicit
    `--force-recreate` refreshes containers; it does not replace health checks.
 3. **Environment:** check only whether the MockERP credential source is set
    (`MOCK_ERP_CREDENTIALS_JSON` or `MOCK_ERP_CREDENTIALS_FILE`) and, for a file
-   source, whether the path is readable. Use Compose's `--env-file .env` and
+   source, whether the path is readable. For an ERP or plugin resource with
+   `credentialSource: file`, check that `ERPBRIDGE_CREDENTIALS_DIR` is present
+   and the reference-named file is a readable regular file, without reading or
+   printing its contents. Use Compose's `--env-file .env` and
    `docker compose --env-file .env config --quiet` to test interpolation. Never
    source `.env`, print its contents, or echo credential values.
 4. **Control-plane root:** inspect the selected context's `mcp-server`. The
@@ -62,22 +65,45 @@ still require the change confirmation in `SKILL.md`.
 ## Workflow
 
 1. Confirm the endpoint owner, URL, method, module, purpose, expected inputs,
-   and the environment/secret-manager reference for its credential. Inspect the
+   and the environment or mounted-file source for its credential. Inspect the
    installed CLI help and matching `docs/cli/` page. Register only after the
-   preflight and exact-action confirmation. Use `--force` on `api register`
-   only when replacing the named API is intentional.
+   preflight and exact-action confirmation. For a mounted source, preserve it
+   in the local API registry with `--credential-source file`:
+
+   ```text
+   bridgectl api register --context "$CTX" --name <api-name> \
+     --url <erp-url> --method GET --module <module> \
+     --description "<purpose>" --credential-ref <ERP_CREDENTIAL_REF> \
+     --credential-source file
+   ```
+
+   Use `--force` on `api register` only when replacing the named API is
+   intentional.
 2. Run `bridgectl api test <name> --context "$CTX"`. Stop on failure and use
    the recovery branches below; do not publish an unverified endpoint. Use
    `--local` only when the operator explicitly needs the legacy host-side
    path, and do not copy its response body into evidence.
 3. Generate a draft with `bridgectl tool generate --api <name>`; add
-   `--openapi <path-or-url>` for multiple operations. Redirect the explicit
-   YAML output to a temporary file, validate it, review it, and remove it.
-   `make generate-tools` is the convenience path that applies one temporary
-   stream once; use it only when that apply is intended.
+   `--openapi <path-or-url>` for multiple operations. For one file per tool,
+   use `--output-dir <draft-dir>` with `-o json` or `-o yaml`; filenames are the
+   exact generated tool names. The directory is created as needed and the
+   progress count is written to stderr, so the normal stdout output contract
+   remains unchanged when `--output-dir` is omitted. Treat every generated
+   file as a draft: review it, validate it, and move only approved content to
+   the reviewed manifest location. `make generate-tools` is the convenience
+   path that applies one temporary YAML stream once; use it only when that
+   apply is intended.
 4. Save reviewed manifests only under `manifests/<module>/`. Complete intent
-   metadata, input/output schemas, execution path, `credentialRef`, cache
-   policy, `security.dataClass`, and optional `allowedRoles`. `public`,
+   metadata, input/output schemas, execution path, `credentialRef` and its
+   optional `credentialSource`, cache policy, `security.dataClass`, and
+   optional `allowedRoles`. Review optional `spec.annotations` fields
+   (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and
+   `openWorldHint`) as behavioral hints; generated method-based values are
+   draft evidence, not authorization. During MCP discovery, the reviewed
+   intent guidance and non-empty role list may appear as namespaced `_meta`
+   keys: `io.erpbridge/whenToUse`, `io.erpbridge/whenNotToUse`,
+   `io.erpbridge/examples`, and `io.erpbridge/allowedRoles`. Clients may
+   ignore or omit these values, and they never grant access. `public`,
    `internal`, `pii`, and `restricted` are the supported data classes;
    `pii` and `restricted` require configured opaque role slugs. Use roles that
    identify an approved function or opaque assignment, never a person name,
@@ -85,8 +111,10 @@ still require the change confirmation in `SKILL.md`.
    Disable cache for writes and list affected reads in `flushOn` when needed.
    Use `assets/mcp-tool.yaml` as a field guide, then validate the actual file.
 5. Run `bridgectl tool validate -f <manifest> --context "$CTX"`. Correct all
-   failures before the apply confirmation. Apply only the reviewed source:
-   `bridgectl tool apply -f <manifest> --context "$CTX"`.
+   failures before the apply confirmation. Apply only the reviewed source. For
+   split output, validate the reviewed files and apply their directory:
+   `bridgectl tool apply -f <reviewed-directory> --context "$CTX"`; for one
+   resource, use `bridgectl tool apply -f <manifest> --context "$CTX"`.
 6. Verify with `tool get`, `tool describe`, MCP discovery, and a safe call at
    `/mcp/`. For guarded tools, verify one permitted role and one denied role;
    never elevate an identity to hide a role failure.
@@ -151,16 +179,20 @@ Mark each item with a safe observable result before handoff:
   health endpoints passed, and any changed quoted value was followed by
   `--force-recreate`.
 - [ ] Credential sources and references were present by name/boolean only;
-  no credential, token, `.env` content, or authorization header was printed.
+  file-backed resources had a mounted `ERPBRIDGE_CREDENTIALS_DIR` and readable
+  reference-named file when required; no credential, token, `.env` content, or
+  authorization header was printed.
 - [ ] API test used the server-side default and returned only its bounded
   summary; `--local`, if used, is labelled as an offline diagnostic.
 - [ ] API readback is in the selected context registry, with no legacy global
   registry being ignored and no unconfirmed overwrite.
 - [ ] The reviewed manifest is the only applied source under
-  `manifests/<module>/`; no generated `schemas/` or per-tool JSON artifact is
-  treated as authoritative.
+  `manifests/<module>/`; split generated files were reviewed before adoption,
+  and no generated `schemas/` or per-tool JSON artifact is treated as
+  authoritative.
 - [ ] Local validation passed; apply readback shows the exact name/version and
-  expected state; MCP `/mcp/` discovery and a safe call succeeded.
+  expected state; MCP `/mcp/` discovery and a safe call succeeded. Any
+  annotations or `_meta` values were treated as informational only.
 - [ ] For sensitive tools, role admission and both allow/deny calls were
   checked with non-identifying role slugs. Demo tools are disabled outside
   local development, and RedisInsight is loopback-only or absent.

@@ -17,6 +17,17 @@ spec:
     type: object
     properties: {}
     required: []
+  # Optional. Define the actual final result shape before applying.
+  # outputSchema:
+  #   type: object
+  #   properties: {}
+  # Optional MCP routing hints. Keep explicit false values when reviewed.
+  # annotations:
+  #   title: "<display title>"
+  #   readOnlyHint: false
+  #   destructiveHint: false
+  #   idempotentHint: true
+  #   openWorldHint: true
   execution:
     type: http
     method: <METHOD>
@@ -24,7 +35,8 @@ spec:
     responsePath: <optional.response.path>
   security:
     authType: api-key
-    credentialRef: <ERP_CREDENTIAL_ENV_VAR>
+    credentialRef: <ERP_CREDENTIAL_REF>
+    credentialSource: env # Use file with ERPBRIDGE_CREDENTIALS_DIR for mounted rotation.
     dataClass: internal # public, internal, pii, or restricted
     # pii/restricted require an existing opaque, non-identifying role slug.
     # Never use a person name, email, employee number, or ERP record as a role.

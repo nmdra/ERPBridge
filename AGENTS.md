@@ -53,7 +53,7 @@ _See [`docs/connectivity.md`](./docs/connectivity.md) for full session and auth 
 - **Docs Sync**: Behavior changes must update the relevant `docs/` guide and `CHANGELOG.md` (Unreleased) in the same commit.
 
 ### 5. Secrets
-- **Environment Only**: Resolve credentials via environment variables (e.g., `credentialRef`, `API_AUTH_TOKEN`).
+- **Environment or Mounted File Only**: Resolve downstream ERP and plugin credentials via environment variables or an explicit per-resource `credentialSource: file` reference under `ERPBRIDGE_CREDENTIALS_DIR`; keep `API_AUTH_TOKEN` in the environment and never hard-code credential values.
 - **Redaction**: Use `logger.RedactArgs` and the `masq` redaction layer to keep secrets out of logs and context.
 
 ### 6. Public Documentation

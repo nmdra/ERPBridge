@@ -22,6 +22,11 @@ context is a separate confirmed action.
   draft and does not create a parallel `schemas/` or per-tool JSON authority.
 - A quoted Compose environment change needs `--env-file .env` and
   `--force-recreate`; never source `.env`. Confirm health after recreation.
+  Environment-backed credential changes need the refreshed process. A
+  `credentialSource: file` resource reads its reference-named file from
+  `ERPBRIDGE_CREDENTIALS_DIR` immediately before the operation, fails closed on
+  invalid content, and bypasses the response cache; provider-mounted updates
+  are eventually visible.
 - Treat deletion as user-visible impact. Confirm the exact `name@version`
   before deletion. A hard delete permanently removes database state and needs
   an explicit hard-delete confirmation even when `--yes` is available.
@@ -57,6 +62,11 @@ and must be absent from production discovery. RedisInsight is a local
 inspection aid: require a loopback binding or an explicit opt-in, and never
 use it as production evidence.
 
+MCP annotations and namespaced `_meta` values help clients select and explain
+published tools, but they are optional and informational. Check the authenticated
+identity and server-side role admission instead of treating discovery metadata
+as permission.
+
 ## Logs and cache
 
 Start with `bridgectl log stats` and bounded `bridgectl log tail` filters to
@@ -67,3 +77,8 @@ Run `bridgectl cache stats` before any invalidation. Confirm the narrowest
 target—tool, module, or all entries—before `bridgectl cache flush`. For an
 all-cache flush, repeat the environment and expected blast radius in the
 confirmation, then verify the post-flush statistic or the affected tool call.
+File-backed tools and active authenticated file-backed plugin bindings bypass
+response caching, so a file replacement does not need a cache flush merely to
+be observed. Environment-backed rotation keeps the normal cache behavior and
+needs the deployment refresh and narrow cache invalidation required by the
+changed credential.
