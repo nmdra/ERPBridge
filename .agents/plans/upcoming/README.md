@@ -10,6 +10,7 @@ Current candidates:
 
 - [`Plan-MCP-Upgrade.md`](./Plan-MCP-Upgrade.md) — deferred MCP specification
   evaluation and migration.
+- [`Plan-API-Key-Header-Propagation.md`](./Plan-API-Key-Header-Propagation.md) — preserve registered upstream API-key headers during MCP tool execution.
 Reference:
 
 - [`rca-sdk-integration-testing.md`](./rca-sdk-integration-testing.md) —

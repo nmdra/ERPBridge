@@ -166,7 +166,11 @@ Body:
 ```
 
 The call goes through the middleware chain: rate limiting, cache, and resilience.
-Authenticated direct calls share a limiter bucket by token principal.
+Authenticated direct calls share a limiter bucket by token principal. Tool
+execution resolves `spec.security.credentialRef` on the server and sends it in
+`spec.security.authHeader` when configured; an omitted header preserves the
+`Authorization` default. `authHeader` contains only a header name, never a
+credential value.
 
 Excess direct calls return HTTP `429` with the stable `RATE_LIMITED` error and a
 whole-second `Retry-After` header. Streamable HTTP MCP `tools/call` requests

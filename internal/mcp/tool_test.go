@@ -258,6 +258,24 @@ func TestTool_PrepareERPCallRoutesGeneratedParameterLocations(t *testing.T) {
 	require.Equal(t, map[string]any{"enabled": true}, bodyValue["details"])
 }
 
+func TestTool_PrepareERPCallUsesConfiguredAuthHeader(t *testing.T) {
+	t.Setenv("ERP_BASE_URL", "")
+	t.Setenv("ERP_TOOL_KEY", "test-key")
+	tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{
+		Execution: Execution{Method: http.MethodGet, Endpoint: "https://erp.example/items"},
+		Security: Security{
+			AuthType:      "api-key",
+			AuthHeader:    "X-API-Key",
+			CredentialRef: "ERP_TOOL_KEY", // #nosec G101 -- logical test reference, not a secret.
+		},
+	}}
+
+	ep, _, _, err := tool.prepareERPCall(nil)
+	require.NoError(t, err)
+	require.Equal(t, "X-API-Key", ep.Auth.Header)
+	require.Equal(t, "test-key", ep.Auth.Key)
+}
+
 func TestTool_PrepareERPCallUsesLegacyFallbackWithoutLocationMetadata(t *testing.T) {
 	t.Setenv("ERP_BASE_URL", "")
 	tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{

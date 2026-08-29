@@ -74,6 +74,7 @@ func (g *Generator) Generate(api API) (*mcp.Tool, error) {
 			Cache: defaultCache(method),
 			Security: mcp.Security{
 				AuthType:         api.AuthType,
+				AuthHeader:       api.AuthHeader,
 				CredentialRef:    credentialRef,
 				CredentialSource: api.CredentialSource,
 			},
@@ -258,6 +259,7 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 					Cache: defaultCache(method),
 					Security: mcp.Security{
 						AuthType:         api.AuthType,
+						AuthHeader:       api.AuthHeader,
 						CredentialRef:    credentialRef,
 						CredentialSource: api.CredentialSource,
 					},

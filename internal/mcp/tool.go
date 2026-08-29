@@ -138,7 +138,8 @@ type Execution struct {
 
 // Security defines the authentication requirements for the tool.
 type Security struct {
-	AuthType         string                       `json:"authType"`      // api-key, basic, bearer
+	AuthType         string                       `json:"authType"` // api-key, basic, bearer
+	AuthHeader       string                       `json:"authHeader,omitempty"`
 	CredentialRef    string                       `json:"credentialRef"` // Logical environment variable name
 	CredentialSource credentials.CredentialSource `json:"credentialSource,omitempty"`
 	DataClass        string                       `json:"dataClass,omitempty"`
@@ -307,8 +308,9 @@ func (t *Tool) prepareERPCall(args map[string]any) (connector.EndpointConfig, ur
 		BaseURL: "",
 		Headers: generatedHeaders,
 		Auth: connector.AuthConfig{
-			Type: t.Spec.Security.AuthType,
-			Key:  cred,
+			Type:   t.Spec.Security.AuthType,
+			Header: t.Spec.Security.AuthHeader,
+			Key:    cred,
 		},
 	}, queryParams, body, nil
 }

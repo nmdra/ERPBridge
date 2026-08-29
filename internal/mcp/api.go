@@ -75,6 +75,7 @@ func (s *Server) handleAPIProbe(w http.ResponseWriter, r *http.Request) {
 		Execution: Execution{Method: request.Method, Endpoint: request.URL},
 		Security: Security{
 			AuthType:         request.AuthType,
+			AuthHeader:       request.AuthHeader,
 			CredentialRef:    request.CredentialRef,
 			CredentialSource: request.CredentialSource,
 		},
@@ -88,8 +89,6 @@ func (s *Server) handleAPIProbe(w http.ResponseWriter, r *http.Request) {
 		writeAPIProbeError(w, http.StatusUnprocessableEntity, "API credential or endpoint could not be prepared")
 		return
 	}
-	ep.Auth.Header = request.AuthHeader
-
 	start := time.Now()
 	response, err := probeERP(r, s.connector, ep, queryParams, body)
 	latency := time.Since(start).Milliseconds()

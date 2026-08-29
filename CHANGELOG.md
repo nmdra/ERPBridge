@@ -23,6 +23,8 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
 - Align MCP tool errors with 2025-11-25 handling: protocol failures use
   JSON-RPC errors, execution failures use sanitized `isError` results, and
   bounded retry/concurrency metadata is available through namespaced `_meta`.
+- Preserve registered upstream authentication headers in generated and
+  declarative MCP tools, including `X-API-Key` for API-key services.
 - Refresh the bundled `bridgectl-ops` skill for file-backed credential
   rotation, split tool generation, MCP annotation and `_meta` guidance, and
   safe embedded-skill installation.

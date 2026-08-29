@@ -7,6 +7,7 @@ starting implementation work.
 
 - [`Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md`](./active/Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md) — portable completion checkpoint for redacted operational knowledge records.
 - [`Plan-Live-E2E-Issue-Fixes.md`](./active/Plan-Live-E2E-Issue-Fixes.md) — remediation of the live E2E product gaps and fixture classifications.
+- [`Plan-API-Key-Header-Propagation.md`](./active/Plan-API-Key-Header-Propagation.md) — preserve registered upstream API-key headers during MCP tool execution.
 
 ## Upcoming
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP

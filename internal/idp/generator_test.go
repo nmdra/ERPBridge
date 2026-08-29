@@ -53,7 +53,8 @@ paths:
 	api := API{
 		Name:          "test",
 		Module:        "finance",
-		AuthType:      "bearer",
+		AuthType:      "api-key",
+		AuthHeader:    "X-API-Key",
 		CredentialRef: "ERP_OPENAPI_KEY", // #nosec G101 -- environment-variable reference, not a secret.
 	}
 
@@ -65,6 +66,7 @@ paths:
 	assert.Equal(t, []string{"Use when the user asks for: Get test data"}, tools[0].Spec.Description.WhenToUse)
 	assert.Equal(t, []string{"I need help with: Get test data"}, tools[0].Spec.Description.Examples)
 	assert.Equal(t, "ERP_OPENAPI_KEY", tools[0].Spec.Security.CredentialRef)
+	assert.Equal(t, "X-API-Key", tools[0].Spec.Security.AuthHeader)
 	assert.Equal(t, "GET", tools[0].Spec.Execution.Method)
 	assert.Equal(t, &mcp.ToolAnnotations{
 		ReadOnlyHint:    new(true),
@@ -89,6 +91,18 @@ func TestGenerator_RequiresAndUsesCredentialReference(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "ERP_CUSTOM_KEY", tool.Spec.Security.CredentialRef)
 	assert.Equal(t, "file", string(tool.Spec.Security.CredentialSource))
+}
+
+func TestGenerator_GeneratePreservesAuthHeader(t *testing.T) {
+	gen := NewGenerator(t.TempDir(), logger.Init())
+	tool, err := gen.Generate(API{
+		Name:          "secured-test",
+		AuthType:      "api-key",
+		AuthHeader:    "X-API-Key",
+		CredentialRef: "ERP_GENERATED_KEY", // #nosec G101 -- logical test reference, not a secret.
+	})
+	require.NoError(t, err)
+	require.Equal(t, "X-API-Key", tool.Spec.Security.AuthHeader)
 }
 
 func TestGenerator_GenerateIsPureAndSaveIsExplicit(t *testing.T) {
