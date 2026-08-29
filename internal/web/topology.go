@@ -37,7 +37,8 @@ type TopologyOmitted struct {
 	Edges int `json:"edges"`
 }
 
-// TopologyNode represents a transport, tool, API, plugin, binding, unresolved endpoint, or ambiguous endpoint.
+// TopologyNode represents a transport, tool, API component, exact ERP endpoint,
+// plugin, binding, unresolved endpoint, or ambiguous endpoint.
 type TopologyNode struct {
 	ID               string                   `json:"id"`
 	Kind             string                   `json:"kind"`
@@ -46,6 +47,7 @@ type TopologyNode struct {
 	ContextState     string                   `json:"contextState,omitempty"`
 	Tool             *ToolProjection          `json:"tool,omitempty"`
 	API              *TopologyAPIDetails      `json:"api,omitempty"`
+	Endpoint         *TopologyEndpointDetails `json:"endpoint,omitempty"`
 	Plugin           *PluginProjection        `json:"plugin,omitempty"`
 	Binding          *PluginBindingProjection `json:"binding,omitempty"`
 }
@@ -57,6 +59,12 @@ type TopologyAPIDetails struct {
 	Method       string `json:"method"`
 	EndpointPath string `json:"endpointPath"`
 	Status       string `json:"status,omitempty"`
+}
+
+// TopologyEndpointDetails contains the safe method and path used by a tool.
+type TopologyEndpointDetails struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
 }
 
 // TopologyEdge represents one graph relationship and its match confidence.
@@ -133,6 +141,7 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	toolIDs := make(map[string]string, len(tools))
+	endpointIDs := make(map[string]string, len(tools))
 	for _, tool := range tools {
 		if len(graph.Nodes) >= maxTopologyNodes {
 			break
@@ -147,8 +156,28 @@ func (h *consoleHandler) topology(w http.ResponseWriter, r *http.Request) {
 		kind, matched, diagnosticReason := matchAPI(tool, apis, ctx.ERPBase)
 		if matched != nil {
 			apiID := "api:" + stableID(matched.ID, matched.Name)
+			contextState := apiContextState(matched.URL, ctx.ERPBase)
 			if len(graph.Edges) < maxTopologyEdges {
-				graph.Edges = append(graph.Edges, TopologyEdge{ID: "edge:" + toolID + ":" + apiID, Source: toolID, Target: apiID, MatchKind: kind, ContextState: apiContextState(matched.URL, ctx.ERPBase), Authoritative: kind == matchExact})
+				graph.Edges = append(graph.Edges, TopologyEdge{ID: "edge:" + toolID + ":" + apiID, Source: toolID, Target: apiID, MatchKind: kind, ContextState: contextState, Authoritative: kind == matchExact})
+			}
+
+			endpointPath := projection.EndpointPath
+			endpointKey := topologyEndpointKey(*matched, projection.Method, endpointPath)
+			if _, endpointSeen := endpointIDs[endpointKey]; !endpointSeen {
+				endpointID := "endpoint:" + stableID(endpointKey, endpointPath)
+				endpointIDs[endpointKey] = endpointID
+				if len(graph.Nodes) < maxTopologyNodes {
+					graph.Nodes = append(graph.Nodes, TopologyNode{
+						ID:           endpointID,
+						Kind:         "erp-endpoint",
+						Label:        endpointPath,
+						ContextState: contextState,
+						Endpoint:     &TopologyEndpointDetails{Method: projection.Method, Path: endpointPath},
+					})
+				}
+				if len(graph.Edges) < maxTopologyEdges {
+					graph.Edges = append(graph.Edges, TopologyEdge{ID: "edge:" + apiID + ":" + endpointID, Source: apiID, Target: endpointID, MatchKind: kind, ContextState: contextState, Authoritative: kind == matchExact})
+				}
 			}
 		} else {
 			endpointKind := "unresolved-endpoint"
@@ -265,14 +294,17 @@ func (h *consoleHandler) registryForContext(contextName string) (*idp.Registry, 
 
 func topologyCandidateCounts(tools []mcp.Tool, apis []idp.API, plugins []mcp.Plugin, bindings []mcp.PluginBinding, pluginsAvailable bool, base string) (int, int) {
 	unresolved := 0
+	endpointKeys := make(map[string]struct{}, len(tools))
 	for _, tool := range tools {
 		_, matched, _ := matchAPI(tool, apis, base)
 		if matched == nil {
 			unresolved++
+			continue
 		}
+		endpointKeys[topologyEndpointKey(*matched, strings.ToUpper(tool.Spec.Execution.Method), safeEndpointPath(tool.Spec.Execution.Endpoint))] = struct{}{}
 	}
-	nodes := 1 + len(apis) + len(tools) + unresolved
-	edges := len(tools) * 2
+	nodes := 1 + len(apis) + len(tools) + unresolved + len(endpointKeys)
+	edges := len(tools)*2 + len(endpointKeys)
 	if !pluginsAvailable {
 		return nodes, edges
 	}
@@ -348,6 +380,14 @@ func stableID(primary, fallback string) string {
 		value = fallback
 	}
 	return strings.NewReplacer("/", "_", " ", "_", "@", "_").Replace(value)
+}
+
+func topologyEndpointKey(api idp.API, method, path string) string {
+	apiID := api.ID
+	if apiID == "" {
+		apiID = api.Name
+	}
+	return apiID + "|" + strings.ToUpper(method) + "|" + path
 }
 
 const (

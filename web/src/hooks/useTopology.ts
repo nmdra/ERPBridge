@@ -4,6 +4,7 @@ export const topologyNodeKinds = [
   "mcp-transport",
   "mcp-tool",
   "erp-api",
+  "erp-endpoint",
   "plugin-binding",
   "external-plugin",
   "unresolved-endpoint",
@@ -37,6 +38,10 @@ export type TopologyNode = {
     method: string;
     endpointPath: string;
     status?: string;
+  };
+  endpoint?: {
+    method: string;
+    path: string;
   };
   plugin?: {
     name: string;

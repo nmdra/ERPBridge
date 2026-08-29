@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refactor the read-only topology console into a progressive component explorer
+with ELK layout, expandable high-cardinality groups, custom React Flow node
+families, semantic edge styling, and an accessible relationship fallback.
+- Add explicit ERP endpoint nodes and API-to-endpoint edges so focused views show
+MCP tool → ERP API component → exact method/path endpoint relationships.
+- Move the component navigator and inspector below the full-width topology canvas.
+- Narrow a selected MCP tool to its direct transport, ERP API, exact endpoint,
+  and plugin path instead of rendering unrelated component members dimmed.
+- Refresh the bundled `bridgectl-ops` skill for file-backed credential
+  rotation, split tool generation, MCP annotation and `_meta` guidance, and
+  safe embedded-skill installation.
+
 ## [v0.5.0-alpha.1] - 2026-08-29
 
 ### Added

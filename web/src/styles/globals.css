@@ -98,3 +98,22 @@ a {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
 }
+
+.react-flow {
+  --xy-background-color-default: hsl(var(--background));
+  --xy-background-pattern-dots-color-default: hsl(var(--border));
+  --xy-edge-stroke-default: hsl(var(--muted-foreground));
+  --xy-edge-stroke-selected-default: hsl(var(--primary));
+  --xy-node-color-default: hsl(var(--foreground));
+  --xy-node-background-color-default: hsl(var(--card));
+  --xy-node-border-default: 1px solid hsl(var(--border));
+  --xy-handle-background-color-default: hsl(var(--muted-foreground));
+  --xy-handle-border-color-default: hsl(var(--background));
+  --xy-controls-button-background-color-default: hsl(var(--card));
+  --xy-controls-button-background-color-hover-default: hsl(var(--muted));
+  --xy-controls-button-color-default: hsl(var(--foreground));
+  --xy-controls-button-color-hover-default: hsl(var(--foreground));
+  --xy-controls-button-border-color-default: hsl(var(--border));
+  --xy-minimap-background-color-default: hsl(var(--card));
+  --xy-minimap-node-background-color-default: hsl(var(--muted));
+}

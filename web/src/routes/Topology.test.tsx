@@ -24,6 +24,12 @@ test("renders accessible topology relationships", async () => {
                 },
               },
               {
+                id: "endpoint",
+                kind: "erp-endpoint",
+                label: "/invoices",
+                endpoint: { method: "GET", path: "/invoices" },
+              },
+              {
                 id: "t",
                 kind: "mcp-tool",
                 label: "list-invoices",
@@ -76,6 +82,13 @@ test("renders accessible topology relationships", async () => {
                 authoritative: true,
               },
               {
+                id: "api-endpoint-edge",
+                source: "a",
+                target: "endpoint",
+                matchKind: "exact",
+                authoritative: true,
+              },
+              {
                 id: "binding-edge",
                 source: "t",
                 target: "b",
@@ -111,9 +124,12 @@ test("renders accessible topology relationships", async () => {
   ).toBeInTheDocument();
   expect(screen.getAllByText(/exact/).length).toBeGreaterThan(0);
   expect(screen.getByText("ERP APIs (1)")).toBeInTheDocument();
+  expect(screen.getByText("ERP endpoints (1)")).toBeInTheDocument();
   expect(screen.getByText("Plugins (1)")).toBeInTheDocument();
   expect(screen.getByText("Unresolved endpoints (1)")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Invoices" })).toBeInTheDocument();
+  expect(
+    screen.getAllByRole("button", { name: "Invoices" }).length,
+  ).toBeGreaterThan(0);
 });
 
 test("filters plugin nodes without placing them in the MCP tools facet", async () => {
@@ -484,5 +500,56 @@ test("renders safe diagnostics when unresolved and ambiguous nodes are selected"
   await user.click(screen.getByRole("button", { name: "/unresolved" }));
   expect(
     screen.getByText("No registered ERP API matches this endpoint."),
+  ).toBeInTheDocument();
+});
+
+test("switches to the relationship table and returns to topology on inspection", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            state: "available",
+            nodes: [
+              {
+                id: "transport",
+                kind: "mcp-transport",
+                label: "MCP transport",
+              },
+              { id: "api", kind: "erp-api", label: "Invoices" },
+            ],
+            edges: [
+              {
+                id: "edge",
+                source: "transport",
+                target: "api",
+                matchKind: "exact",
+                authoritative: true,
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    ),
+  );
+
+  render(<Topology contextName="local" />);
+  await screen.findByRole("tabpanel", { name: "Topology canvas" });
+  await user.click(screen.getByRole("tab", { name: "Relationships" }));
+
+  expect(screen.queryByRole("application")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("tabpanel", { name: "Topology relationships" }),
+  ).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Inspect" }));
+  expect(
+    screen.getByRole("tabpanel", { name: "Topology canvas" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Selected relationship" }),
   ).toBeInTheDocument();
 });

@@ -40,12 +40,14 @@ test("groups an endpoint with its MCP and plugin relationship chain", () => {
     node("transport", "mcp-transport"),
     node("tool", "mcp-tool"),
     node("api", "erp-api", "mockerp-items"),
+    node("endpoint", "erp-endpoint", "/api/items"),
     node("binding", "plugin-binding"),
     node("plugin", "external-plugin"),
   ];
   const edges = [
     edge("transport-tool", "transport", "tool"),
     edge("tool-api", "tool", "api", "base-prefix"),
+    edge("api-endpoint", "api", "endpoint", "base-prefix"),
     edge("tool-binding", "tool", "binding"),
     edge("binding-plugin", "binding", "plugin"),
   ];
@@ -53,6 +55,7 @@ test("groups an endpoint with its MCP and plugin relationship chain", () => {
   const [component] = buildEndpointComponents(nodes, edges);
   expect(component.memberNodeIds).toEqual([
     "api",
+    "endpoint",
     "tool",
     "transport",
     "binding",
@@ -63,8 +66,8 @@ test("groups an endpoint with its MCP and plugin relationship chain", () => {
   expect(componentSummary(component)).toContain("1 base-prefix");
 
   const focused = focusedComponentGraph(component, nodes, edges);
-  expect(focused.nodes.map((item) => item.id)).toHaveLength(5);
-  expect(focused.edges.map((item) => item.id)).toHaveLength(4);
+  expect(focused.nodes.map((item) => item.id)).toHaveLength(6);
+  expect(focused.edges.map((item) => item.id)).toHaveLength(5);
 });
 
 test("ranks unresolved and ambiguous endpoint components before exact ones", () => {

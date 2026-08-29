@@ -5,8 +5,6 @@ starting implementation work.
 
 ## Active
 
-No active plans.
-
 ## Upcoming
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
   specification evaluation and migration. It is not authorization to begin
@@ -22,6 +20,8 @@ promotion to `active/`.
 
 ## Completed
 
+- [`[COMPLETED]Plan-Bridgectl-Ops-Skill-Refresh.md`](./completed/%5BCOMPLETED%5DPlan-Bridgectl-Ops-Skill-Refresh.md) — refreshed bundled operations guidance, mounted credential handling, MCP discovery hints, and embedded-skill delivery.
+- [`[COMPLETED]Plan-Topology-Selection-Focus.md`](./completed/%5BCOMPLETED%5DPlan-Topology-Selection-Focus.md) — selected MCP tools render only their direct execution paths.
 - [`[COMPLETED]Plan-Release-v0.5.0-alpha.1.md`](./completed/%5BCOMPLETED%5DPlan-Release-v0.5.0-alpha.1.md) — live candidate validation, release-note cut, and prerelease publication.
 - [`[COMPLETED]Plan-Console-Topology-and-Pagination.md`](./completed/%5BCOMPLETED%5DPlan-Console-Topology-and-Pagination.md) — context-correct topology, compact React Flow redesign, and operational-table pagination.
 - [`[COMPLETED]Plan-Agentic-Tools-MCP-Integration.md`](./completed/%5BCOMPLETED%5DPlan-Agentic-Tools-MCP-Integration.md)

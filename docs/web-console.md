@@ -169,7 +169,7 @@ schemas, and full upstream URLs.
 The topology describes these paths:
 
 ```text
-MCP client -> MCP tool -> ERP API endpoint
+MCP client -> MCP tool -> ERP API component -> exact ERP endpoint
                     `-> plugin binding -> external plugin -> result
 ```
 
@@ -184,7 +184,9 @@ Each relationship has one match state:
 - `exact`: the method and normalized endpoint match one API entry.
 - `base-prefix`: the server inferred a match from a configured base prefix.
   A root API registration can infer paths across HTTP methods, but the edge is
-  not authoritative.
+  not authoritative. For generated tools that share an ERP base, register the
+  API at that base/root URL. A path-specific registration only verifies that
+  path and can leave other working tool paths unresolved.
 - `ambiguous`: more than one API entry matches. No API is selected as the
   winner.
 - `unresolved`: no safe API match exists.
@@ -196,30 +198,41 @@ entries as `context matched` or `unassigned`. The registry has no deployment
 context field, so the console does not claim cross-environment ownership. It
 shows endpoint paths and selected-context labels, not full upstream URLs.
 
-The topology includes MCP transport, MCP tool, ERP API, plugin binding,
-external plugin, ambiguous endpoint, and unresolved endpoint nodes. Plugin
-relationships appear only when both plugin list routes are available. When any
-endpoint component exists, including a standalone MCP tool, the canvas starts
-with a compact connected overview. It connects the MCP transport
-to bounded component summaries. Each summary shows one safe endpoint identity,
-its MCP tool count, and its match-state summary. The overview displays at most
-24 components; the component menu, search, and filters expose additional
-components.
+The topology includes MCP transport, MCP tool, ERP API component, exact ERP
+endpoint, plugin binding, external plugin, ambiguous endpoint, and unresolved
+endpoint nodes. Plugin relationships appear only when both plugin list routes are
+available. The component overview connects the MCP transport to bounded component
+summaries.
+Each summary shows one safe ERP API component identity, its MCP tool count,
+ERP endpoint count, and match-state summary. The overview displays at most 24 components; the sidebar,
+search, and filters expose additional components. Focused layouts collapse
+collections larger than ten members and can expand them on demand.
 
-The component menu provides buttons for each ERP endpoint, including ambiguous
-or unresolved diagnostic endpoints, and for each MCP tool. Select one to drill
-down to its connected MCP tools, endpoint, bindings, plugins, and
-relationships. Selecting a node in the
-canvas or relationship list shares the same selection and inspector; Escape or
-Back to compact overview returns to the overview. The raw accessible
-relationship list remains available for the complete filtered graph.
+The topology opens as a bounded component overview. Select a component or MCP
+tool in the component sidebar to drill down to its connected tools, exact ERP
+endpoint, bindings, plugins, and relationships. Selecting an MCP tool narrows
+the canvas to its direct execution path: MCP transport, that tool, its ERP API
+component, its exact ERP endpoint, and any attached plugin binding and plugin.
+The relationship table remains complete. High-cardinality tool, binding, and
+plugin relationships are represented by expandable groups until the user
+requests the individual nodes. Selecting a node in the canvas or relationship
+list shares the same selection and inspector; Escape or Back to compact overview
+returns to the overview.
 
-React Flow uses distinct shapes for transports, tools, APIs, ambiguous and
-unresolved endpoints, bindings, and plugins. Directional labelled handles,
-arrowed edges, selected/dimmed states, fit-to-view behavior, zoom controls, and
-a minimap support diagram navigation. Nodes, edges, component buttons, and
-controls have keyboard focus and accessible labels; the relationship table and
-inspector provide a non-canvas alternative.
+React Flow renders the read-only canvas and ELK computes relationship-aware
+layered positions. The focused graph preserves the chain from each MCP tool to
+its ERP API component and exact method/path endpoint. The component sidebar and
+inspector sit below the full-width canvas to preserve horizontal graph space.
+Entity cards use consistent structure, while status icons,
+text, accent rails, and semantic tones communicate exact, inferred, ambiguous,
+and unresolved relationships without relying on color or unique polygons.
+Exact relationships have no permanent labels, inferred relationships are static
+(dashed), and unrelated relationships become nearly transparent for selections
+that retain the full component graph. A selected MCP tool instead shows only its
+direct path. The minimap appears only for sufficiently large focused graphs.
+Nodes, edges, component buttons, and controls have keyboard focus and accessible
+labels. The raw relationship table remains available as the complete non-canvas
+alternative.
 
 Use the search field and the node kind, match-confidence, and context-state
 filters to narrow the graph. The canvas and accessible relationship list share

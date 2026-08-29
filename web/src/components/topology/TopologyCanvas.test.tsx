@@ -1,6 +1,10 @@
 import { expect, test } from "vitest";
 
-import type { TopologyEdge, TopologyNode } from "../../hooks/useTopology";
+import type {
+  TopologyVisualEdge,
+  TopologyVisualGraph,
+  TopologyVisualNode,
+} from "../../routes/topologyViewModel";
 import {
   buildTopologyFlow,
   handleIDs,
@@ -11,38 +15,69 @@ const componentKinds = [
   "mcp-transport",
   "mcp-tool",
   "erp-api",
+  "erp-endpoint",
   "ambiguous-endpoint",
   "unresolved-endpoint",
   "plugin-binding",
   "external-plugin",
 ] as const;
 
-function node(id: string, kind: string): TopologyNode {
-  return { id, kind, label: `${kind} label` };
+function visualNode(
+  id: string,
+  kind: TopologyVisualNode["kind"],
+  label = id,
+  topologyKind?: string,
+): TopologyVisualNode {
+  return {
+    id,
+    kind,
+    label,
+    topologyKind,
+    selected: false,
+    dimmed: false,
+  };
 }
 
-function edge(source: string, target: string, matchKind: string): TopologyEdge {
+function visualEdge(
+  id: string,
+  source: string,
+  target: string,
+  matchKind = "exact",
+): TopologyVisualEdge {
   return {
-    id: `${source}:${target}`,
+    id,
     source,
     target,
     matchKind,
     authoritative: matchKind === "exact",
+    originalEdgeIds: [id],
+    selected: false,
+    dimmed: false,
   };
 }
 
-test("gives every topology component an accessible, distinct visual shape", () => {
+test("gives topology entities accessible roles without relying on unique shapes", () => {
   const presentations = componentKinds.map((kind) =>
     topologyNodePresentation(kind),
   );
 
   expect(
-    new Set(presentations.map((presentation) => presentation.shape)).size,
-  ).toBe(componentKinds.length);
+    presentations.map((presentation) => presentation.structuralRole),
+  ).toEqual([
+    "transport",
+    "entity",
+    "entity",
+    "entity",
+    "entity",
+    "entity",
+    "entity",
+    "entity",
+  ]);
   expect(presentations.map((presentation) => presentation.label)).toEqual([
     "MCP transport",
     "MCP tool",
     "ERP API",
+    "ERP endpoint",
     "Ambiguous endpoint",
     "Unresolved endpoint",
     "Plugin binding",
@@ -54,36 +89,49 @@ test("gives every topology component an accessible, distinct visual shape", () =
   });
 });
 
-test("assigns labelled directional edges to their matching stable handles", () => {
-  const nodes = [
-    node("transport", "mcp-transport"),
-    node("tool", "mcp-tool"),
-    node("api", "erp-api"),
-  ];
-  const edges = [
-    edge("transport", "tool", "exact"),
-    edge("tool", "api", "base-prefix"),
-  ];
+test("converts visual graph edges to stable handles without permanent labels", () => {
+  const graph: TopologyVisualGraph = {
+    nodes: [
+      visualNode("transport", "transport", "MCP transport", "mcp-transport"),
+      visualNode("tool", "entity", "list-invoices", "mcp-tool"),
+      visualNode("api", "component", "Invoices", "erp-api"),
+    ],
+    edges: [
+      visualEdge("transport-tool", "transport", "tool"),
+      visualEdge("tool-api", "tool", "api", "base-prefix"),
+    ],
+  };
 
-  const flow = buildTopologyFlow(nodes, edges, null, false, {});
+  const flow = buildTopologyFlow(graph);
 
-  expect(flow.nodes.map((item) => item.data.shape)).toEqual([
-    "pill",
-    "rectangle",
-    "database",
-  ]);
   expect(flow.edges).toEqual([
     expect.objectContaining({
-      label: "exact",
-      sourceHandle: "source-mcp-transport",
-      targetHandle: "target-mcp-tool",
+      sourceHandle: "source-transport",
+      targetHandle: "target-entity",
+      data: expect.objectContaining({ matchKind: "exact" }),
     }),
     expect.objectContaining({
-      label: "base-prefix",
-      sourceHandle: "source-mcp-tool",
-      targetHandle: "target-erp-api",
+      sourceHandle: "source-entity",
+      targetHandle: "target-component",
+      data: expect.objectContaining({ matchKind: "base-prefix" }),
     }),
   ]);
-  expect(flow.edges[0].ariaLabel).toContain("authoritative");
-  expect(flow.edges[1].ariaLabel).toContain("base-prefix");
+  expect(flow.edges.every((item) => item.label === undefined)).toBe(true);
+});
+
+test("adds per-edge ports only for high-degree nodes", () => {
+  const nodes = [visualNode("api", "component", "Invoices", "erp-api")];
+  const edges = Array.from({ length: 6 }, (_, index) => {
+    const toolID = `tool-${index}`;
+    nodes.push(visualNode(toolID, "entity", toolID, "mcp-tool"));
+    return visualEdge(`edge-${index}`, toolID, "api");
+  });
+
+  const flow = buildTopologyFlow({ nodes, edges });
+  const api = flow.nodes.find((item) => item.id === "api");
+
+  expect(api?.data.incomingPorts).toHaveLength(6);
+  expect(flow.edges.map((item) => item.targetHandle)).toEqual(
+    edges.map((item) => `target-port-${item.id}`),
+  );
 });

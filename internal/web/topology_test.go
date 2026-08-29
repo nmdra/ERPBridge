@@ -211,6 +211,25 @@ func TestTopologyLoadsSelectedContextRegistryWithoutInjectedRegistry(t *testing.
 	if !exactMatched {
 		t.Fatalf("selected context API has no exact match: %+v", topology.Edges)
 	}
+	var endpointID string
+	for _, node := range topology.Nodes {
+		if node.Kind == "erp-endpoint" && node.Endpoint != nil &&
+			node.Endpoint.Method == http.MethodGet && node.Endpoint.Path == "/api/invoices" {
+			endpointID = node.ID
+		}
+	}
+	if endpointID == "" {
+		t.Fatalf("exact ERP endpoint is absent: %+v", topology.Nodes)
+	}
+	var apiEndpointMatched bool
+	for _, edge := range topology.Edges {
+		if edge.Source == "api:selected-api" && edge.Target == endpointID && edge.MatchKind == matchExact {
+			apiEndpointMatched = true
+		}
+	}
+	if !apiEndpointMatched {
+		t.Fatalf("selected API has no exact endpoint relationship: %+v", topology.Edges)
+	}
 
 	omittedRequest := httptest.NewRequest(http.MethodGet, console.URL()+"/api/console/v1/topology", nil)
 	omittedRequest.Host = console.Host()

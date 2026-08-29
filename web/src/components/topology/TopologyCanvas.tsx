@@ -1,275 +1,207 @@
-import { useCallback, useMemo, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 
 import {
   Background,
+  BackgroundVariant,
   Controls,
-  Handle,
   MiniMap,
   Panel,
-  Position,
   ReactFlow,
+  useReactFlow,
   type Edge,
   type Node,
 } from "@xyflow/react";
-import {
-  AlertTriangle,
-  Database,
-  Link2,
-  Network,
-  Plug,
-  Server,
-  Wrench,
-} from "lucide-react";
-import "@xyflow/react/dist/style.css";
-
 import type {
-  TopologyEdge,
-  TopologyNode,
-  TopologySelection,
-} from "../../hooks/useTopology";
-
+  TopologyVisualGraph,
+  TopologyVisualNode,
+} from "../../routes/topologyViewModel";
+import { graphLayoutKey, layoutTopology } from "../../routes/topologyLayout";
 import {
   buildTopologyFlow,
-  handleIDs,
-  type FlowNodeData,
+  type TopologyFlowEdgeData,
+  type TopologyFlowNode,
 } from "./topologyFlow";
+import { TopologyClusterNode } from "./TopologyClusterNode";
+import { TopologyComponentNode } from "./TopologyComponentNode";
+import { TopologyEntityNode } from "./TopologyEntityNode";
+import { TopologyFlowEdge as TopologyFlowEdgeRenderer } from "./TopologyFlowEdge";
+import { TopologyTransportNode } from "./TopologyTransportNode";
+import { TopologyLegend } from "./TopologyLegend";
 
-function NodeIcon({ kind }: { kind: string }) {
-  if (kind === "erp-api") return <Database aria-hidden="true" size={15} />;
-  if (kind === "mcp-tool") return <Wrench aria-hidden="true" size={15} />;
-  if (kind === "mcp-transport") return <Network aria-hidden="true" size={15} />;
-  if (kind === "external-plugin") return <Plug aria-hidden="true" size={15} />;
-  if (kind === "plugin-binding") return <Link2 aria-hidden="true" size={15} />;
-  if (kind === "unresolved-endpoint") {
-    return <AlertTriangle aria-hidden="true" size={15} />;
-  }
-  return <Server aria-hidden="true" size={15} />;
+const nodeTypes = {
+  transport: TopologyTransportNode,
+  component: TopologyComponentNode,
+  entity: TopologyEntityNode,
+  cluster: TopologyClusterNode,
+};
+const edgeTypes = { topology: TopologyFlowEdgeRenderer };
+const fitViewOptions = { duration: 180, maxZoom: 1.1, padding: 0.2 };
+
+function miniMapNodeColor(node: Node) {
+  const kind = node.data?.topologyKind ?? node.data?.viewKind;
+  if (kind === "ambiguous-endpoint") return "hsl(var(--warning))";
+  if (kind === "unresolved-endpoint") return "hsl(var(--destructive))";
+  if (node.data?.viewKind === "cluster") return "hsl(var(--info))";
+  if (node.data?.viewKind === "transport")
+    return "hsl(var(--muted-foreground))";
+  return "hsl(var(--primary))";
 }
 
-function nodeClass(
-  kind: string,
-  shapeClass: string,
-  compact: boolean,
-  selected: boolean,
-  dimmed: boolean,
-) {
-  const colorClass =
-    kind === "erp-api"
-      ? "border-emerald-500/60 bg-emerald-500/10"
-      : kind === "mcp-tool"
-        ? "border-primary/60 bg-primary/10"
-        : kind === "mcp-transport"
-          ? "border-sky-500/60 bg-sky-500/10"
-          : kind === "external-plugin"
-            ? "border-violet-500/60 bg-violet-500/10"
-            : kind === "plugin-binding"
-              ? "border-amber-500/60 bg-amber-500/10"
-              : kind === "ambiguous-endpoint"
-                ? "border-orange-500/60 bg-orange-500/10"
-                : kind === "unresolved-endpoint"
-                  ? "border-destructive/60 bg-destructive/10"
-                  : "border-border bg-card";
-  return [
-    `relative ${compact ? "w-56 min-w-56 max-w-56" : "w-40 min-w-40 max-w-40"} ${shapeClass} border px-3 py-2 text-card-foreground shadow-sm outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-ring`,
-    colorClass,
-    selected ? "z-20 ring-2 ring-primary shadow-lg" : "",
-    dimmed ? "opacity-25" : "opacity-100",
-  ].join(" ");
+function FitViewAfterLayout({
+  layoutKey,
+  ready,
+}: {
+  layoutKey: string;
+  ready: boolean;
+}) {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    if (ready) void fitView(fitViewOptions);
+  }, [fitView, layoutKey, ready]);
+  return null;
 }
 
-function TopologyFlowNode({ data }: { data: FlowNodeData }) {
-  const handles = handleIDs(data.kind);
-
-  return (
-    <div
-      aria-label={`${data.label}, ${data.presentationLabel}`}
-      aria-pressed={data.selected}
-      className={nodeClass(
-        data.kind,
-        data.shapeClass,
-        data.compact,
-        data.selected,
-        data.dimmed,
-      )}
-      onClick={data.onSelect}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          data.onSelect();
-        }
-      }}
-      role="button"
-      tabIndex={0}
-    >
-      <Handle
-        aria-label={`Incoming connection to ${data.label}`}
-        id={handles.target}
-        position={Position.Left}
-        type="target"
-      />
-      <div className="flex items-center gap-2 text-xs font-medium">
-        <NodeIcon kind={data.kind} />
-        <span
-          className={`min-w-0 ${data.compact ? "break-words" : "truncate"}`}
-          title={data.label}
-        >
-          {data.label}
-        </span>
-      </div>
-      <span className="mt-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
-        {data.kind}
-      </span>
-      {data.summary ? (
-        <span className="mt-1 block break-words text-[10px] text-muted-foreground">
-          {data.summary}
-        </span>
-      ) : null}
-      <Handle
-        aria-label={`Outgoing connection from ${data.label}`}
-        id={handles.source}
-        position={Position.Right}
-        type="source"
-      />
-    </div>
-  );
-}
-
-const nodeTypes = { topology: TopologyFlowNode };
-
-function miniMapNodeColor(node: Node<FlowNodeData>) {
-  if (node.data?.kind === "external-plugin") return "#8b5cf6";
-  if (node.data?.kind === "mcp-tool") return "#2563eb";
-  if (node.data?.kind === "plugin-binding") return "#d97706";
-  if (node.data?.kind === "erp-api") return "#059669";
-  if (node.data?.kind === "ambiguous-endpoint") return "#f97316";
-  if (node.data?.kind === "unresolved-endpoint") return "#dc2626";
-  return "#64748b";
-}
-
-const fitViewOptions = { duration: 200, maxZoom: 1.2, padding: 0.2 };
+export type TopologyCanvasProps = {
+  graph: TopologyVisualGraph;
+  mode: "overview" | "focused" | "expanded";
+  onSelectNode: (nodeID: string) => void;
+  onSelectEdge: (edgeID: string) => void;
+  onExpandCluster: (node: TopologyVisualNode) => void;
+  onClearSelection: () => void;
+};
 
 export function TopologyCanvas({
-  nodes,
-  edges,
-  selection,
+  graph,
+  mode,
   onSelectNode,
   onSelectEdge,
+  onExpandCluster,
   onClearSelection,
-  compact = false,
-  nodeSummaries = {},
-}: {
-  nodes: TopologyNode[];
-  edges: TopologyEdge[];
-  selection: TopologySelection;
-  onSelectNode: (id: string) => void;
-  onSelectEdge: (id: string) => void;
-  onClearSelection: () => void;
-  compact?: boolean;
-  nodeSummaries?: Record<string, string>;
-}) {
-  const topologyFlow = useMemo(
-    () => buildTopologyFlow(nodes, edges, selection, compact, nodeSummaries),
-    [compact, edges, nodeSummaries, nodes, selection],
-  );
-  const flowNodes = useMemo<Node<FlowNodeData>[]>(
+}: TopologyCanvasProps) {
+  const currentFlow = useMemo(
     () =>
-      topologyFlow.nodes.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          onSelect: () => onSelectNode(node.id),
-        },
-      })),
-    [onSelectNode, topologyFlow.nodes],
+      buildTopologyFlow(graph, {
+        onExpandCluster,
+        onSelectNode: (node) =>
+          onSelectNode(node.originalNodeId ?? node.componentId ?? node.id),
+      }),
+    [graph, onExpandCluster, onSelectNode],
   );
-  const nodeKey = useMemo(
-    () => nodes.map((node) => node.id).join("|"),
-    [nodes],
+  const currentLayoutKey = useMemo(
+    () => graphLayoutKey(currentFlow.nodes, currentFlow.edges),
+    [currentFlow.edges, currentFlow.nodes],
   );
-  const flowEdges = topologyFlow.edges;
-  const handleEdgeClick = useCallback(
-    (_event: MouseEvent, edge: Edge) => onSelectEdge(edge.id),
-    [onSelectEdge],
-  );
+  const latestFlow = useRef(currentFlow);
+  latestFlow.current = currentFlow;
+  const [layout, setLayout] = useState<{
+    key: string;
+    nodes: Node[];
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLayout(null);
+    void layoutTopology(latestFlow.current.nodes, latestFlow.current.edges)
+      .then((next) => {
+        if (!cancelled) {
+          setLayout({ key: currentLayoutKey, nodes: next.nodes });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLayout({ key: currentLayoutKey, nodes: latestFlow.current.nodes });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentLayoutKey]);
+
+  const positionedNodes = useMemo(() => {
+    const positions = new Map(
+      (layout?.nodes ?? []).map((node) => [node.id, node.position]),
+    );
+    return currentFlow.nodes.map((node) => ({
+      ...node,
+      position: positions.get(node.id) ?? node.position,
+    }));
+  }, [currentFlow.nodes, layout?.nodes]);
+  const layoutReady = layout?.key === currentLayoutKey;
+  const showMiniMap = mode !== "overview" && positionedNodes.length >= 30;
+
   const handleNodeClick = useCallback(
-    (_event: MouseEvent, node: Node) => onSelectNode(node.id),
+    (_event: MouseEvent, node: Node<TopologyFlowNode["data"]>) => {
+      onSelectNode(
+        node.data.originalNodeId ?? node.data.componentId ?? node.id,
+      );
+    },
     [onSelectNode],
+  );
+  const handleEdgeClick = useCallback(
+    (_event: MouseEvent, edge: Edge<TopologyFlowEdgeData>) => {
+      onSelectEdge(edge.data?.originalEdgeIds?.[0] ?? edge.id);
+    },
+    [onSelectEdge],
   );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div
+        aria-busy={!layoutReady}
         aria-label="Interactive API to MCP topology"
-        className="h-[28rem] overflow-hidden rounded-lg border border-border bg-muted/30 sm:h-[36rem]"
+        className="relative h-[calc(100vh-14rem)] min-h-[32rem] overflow-hidden rounded-xl border border-border bg-background"
         role="application"
       >
         <ReactFlow
-          edges={flowEdges}
-          key={nodeKey}
-          edgesFocusable
-          elevateEdgesOnSelect
+          edges={currentFlow.edges}
+          edgeTypes={edgeTypes}
+          elementsSelectable
           fitView
           fitViewOptions={fitViewOptions}
           maxZoom={1.5}
           minZoom={0.1}
           nodeTypes={nodeTypes}
-          nodes={flowNodes}
+          nodes={positionedNodes}
+          nodesConnectable={false}
+          nodesDraggable={false}
           nodesFocusable
+          edgesFocusable
           onEdgeClick={handleEdgeClick}
           onNodeClick={handleNodeClick}
           onPaneClick={onClearSelection}
         >
-          <Background />
+          <FitViewAfterLayout
+            layoutKey={currentLayoutKey}
+            ready={layoutReady}
+          />
+          <Background
+            color="hsl(var(--border))"
+            gap={24}
+            size={1}
+            variant={BackgroundVariant.Dots}
+          />
           <Controls />
-          <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
+          {showMiniMap ? (
+            <MiniMap nodeColor={miniMapNodeColor} pannable zoomable />
+          ) : null}
           <Panel
-            className="rounded-md border border-border bg-card/90 px-2 py-1 text-xs text-muted-foreground shadow-sm"
+            className="rounded-lg border border-border bg-card/95 px-3 py-2 text-xs text-muted-foreground shadow-sm"
             position="top-left"
           >
-            {compact
-              ? "Select a component below to show its connected MCP graph."
-              : "Click a node or relationship to inspect it. Press Escape to clear."}
+            {mode === "overview"
+              ? "Select a component to investigate its relationships."
+              : "MCP tool → ERP API → ERP endpoint. Select a node or relationship to inspect it. Press Escape to clear."}
           </Panel>
         </ReactFlow>
       </div>
-      <div
-        aria-label="Topology legend"
-        className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
-      >
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm border border-sky-500/60 bg-sky-500/20" />
-          Transport
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm border border-primary/60 bg-primary/20" />
-          MCP tool
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm border border-emerald-500/60 bg-emerald-500/20" />
-          ERP API
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm border border-orange-500/60 bg-orange-500/20" />
-          Ambiguous
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm border border-destructive/60 bg-destructive/20" />
-          Unresolved
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm border border-amber-500/60 bg-amber-500/20" />
-          Binding
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-sm border border-violet-500/60 bg-violet-500/20" />
-          Plugin
-        </span>
-        <span>
-          {compact
-            ? "Components are collapsed until selected."
-            : "Edge labels show match confidence."}
-        </span>
-      </div>
+      <TopologyLegend />
     </div>
   );
 }

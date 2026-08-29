@@ -1,77 +1,123 @@
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
 
 import type {
-  TopologyEdge,
-  TopologyNode,
-  TopologySelection,
-} from "../../hooks/useTopology";
+  TopologyVisualEdge,
+  TopologyVisualGraph,
+  TopologyVisualNode,
+  TopologyVisualNodeKind,
+} from "../../routes/topologyViewModel";
 
-export type TopologyShape =
-  "pill" | "rectangle" | "database" | "diamond" | "hexagon" | "tag" | "rounded";
+export type TopologyTone =
+  "neutral" | "success" | "info" | "warning" | "danger";
 
-type TopologyNodePresentation = {
+export type TopologyNodePresentation = {
   label: string;
-  shape: TopologyShape;
-  shapeClass: string;
+  structuralRole: "transport" | "entity" | "component" | "cluster";
+  tone: TopologyTone;
 };
 
-export type FlowNodeData = {
+export type TopologyFlowNodeData = {
   label: string;
-  kind: string;
+  viewKind: TopologyVisualNodeKind;
+  topologyKind?: string;
   presentationLabel: string;
-  shape: TopologyShape;
-  shapeClass: string;
   summary?: string;
-  compact: boolean;
+  count?: number;
+  originalNodeId?: string;
+  componentId?: string;
+  memberNodeIds?: string[];
+  tone: TopologyTone;
   selected: boolean;
   dimmed: boolean;
+  incomingPorts?: string[];
+  outgoingPorts?: string[];
   onSelect: () => void;
+  onExpand?: () => void;
+};
+
+export type TopologyFlowNode = Node<TopologyFlowNodeData>;
+
+export type TopologyFlowEdgeData = {
+  matchKind: string;
+  authoritative: boolean;
+  originalEdgeIds: string[];
+  dimmed: boolean;
+};
+
+export type TopologyFlowEdge = Edge<TopologyFlowEdgeData>;
+
+export type TopologyFlowHandlers = {
+  onSelectNode?: (node: TopologyVisualNode) => void;
+  onExpandCluster?: (node: TopologyVisualNode) => void;
 };
 
 const nodePresentations: Record<string, TopologyNodePresentation> = {
   "mcp-transport": {
     label: "MCP transport",
-    shape: "pill",
-    shapeClass: "rounded-full",
+    structuralRole: "transport",
+    tone: "neutral",
   },
   "mcp-tool": {
     label: "MCP tool",
-    shape: "rectangle",
-    shapeClass: "rounded-sm",
+    structuralRole: "entity",
+    tone: "neutral",
   },
   "erp-api": {
     label: "ERP API",
-    shape: "database",
-    shapeClass: "rounded-[45%] border-2",
+    structuralRole: "entity",
+    tone: "neutral",
+  },
+  "erp-endpoint": {
+    label: "ERP endpoint",
+    structuralRole: "entity",
+    tone: "neutral",
   },
   "ambiguous-endpoint": {
     label: "Ambiguous endpoint",
-    shape: "diamond",
-    shapeClass:
-      "rounded-none [clip-path:polygon(50%_0%,100%_50%,50%_100%,0%_50%)]",
+    structuralRole: "entity",
+    tone: "warning",
   },
   "unresolved-endpoint": {
     label: "Unresolved endpoint",
-    shape: "hexagon",
-    shapeClass:
-      "rounded-none [clip-path:polygon(25%_0%,75%_0%,100%_50%,75%_100%,25%_100%,0%_50%)]",
+    structuralRole: "entity",
+    tone: "danger",
   },
   "plugin-binding": {
     label: "Plugin binding",
-    shape: "tag",
-    shapeClass: "rounded-bl-xl rounded-br-sm rounded-tl-sm rounded-tr-xl",
+    structuralRole: "entity",
+    tone: "neutral",
   },
   "external-plugin": {
     label: "External plugin",
-    shape: "rounded",
-    shapeClass: "rounded-2xl",
+    structuralRole: "entity",
+    tone: "neutral",
+  },
+  cluster: {
+    label: "Collapsed group",
+    structuralRole: "cluster",
+    tone: "info",
+  },
+  component: {
+    label: "Topology component",
+    structuralRole: "component",
+    tone: "neutral",
+  },
+  transport: {
+    label: "MCP transport",
+    structuralRole: "transport",
+    tone: "neutral",
+  },
+  entity: {
+    label: "Topology entity",
+    structuralRole: "entity",
+    tone: "neutral",
   },
 };
 
 const defaultNodePresentation: TopologyNodePresentation = {
   label: "Topology component",
-  shape: "rectangle",
-  shapeClass: "rounded-sm",
+  structuralRole: "entity",
+  tone: "neutral",
 };
 
 export function topologyNodePresentation(
@@ -87,192 +133,133 @@ export function handleIDs(kind: string) {
   };
 }
 
-const toolColumns = 6;
-const columnGap = 190;
-const rowGap = 100;
-
-type FlowTopologyNode = Node<FlowNodeData>;
-
-function groupNodes(nodes: TopologyNode[], kind: string) {
-  return nodes.filter((node) => node.kind === kind);
+function toneForNode(node: TopologyVisualNode): TopologyTone {
+  if (node.kind === "cluster") return "info";
+  return topologyNodePresentation(node.topologyKind ?? node.kind).tone;
 }
 
-function selectedConnectedIDs(
-  nodes: TopologyNode[],
-  edges: TopologyEdge[],
-  selection: TopologySelection,
-) {
-  if (!selection) return new Set<string>();
-  if (selection.kind === "node") {
-    const connected = new Set([selection.id]);
-    for (const edge of edges) {
-      if (edge.source === selection.id) connected.add(edge.target);
-      if (edge.target === selection.id) connected.add(edge.source);
-    }
-    return connected;
+function labelForNode(node: TopologyVisualNode) {
+  return node.kind === "cluster"
+    ? node.label
+    : topologyNodePresentation(node.topologyKind ?? node.kind).label;
+}
+
+const MULTI_PORT_THRESHOLD = 5;
+
+type PortMaps = {
+  incoming: Map<string, string[]>;
+  outgoing: Map<string, string[]>;
+};
+
+function buildPortMaps(edges: TopologyVisualEdge[]): PortMaps {
+  const incoming = new Map<string, string[]>();
+  const outgoing = new Map<string, string[]>();
+  for (const edge of edges) {
+    const inputPorts = incoming.get(edge.target) ?? [];
+    inputPorts.push(`target-port-${edge.id}`);
+    incoming.set(edge.target, inputPorts);
+    const outputPorts = outgoing.get(edge.source) ?? [];
+    outputPorts.push(`source-port-${edge.id}`);
+    outgoing.set(edge.source, outputPorts);
   }
-  const edge = edges.find((candidate) => candidate.id === selection.id);
-  return edge
-    ? new Set([edge.source, edge.target])
-    : new Set(nodes.map((node) => node.id));
+  return {
+    incoming: new Map(
+      [...incoming].filter(([, ports]) => ports.length > MULTI_PORT_THRESHOLD),
+    ),
+    outgoing: new Map(
+      [...outgoing].filter(([, ports]) => ports.length > MULTI_PORT_THRESHOLD),
+    ),
+  };
 }
 
-function layoutTopologyNodes(
-  nodes: TopologyNode[],
-  edges: TopologyEdge[],
-  selection: TopologySelection,
-  compact: boolean,
-  summaries: Record<string, string>,
-): FlowTopologyNode[] {
-  const transports = groupNodes(nodes, "mcp-transport");
-  const tools = groupNodes(nodes, "mcp-tool");
-  const bindings = groupNodes(nodes, "plugin-binding");
-  const plugins = groupNodes(nodes, "external-plugin");
-  const apis = nodes.filter(
-    (node) =>
-      node.kind === "erp-api" ||
-      node.kind === "ambiguous-endpoint" ||
-      node.kind === "unresolved-endpoint",
-  );
-  const connectedIDs = selectedConnectedIDs(nodes, edges, selection);
-  const toolRows = Math.max(1, Math.ceil(tools.length / toolColumns));
-  const rightRows = Math.max(1, bindings.length, plugins.length, apis.length);
-  const centerY = ((Math.max(toolRows, rightRows) - 1) * rowGap) / 2;
-  const rightX = 280 + toolColumns * columnGap;
-  const pluginX = rightX + 220;
-  const apiX = pluginX + 220;
-
-  const place = (
-    node: TopologyNode,
-    position: { x: number; y: number },
-  ): FlowTopologyNode => ({
+function toFlowNode(
+  node: TopologyVisualNode,
+  handlers: TopologyFlowHandlers,
+  portMaps: PortMaps,
+): TopologyFlowNode {
+  const topologyKind = node.node?.kind ?? node.topologyKind;
+  return {
     id: node.id,
-    position,
+    position: { x: 0, y: 0 },
+    type: node.kind,
     data: {
       label: node.label,
-      kind: node.kind,
-      presentationLabel: topologyNodePresentation(node.kind).label,
-      shape: topologyNodePresentation(node.kind).shape,
-      shapeClass: topologyNodePresentation(node.kind).shapeClass,
-      summary: summaries[node.id],
-      compact,
-      selected: selection?.kind === "node" && selection.id === node.id,
-      dimmed: Boolean(selection) && !connectedIDs.has(node.id),
-      onSelect: () => undefined,
+      viewKind: node.kind,
+      topologyKind,
+      presentationLabel: labelForNode(node),
+      summary: node.summary,
+      count: node.count,
+      originalNodeId: node.originalNodeId,
+      componentId: node.componentId,
+      memberNodeIds: node.memberNodeIds,
+      tone: toneForNode(node),
+      selected: node.selected,
+      dimmed: node.dimmed,
+      incomingPorts: portMaps.incoming.get(node.id),
+      outgoingPorts: portMaps.outgoing.get(node.id),
+      onSelect: () => handlers.onSelectNode?.(node),
+      onExpand:
+        node.kind === "cluster"
+          ? () => handlers.onExpandCluster?.(node)
+          : undefined,
     },
-    type: "topology",
-  });
-
-  if (compact) {
-    const componentNodes = nodes.filter(
-      (node) => node.kind !== "mcp-transport",
-    );
-    return [
-      ...transports.map((node, index) =>
-        place(node, {
-          x: 0,
-          y: centerY + (index - (transports.length - 1) / 2) * rowGap,
-        }),
-      ),
-      ...componentNodes.map((node, index) =>
-        place(node, {
-          x: 280 + (index % 3) * 280,
-          y: Math.floor(index / 3) * 150,
-        }),
-      ),
-    ];
-  }
-
-  return [
-    ...transports.map((node, index) =>
-      place(node, {
-        x: 0,
-        y: centerY + (index - (transports.length - 1) / 2) * rowGap,
-      }),
-    ),
-    ...tools.map((node, index) =>
-      place(node, {
-        x: 280 + (index % toolColumns) * columnGap,
-        y: Math.floor(index / toolColumns) * rowGap,
-      }),
-    ),
-    ...bindings.map((node, index) =>
-      place(node, {
-        x: rightX,
-        y: centerY + (index - (bindings.length - 1) / 2) * rowGap,
-      }),
-    ),
-    ...plugins.map((node, index) =>
-      place(node, {
-        x: pluginX,
-        y: centerY + (index - (plugins.length - 1) / 2) * rowGap,
-      }),
-    ),
-    ...apis.map((node, index) =>
-      place(node, {
-        x: apiX,
-        y: centerY + (index - (apis.length - 1) / 2) * rowGap,
-      }),
-    ),
-  ];
+  };
 }
 
 function edgeColor(matchKind: string) {
   if (matchKind === "unresolved") return "hsl(var(--destructive))";
-  if (matchKind === "ambiguous") return "hsl(38 92% 50%)";
-  if (matchKind === "base-prefix") return "hsl(221 83% 53%)";
-  return "hsl(var(--primary))";
+  if (matchKind === "ambiguous") return "hsl(var(--warning))";
+  if (matchKind === "base-prefix") return "hsl(var(--info))";
+  return "hsl(var(--muted-foreground))";
+}
+
+function toFlowEdge(
+  edge: TopologyVisualEdge,
+  byID: Map<string, TopologyVisualNode>,
+  portMaps: PortMaps,
+): TopologyFlowEdge {
+  const source = byID.get(edge.source);
+  const target = byID.get(edge.target);
+  const sourceHandle = portMaps.outgoing.has(edge.source)
+    ? `source-port-${edge.id}`
+    : handleIDs(source?.kind ?? "entity").source;
+  const targetHandle = portMaps.incoming.has(edge.target)
+    ? `target-port-${edge.id}`
+    : handleIDs(target?.kind ?? "entity").target;
+  const sourceLabel = source?.label ?? edge.source;
+  const targetLabel = target?.label ?? edge.target;
+  const color = edgeColor(edge.matchKind);
+  return {
+    id: edge.id,
+    source: edge.source,
+    sourceHandle,
+    target: edge.target,
+    targetHandle,
+    type: "topology",
+    ariaLabel: `${sourceLabel} to ${targetLabel}: ${edge.matchKind}${edge.authoritative ? " authoritative" : " inferred or unresolved"}`,
+    selected: edge.selected,
+    markerEnd:
+      edge.matchKind === "summary"
+        ? undefined
+        : { type: MarkerType.ArrowClosed, color },
+    data: {
+      matchKind: edge.matchKind,
+      authoritative: edge.authoritative,
+      originalEdgeIds: edge.originalEdgeIds,
+      dimmed: edge.dimmed,
+    },
+    zIndex: edge.selected ? 10 : 0,
+  };
 }
 
 export function buildTopologyFlow(
-  nodes: TopologyNode[],
-  edges: TopologyEdge[],
-  selection: TopologySelection,
-  compact: boolean,
-  summaries: Record<string, string>,
-): { nodes: FlowTopologyNode[]; edges: Edge[] } {
-  const labels = new Map(nodes.map((node) => [node.id, node.label]));
-  const flowNodes = layoutTopologyNodes(
-    nodes,
-    edges,
-    selection,
-    compact,
-    summaries,
-  );
-  const flowEdges = edges.map((edge) => {
-    const selected = selection?.kind === "edge" && selection.id === edge.id;
-    const connected =
-      !selection ||
-      selected ||
-      (selection.kind === "node" &&
-        (edge.source === selection.id || edge.target === selection.id));
-    const color = edgeColor(edge.matchKind);
-    const source = nodes.find((node) => node.id === edge.source);
-    const target = nodes.find((node) => node.id === edge.target);
-
-    return {
-      id: edge.id,
-      source: edge.source,
-      sourceHandle: handleIDs(source?.kind ?? "topology-component").source,
-      target: edge.target,
-      targetHandle: handleIDs(target?.kind ?? "topology-component").target,
-      animated: edge.matchKind === "base-prefix",
-      ariaLabel: `${labels.get(edge.source) ?? edge.source} to ${labels.get(edge.target) ?? edge.target}: ${edge.matchKind}${edge.authoritative ? " authoritative" : ""}`,
-      selected,
-      label: edge.matchKind,
-      labelStyle: { fontSize: 10, fontWeight: selected ? 700 : 500 },
-      labelBgStyle: { fill: "hsl(var(--card))", fillOpacity: 0.9 },
-      labelBgPadding: [4, 2] as [number, number],
-      labelBgBorderRadius: 4,
-      markerEnd: { type: MarkerType.ArrowClosed, color },
-      style: {
-        stroke: color,
-        strokeWidth: selected ? 3 : 1.5,
-        opacity: connected ? 1 : 0.2,
-      },
-      zIndex: selected ? 10 : 0,
-    };
-  });
-
-  return { nodes: flowNodes, edges: flowEdges };
+  graph: TopologyVisualGraph,
+  handlers: TopologyFlowHandlers = {},
+): { nodes: TopologyFlowNode[]; edges: TopologyFlowEdge[] } {
+  const byID = new Map(graph.nodes.map((node) => [node.id, node]));
+  const portMaps = buildPortMaps(graph.edges);
+  return {
+    nodes: graph.nodes.map((node) => toFlowNode(node, handlers, portMaps)),
+    edges: graph.edges.map((edge) => toFlowEdge(edge, byID, portMaps)),
+  };
 }

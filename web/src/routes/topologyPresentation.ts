@@ -16,6 +16,7 @@ export type EndpointComponent = {
   memberNodeIds: string[];
   memberEdges: TopologyEdge[];
   toolCount: number;
+  endpointCount: number;
   matchCounts: TopologyMatchHistogram;
 };
 
@@ -45,7 +46,12 @@ function isEndpointNode(node: TopologyNode | undefined) {
 }
 
 export function canDrillIntoNode(node: TopologyNode | undefined) {
-  return Boolean(node && (node.kind === "mcp-tool" || isEndpointNode(node)));
+  return Boolean(
+    node &&
+    (node.kind === "mcp-tool" ||
+      node.kind === "erp-endpoint" ||
+      isEndpointNode(node)),
+  );
 }
 
 function componentForEndpoint(
@@ -54,6 +60,16 @@ function componentForEndpoint(
   byID: Map<string, TopologyNode>,
 ) {
   const memberNodeIds = new Set([endpoint.id]);
+  for (const edge of edges) {
+    if (edge.source === endpoint.id) {
+      const other = byID.get(edge.target);
+      if (other?.kind === "erp-endpoint") memberNodeIds.add(other.id);
+    }
+    if (edge.target === endpoint.id) {
+      const other = byID.get(edge.source);
+      if (other?.kind === "erp-endpoint") memberNodeIds.add(other.id);
+    }
+  }
   const toolIDs = new Set(
     edges.flatMap((edge) => {
       if (
@@ -114,6 +130,8 @@ function toComponent(
   for (const kind of topologyMatchKinds) matchCounts[kind] = 0;
   for (const edge of memberEdges) {
     if (edge.target !== endpoint.id && edge.source !== endpoint.id) continue;
+    const otherID = edge.source === endpoint.id ? edge.target : edge.source;
+    if (byID.get(otherID)?.kind !== "mcp-tool") continue;
     matchCounts[edge.matchKind] = (matchCounts[edge.matchKind] ?? 0) + 1;
   }
 
@@ -123,6 +141,9 @@ function toComponent(
     memberEdges,
     toolCount: [...memberNodeIds].filter(
       (id) => byID.get(id)?.kind === "mcp-tool",
+    ).length,
+    endpointCount: [...memberNodeIds].filter(
+      (id) => byID.get(id)?.kind === "erp-endpoint",
     ).length,
     matchCounts,
   };
@@ -154,42 +175,59 @@ export function buildEndpointComponents(
       component.memberNodeIds.filter((id) => byID.get(id)?.kind === "mcp-tool"),
     ),
   );
+  const assignedEndpointIDs = new Set(
+    endpointComponents.flatMap((component) =>
+      component.memberNodeIds.filter(
+        (id) => byID.get(id)?.kind === "erp-endpoint",
+      ),
+    ),
+  );
+  const standaloneEndpointComponents = nodes
+    .filter(
+      (node) =>
+        node.kind === "erp-endpoint" && !assignedEndpointIDs.has(node.id),
+    )
+    .map((endpoint) =>
+      toComponent(endpoint, new Set([endpoint.id]), edges, byID),
+    );
   const standaloneToolComponents = nodes
     .filter((node) => node.kind === "mcp-tool" && !assignedToolIDs.has(node.id))
     .map((tool) =>
       toComponent(tool, componentForEndpoint(tool, edges, byID), edges, byID),
     );
 
-  return [...endpointComponents, ...standaloneToolComponents].sort(
-    (left, right) => {
-      const leftPriority =
-        left.endpoint.kind === "unresolved-endpoint"
-          ? -1
-          : Math.min(
-              ...Object.entries(left.matchCounts)
-                .filter(([, count]) => count > 0)
-                .map(([kind]) => matchPriority(kind)),
-              4,
-            );
-      const rightPriority =
-        right.endpoint.kind === "unresolved-endpoint"
-          ? -1
-          : Math.min(
-              ...Object.entries(right.matchCounts)
-                .filter(([, count]) => count > 0)
-                .map(([kind]) => matchPriority(kind)),
-              4,
-            );
-      return (
-        leftPriority - rightPriority ||
-        left.endpoint.label.localeCompare(right.endpoint.label)
-      );
-    },
-  );
+  return [
+    ...endpointComponents,
+    ...standaloneEndpointComponents,
+    ...standaloneToolComponents,
+  ].sort((left, right) => {
+    const leftPriority =
+      left.endpoint.kind === "unresolved-endpoint"
+        ? -1
+        : Math.min(
+            ...Object.entries(left.matchCounts)
+              .filter(([, count]) => count > 0)
+              .map(([kind]) => matchPriority(kind)),
+            4,
+          );
+    const rightPriority =
+      right.endpoint.kind === "unresolved-endpoint"
+        ? -1
+        : Math.min(
+            ...Object.entries(right.matchCounts)
+              .filter(([, count]) => count > 0)
+              .map(([kind]) => matchPriority(kind)),
+            4,
+          );
+    return (
+      leftPriority - rightPriority ||
+      left.endpoint.label.localeCompare(right.endpoint.label)
+    );
+  });
 }
 
 export function componentForNode(
-  components: EndpointComponent[],
+  components: readonly EndpointComponent[],
   nodeID: string,
 ) {
   return components.find((component) =>
@@ -202,7 +240,10 @@ export function componentSummary(component: EndpointComponent) {
     .filter((kind) => component.matchCounts[kind] > 0)
     .map((kind) => `${component.matchCounts[kind]} ${kind}`)
     .join(" · ");
-  return `${component.toolCount} MCP tool${component.toolCount === 1 ? "" : "s"}${matches ? ` · ${matches}` : ""}`;
+  const endpoints = component.endpointCount
+    ? ` · ${component.endpointCount} ERP endpoint${component.endpointCount === 1 ? "" : "s"}`
+    : "";
+  return `${component.toolCount} MCP tool${component.toolCount === 1 ? "" : "s"}${endpoints}${matches ? ` · ${matches}` : ""}`;
 }
 
 export function buildCompactTopologyOverview(
