@@ -139,6 +139,13 @@ test("filters plugin nodes without placing them in the MCP tools facet", async (
   await screen.findByRole("table", {
     name: "Accessible topology relationships",
   });
+  const filters = screen.getByRole("button", { name: "Show filters" });
+  expect(filters).toHaveAttribute("aria-expanded", "false");
+  expect(
+    screen.queryByRole("textbox", { name: "Search topology" }),
+  ).not.toBeInTheDocument();
+  await user.click(filters);
+  expect(filters).toHaveAttribute("aria-expanded", "true");
   await user.type(
     screen.getByRole("textbox", { name: "Search topology" }),
     "transformer",

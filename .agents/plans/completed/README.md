@@ -11,3 +11,5 @@ work queues.
   — progressive React Flow topology explorer with ELK layout and explicit ERP endpoint relationships.
 - [`[COMPLETED]Plan-Topology-Selection-Focus.md`](./%5BCOMPLETED%5DPlan-Topology-Selection-Focus.md)
   — selected MCP tools render only their direct execution paths.
+- [`[COMPLETED]Plan-Topology-Collapsible-Filters.md`](./%5BCOMPLETED%5DPlan-Topology-Collapsible-Filters.md)
+  — topology filters collapse until requested.

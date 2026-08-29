@@ -234,8 +234,8 @@ Nodes, edges, component buttons, and controls have keyboard focus and accessible
 labels. The raw relationship table remains available as the complete non-canvas
 alternative.
 
-Use the search field and the node kind, match-confidence, and context-state
-filters to narrow the graph. The canvas and accessible relationship list share
+Use **Show filters** to reveal the search field and the node kind,
+match-confidence, and context-state filters when you need to narrow the graph. The canvas and accessible relationship list share
 selection state: selecting a node highlights its immediate relationships, while
 selecting an edge shows its source, target, match confidence, authority, context
 state, and safe endpoint paths. The BFF reports when safety caps omit nodes or

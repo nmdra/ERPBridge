@@ -17,9 +17,12 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
 - Move the component navigator and inspector below the full-width topology canvas.
 - Narrow a selected MCP tool to its direct transport, ERP API, exact endpoint,
   and plugin path instead of rendering unrelated component members dimmed.
+- Collapse topology filter controls until the user selects **Show filters**.
 - Refresh the bundled `bridgectl-ops` skill for file-backed credential
   rotation, split tool generation, MCP annotation and `_meta` guidance, and
   safe embedded-skill installation.
+- Add optional project-local `bridgectl-ops` operational memory guidance with
+  bounded retrieval, redacted execution evidence, and gated skill proposals.
 
 ## [v0.5.0-alpha.1] - 2026-08-29
 

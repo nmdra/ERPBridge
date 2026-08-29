@@ -361,6 +361,7 @@ export function Topology({ contextName }: { contextName: string }) {
   const [activeTab, setActiveTab] = useState<"topology" | "relationships">(
     "topology",
   );
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   const data = topology.data;
   const allNodes = useMemo(() => data?.nodes ?? [], [data?.nodes]);
@@ -639,20 +640,17 @@ export function Topology({ contextName }: { contextName: string }) {
             </div>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
-            <label
-              className="flex min-w-[15rem] flex-1 items-center gap-2 text-sm"
-              htmlFor="topology-filter"
+            <button
+              aria-controls="topology-filters"
+              aria-expanded={filtersExpanded}
+              className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setFiltersExpanded((expanded) => !expanded)}
+              type="button"
             >
-              <span className="sr-only">Search topology</span>
-              <Filter aria-hidden="true" size={16} />
-              <input
-                className="h-9 w-full rounded-md border border-border bg-card px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                id="topology-filter"
-                placeholder="Search names, paths, versions, or match states"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </label>
+              <Filter aria-hidden="true" size={15} />
+              {filtersExpanded ? "Hide filters" : "Show filters"}
+              {filterCount ? ` (${filterCount} active)` : ""}
+            </button>
             {filterCount ? (
               <button
                 className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -664,81 +662,108 @@ export function Topology({ contextName }: { contextName: string }) {
               </button>
             ) : null}
           </div>
-          <div className="grid gap-4 border-t border-border pt-4 md:grid-cols-3">
-            <fieldset>
-              <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Node types
-              </legend>
-              <div className="mt-1 grid gap-1">
-                {topologyNodeKinds.map((kind) => (
-                  <FilterCheckbox
-                    checked={selectedKinds.includes(kind)}
-                    count={allNodes.filter((node) => node.kind === kind).length}
-                    disabled={!allNodes.some((node) => node.kind === kind)}
-                    key={kind}
-                    label={nodeKindLabels[kind]}
-                    onChange={() =>
-                      setSelectedKinds((current) => toggleValue(current, kind))
-                    }
-                  />
-                ))}
+          {filtersExpanded ? (
+            <div className="space-y-4" id="topology-filters">
+              <label
+                className="flex min-w-[15rem] flex-1 items-center gap-2 text-sm"
+                htmlFor="topology-filter"
+              >
+                <span className="sr-only">Search topology</span>
+                <Filter aria-hidden="true" size={16} />
+                <input
+                  className="h-9 w-full rounded-md border border-border bg-card px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  id="topology-filter"
+                  placeholder="Search names, paths, versions, or match states"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </label>
+              <div className="grid gap-4 border-t border-border pt-4 md:grid-cols-3">
+                <fieldset>
+                  <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Node types
+                  </legend>
+                  <div className="mt-1 grid gap-1">
+                    {topologyNodeKinds.map((kind) => (
+                      <FilterCheckbox
+                        checked={selectedKinds.includes(kind)}
+                        count={
+                          allNodes.filter((node) => node.kind === kind).length
+                        }
+                        disabled={!allNodes.some((node) => node.kind === kind)}
+                        key={kind}
+                        label={nodeKindLabels[kind]}
+                        onChange={() =>
+                          setSelectedKinds((current) =>
+                            toggleValue(current, kind),
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Match confidence
+                  </legend>
+                  <div className="mt-1 grid gap-1">
+                    {matchKinds.map((kind) => (
+                      <FilterCheckbox
+                        checked={selectedMatches.includes(kind)}
+                        count={
+                          allEdges.filter((edge) => edge.matchKind === kind)
+                            .length
+                        }
+                        disabled={
+                          !allEdges.some((edge) => edge.matchKind === kind)
+                        }
+                        key={kind}
+                        label={matchKindLabels[kind]}
+                        onChange={() =>
+                          setSelectedMatches((current) =>
+                            toggleValue(current, kind),
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Context state
+                  </legend>
+                  <div className="mt-1 grid gap-1">
+                    {contextStates.map((state) => (
+                      <FilterCheckbox
+                        checked={selectedContexts.includes(state)}
+                        count={
+                          allNodes.filter(
+                            (node) => nodeContextState(node) === state,
+                          ).length
+                        }
+                        disabled={
+                          !allNodes.some(
+                            (node) => nodeContextState(node) === state,
+                          )
+                        }
+                        key={state}
+                        label={
+                          state === "context matched"
+                            ? "Context matched"
+                            : "Unassigned"
+                        }
+                        onChange={() =>
+                          setSelectedContexts((current) =>
+                            toggleValue(current, state),
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </fieldset>
               </div>
-            </fieldset>
-            <fieldset>
-              <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Match confidence
-              </legend>
-              <div className="mt-1 grid gap-1">
-                {matchKinds.map((kind) => (
-                  <FilterCheckbox
-                    checked={selectedMatches.includes(kind)}
-                    count={
-                      allEdges.filter((edge) => edge.matchKind === kind).length
-                    }
-                    disabled={!allEdges.some((edge) => edge.matchKind === kind)}
-                    key={kind}
-                    label={matchKindLabels[kind]}
-                    onChange={() =>
-                      setSelectedMatches((current) =>
-                        toggleValue(current, kind),
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            </fieldset>
-            <fieldset>
-              <legend className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Context state
-              </legend>
-              <div className="mt-1 grid gap-1">
-                {contextStates.map((state) => (
-                  <FilterCheckbox
-                    checked={selectedContexts.includes(state)}
-                    count={
-                      allNodes.filter(
-                        (node) => nodeContextState(node) === state,
-                      ).length
-                    }
-                    disabled={
-                      !allNodes.some((node) => nodeContextState(node) === state)
-                    }
-                    key={state}
-                    label={
-                      state === "context matched"
-                        ? "Context matched"
-                        : "Unassigned"
-                    }
-                    onChange={() =>
-                      setSelectedContexts((current) =>
-                        toggleValue(current, state),
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            </fieldset>
-          </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
