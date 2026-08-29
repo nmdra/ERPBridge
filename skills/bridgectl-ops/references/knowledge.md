@@ -183,9 +183,15 @@ Authoritative procedure belongs in the skill references, not in memory.
 ## Append an execution record
 
 Use [`execution-record.json`](../assets/execution-record.json) as the field
-reference. Record one meaningful workflow, not one record for each command.
-Append one JSON object to `executions/YYYY-MM.jsonl` after the workflow. Keep
-facts bounded:
+reference. A major task is one completed multi-step ERPBridge workflow, such
+as onboarding, lifecycle administration, diagnosis, bundled-skill
+distribution, or a cross-system operation. Record one major task, not one
+record for each command, tool call, turn, retry, or subtask. A single read,
+explanation, or operation still waiting for confirmation is not a completed
+major task. Append exactly one JSON object to `executions/YYYY-MM.jsonl` after
+observable verification and at the terminal handoff, including when the
+terminal outcome is `success`, `resolved`, `unresolved`, `blocked`, or
+`abandoned`. Keep facts bounded:
 
 - safe context name, area, operation, and resource kind;
 - `bridgectl`, server, and skill versions, or `unknown`;
@@ -225,11 +231,11 @@ it into knowledge.
 
 ## Consolidate reusable evidence
 
-Use this fast loop:
+Use this fast loop after the major-task completion checkpoint:
 
 ```text
-workflow → append redacted execution → search matching knowledge
-         → update an existing entry or create one justified entry
+verify terminal outcome → append one redacted execution → search matching knowledge
+                        → update an existing entry or create one justified entry
 ```
 
 After appending, decide whether the workflow showed:
@@ -308,7 +314,8 @@ skill.
 
 The current Agent Skill framework invokes Markdown instructions. It does not
 provide an automatic post-execution hook in this repository. Therefore, this
-reference defines agent-followed recording and consolidation conventions; it
-does not claim that records appear automatically. If an agent cannot safely
-redact or append a record, it must continue the operational handoff without
-inventing evidence and state that memory recording was not completed.
+reference defines a portable, agent-followed best-effort completion checkpoint,
+not guaranteed runtime automation. If an agent cannot safely redact or append
+the one record, or if the optional memory store is absent, it must continue the
+operational handoff without creating the store, inventing evidence, or claiming
+that a record exists. State that memory recording was not completed.
