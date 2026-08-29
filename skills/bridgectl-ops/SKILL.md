@@ -1,11 +1,11 @@
 ---
 name: bridgectl-ops
-description: "Use this skill whenever operating ERPBridge with bridgectl: run onboarding preflight; register or test ERP APIs; manage context-scoped MCP tools, generated split manifests, external plugins, and bindings; administer tokens or roles; inspect caches or logs; diagnose stable control-plane, runtime, or SDK failures; or prepare a redacted bug report. Reach for it for file-backed credential rotation, OpenAPI generation, MCP annotation or _meta review, operational knowledge reuse, plugin endpoints/auth/lifecycle, or bundled skill installation."
+description: "Use this skill whenever operating ERPBridge with bridgectl: run onboarding preflight; register or test ERP APIs; manage context-scoped MCP tools, generated split manifests, external plugins, and bindings; administer tokens or roles; inspect caches or logs; diagnose stable control-plane, runtime, or SDK failures; or prepare a redacted bug report. Reach for it for file-backed credential rotation, OpenAPI generation, MCP annotation or _meta review, operational knowledge reuse, or the redacted completion checkpoint after a major ERPBridge workflow; plugin endpoints/auth/lifecycle; or bundled skill installation."
 license: MIT
 compatibility: Requires a current bridgectl binary, an authorized ERPBridge context, and network access to the selected ERPBridge server and ERP endpoint. Git is required for repository diagnosis; GitHub CLI is optional for approved issue creation.
 metadata:
   author: ERPBridge Team
-  version: 3.4.0
+  version: 3.4.1
 ---
 
 # Bridgectl Operations
@@ -48,9 +48,9 @@ skill, its references, installed-release documentation, authenticated server
 state, schemas, authorization, or change gates. Re-query it when execution
 reveals a new stable error code, resource state, or root-cause clue.
 
-After the workflow, append a redacted execution record and consolidate reusable
-evidence when warranted. Do not rewrite this skill because one execution
-succeeded or failed. Repeated or independently verified evidence may produce a
+At the terminal boundary, follow the
+[major-task completion checkpoint](#major-task-completion-checkpoint). Do not
+rewrite this skill because one execution succeeded or failed. Repeated or independently verified evidence may produce a
 skill-change proposal, but proposals require the documented evolution gate.
 
 ## Select the workflow
@@ -99,14 +99,47 @@ before installing it. Treat `--force` as a replacement of the destination
 skill tree: confirm the exact destination first, and never hand-edit the
 installed copy.
 
-## Verify and hand off
+## Verify the workflow
 
 After a workflow, use the [verification checklist](references/onboarding.md#verification-checklist)
 and verify the observable result at its highest available seam:
 the API test, local schema validation, registry readback, plugin or binding
-readback, MCP discovery/call, or an affected runtime metric/log. State the
+readback, MCP discovery/call, or an affected runtime metric/log. Record the
 context, versions, commands run, result, and remaining risk. Treat annotations
 and `_meta` as optional routing hints only; server-side identity,
 authorization, and schemas remain authoritative. Redact secrets,
 authorization headers, plugin payloads and response bodies, and personally
 identifying ERP data.
+
+## Major-task completion checkpoint
+
+Use this checkpoint once, after the verification above and before the final
+handoff, when the work is a completed major task. A major task is a completed
+multi-step ERPBridge workflow such as onboarding; API, tool, plugin, or binding
+lifecycle work; token, role, or cache administration; multi-step diagnosis;
+bundled-skill distribution; or a cross-system operation. It may end in
+`success`, `resolved`, `unresolved`, `blocked`, or `abandoned` when that outcome
+is terminal. A single read, explanation, command, retry, turn, or subtask is
+not a major task. Do not record work that is still waiting for confirmation.
+
+1. Choose the bounded terminal outcome after verifying the result.
+2. If `.agents/skill-memory/bridgectl-ops/` exists, construct exactly one
+   compact execution record for this task. Do not write one record per command,
+   tool call, turn, retry, or subtask. Apply the [redaction gate](references/knowledge.md#redaction-gate)
+   before writing and set `redaction_review` to `passed` only after inspection.
+3. Append the record in lock-preserving append mode. Then consolidate only a
+   reusable, supported lesson according to [Operational knowledge](references/knowledge.md).
+4. If the store is absent, or a safe append cannot be completed, continue the
+   operational handoff and say that memory recording was not completed. Never
+   create the store silently, claim that a record exists, or persist a sensitive
+   draft.
+5. Finish the final handoff only after this checkpoint. State the outcome and
+   whether the redacted record was appended; do not expose credentials,
+   authorization headers, payloads, ERP data, unrestricted logs, or private
+   reasoning.
+
+This is a portable, agent-followed best-effort checkpoint, not a runtime hook.
+A host extension may provide separate lifecycle automation, but it must not be
+assumed or described as guaranteed by this Markdown skill.
+
+## Hand off

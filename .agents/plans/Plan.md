@@ -1,1 +1,1 @@
-active/Plan-Live-E2E-Issue-Fixes.md
+active/Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md

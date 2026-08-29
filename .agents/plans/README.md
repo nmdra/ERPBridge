@@ -5,7 +5,7 @@ starting implementation work.
 
 ## Active
 
-No active plans.
+- [`Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md`](./active/Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md) — portable completion checkpoint for redacted operational knowledge records.
 
 ## Upcoming
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP

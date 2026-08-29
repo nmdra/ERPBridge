@@ -23,6 +23,10 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
   safe embedded-skill installation.
 - Add optional project-local `bridgectl-ops` operational memory guidance with
   bounded retrieval, redacted execution evidence, and gated skill proposals.
+- Add a `bridgectl-ops` major-task completion checkpoint that attempts one
+  redacted append-only execution record after verification, supports terminal
+  blocked outcomes, and reports absent-memory or append failures without
+  inventing evidence or claiming a runtime hook.
 
 ## [v0.5.0-alpha.1] - 2026-08-29
 
