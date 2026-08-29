@@ -184,7 +184,10 @@ This endpoint resolves registered tools only. MCP built-ins such as `system.prog
 The REST endpoint returns the legacy `ToolResult` compatibility shape. MCP
 clients receive the MCP result envelope, including `content`,
 `structuredContent` when the developer declares an object-shaped output schema,
-and `isError: true` for tool execution errors. A successful image-to-text tool
+and `isError: true` for tool execution errors. Protocol failures remain JSON-RPC
+errors with standard codes. Tool execution errors use concise safe text and may
+include the namespaced `com.erpbridge/error` metadata with `type`, `retryable`,
+and `retryAfterMs` fields. A successful image-to-text tool
 can declare `{text: string}`: MCP receives structured `{text: ...}` plus
 equivalent text content containing only the extracted text. SDK clients must
 preserve that envelope and must not flatten structured content.

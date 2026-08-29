@@ -64,6 +64,20 @@ Generated annotations are method-based draft hints. Review them before
 applying a generated manifest; they do not replace authorization or other
 server-side controls.
 
+### `spec.rateLimit` and `spec.concurrency`
+
+Optional execution protection for high-volume or expensive tools.
+
+- **`rateLimit.requestsPerSecond`**: Positive finite per-tool token-bucket rate.
+- **`rateLimit.burst`**: Positive per-tool token-bucket burst size.
+- **`concurrency.limit`**: Positive maximum number of active calls.
+- **`concurrency.perPrincipal`**: When `true`, apply the active-call limit per
+  authenticated principal or MCP session; when `false`, share it across the
+  tool. The global principal/session limiter remains in effect for every tool.
+
+Unconfigured tools retain the server defaults. Side-effecting ERP methods are
+not automatically retried.
+
 ### MCP discovery metadata
 
 During MCP `tools/list`, ERPBridge projects existing guidance into namespaced

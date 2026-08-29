@@ -58,7 +58,7 @@ func serveHTTP(ctx context.Context, server *http.Server, listener net.Listener) 
 }
 
 func parseRateLimitConfig() (mcp.RateLimitConfig, error) {
-	config := mcp.RateLimitConfig{RequestsPerSecond: 5, Burst: 10}
+	config := mcp.RateLimitConfig{RequestsPerSecond: 10, Burst: 20}
 	if value := os.Getenv("RATE_LIMIT_RPS"); value != "" {
 		parsed, err := strconv.ParseFloat(value, 64)
 		if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) {

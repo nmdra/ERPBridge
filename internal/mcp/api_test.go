@@ -220,7 +220,8 @@ func TestServer_HandleMCPToolCall_ExecuteError(t *testing.T) {
 	assert.True(t, res.IsError)
 	assert.Len(t, res.Content, 1)
 	textRes := res.Content[0].(mcp.TextContent)
-	assert.Contains(t, textRes.Text, "execute error")
+	assert.Equal(t, defaultToolExecutionErrorMessage, textRes.Text)
+	assert.NotContains(t, textRes.Text, "execute error")
 }
 
 func TestServer_ToolAPINoStore(t *testing.T) {

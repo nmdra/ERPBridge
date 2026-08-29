@@ -18,6 +18,11 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
 - Narrow a selected MCP tool to its direct transport, ERP API, exact endpoint,
   and plugin path instead of rendering unrelated component members dimmed.
 - Collapse topology filter controls until the user selects **Show filters**.
+- Increase the default tool-execution rate limit to 10 requests per second with
+  a burst of 20, while preserving environment overrides.
+- Align MCP tool errors with 2025-11-25 handling: protocol failures use
+  JSON-RPC errors, execution failures use sanitized `isError` results, and
+  bounded retry/concurrency metadata is available through namespaced `_meta`.
 - Refresh the bundled `bridgectl-ops` skill for file-backed credential
   rotation, split tool generation, MCP annotation and `_meta` guidance, and
   safe embedded-skill installation.

@@ -4,7 +4,6 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -23,6 +22,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/credentials"
+	"github.com/nmdra/ERPBridge/internal/faults"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/metrics"
 )
@@ -39,6 +39,9 @@ type Server struct {
 	registry            *ToolRegistry
 	pluginRegistry      *PluginRegistry
 	pluginClient        PluginProcessor
+	concurrency         *ToolConcurrencyLimiter
+	toolRateLimitMu     sync.Mutex
+	toolRateLimiters    map[string]*RateLimitMiddleware
 	lifecycleGeneration uint64
 	lastDesiredHash     string
 	resources           map[string]*Resource
@@ -87,6 +90,7 @@ func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Lo
 		server.WithLogging(),
 		server.WithResourceCompletionProvider(&ResourceCompletionProvider{}),
 		server.WithPromptCompletionProvider(&PromptCompletionProvider{}),
+		server.WithInputSchemaValidation(),
 		server.WithOutputSchemaValidation(),
 		server.WithHooks(&server.Hooks{}),
 		server.WithToolFilter(func(_ context.Context, tools []mcp.Tool) []mcp.Tool {
@@ -109,17 +113,19 @@ func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Lo
 	}
 
 	srv := &Server{
-		mcpServer:      s,
-		connector:      connector,
-		cache:          cacheMgr,
-		log:            mcpLog,
-		store:          store,
-		registry:       NewToolRegistry(),
-		pluginRegistry: NewPluginRegistry(),
-		pluginClient:   NewPluginClientWithLogger(mcpLog),
-		resources:      make(map[string]*Resource),
-		prompts:        make(map[string]*Prompt),
-		Notifier:       NewCustomNotifier(s),
+		mcpServer:        s,
+		connector:        connector,
+		cache:            cacheMgr,
+		log:              mcpLog,
+		store:            store,
+		registry:         NewToolRegistry(),
+		pluginRegistry:   NewPluginRegistry(),
+		pluginClient:     NewPluginClientWithLogger(mcpLog),
+		concurrency:      NewToolConcurrencyLimiter(),
+		toolRateLimiters: make(map[string]*RateLimitMiddleware),
+		resources:        make(map[string]*Resource),
+		prompts:          make(map[string]*Prompt),
+		Notifier:         NewCustomNotifier(s),
 	}
 	bridgeServer = srv
 
@@ -133,6 +139,7 @@ func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Lo
 	// Initialize global tool middlewares
 	rateLimiter := NewRateLimitMiddleware(rateCfg.RequestsPerSecond, rateCfg.Burst)
 	srv.toolMiddlewares = []server.ToolHandlerMiddleware{
+		RecoveryMiddleware(srv.log),
 		rateLimiter.Handle(),
 		LoggingMiddleware(srv.log),
 		MetricsMiddleware(),
@@ -633,15 +640,18 @@ func (s *Server) handleMCPToolCall(name string) server.ToolHandlerFunc {
 		s.mu.RUnlock()
 
 		if err != nil {
-			return nil, fmt.Errorf("tool not found: %s (%w)", name, err)
+			return nil, faults.NewProtocol(faults.KindNotFound, "the requested tool is unavailable", err)
 		}
 		args, err := toolArguments(request)
 		if err != nil {
-			return nil, err
+			return nil, faults.NewProtocol(faults.KindInvalidInput, "tool arguments must be an object", err)
 		}
 		result, err := s.executeToolCall(ctx, t, args)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			if faults.IsProtocol(err) {
+				return nil, err
+			}
+			return newToolExecutionResult(err), nil
 		}
 		return result, nil
 	}
@@ -664,8 +674,9 @@ func toolArguments(request mcp.CallToolRequest) (map[string]any, error) {
 }
 
 func (s *Server) applyToolMiddlewares(tool *Tool, handler server.ToolHandlerFunc) server.ToolHandlerFunc {
-	handler = s.CacheMiddleware(tool)(handler)
+	handler = s.CacheMiddleware(tool)(s.ConcurrencyMiddleware(tool)(handler))
 	handler = s.RoleAuthzMiddleware(tool)(handler)
+	handler = s.toolRateLimitMiddleware(tool)(handler)
 	for _, middleware := range slices.Backward(s.toolMiddlewares) {
 		handler = middleware(handler)
 	}
@@ -694,66 +705,10 @@ func (s *Server) ServeHTTP(mux *http.ServeMux, _ string) {
 		),
 	)
 
-	// Wrap streamableServer with filtering middleware to hide inactive tools
-	filteredStreamable := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Only intercept JSON-RPC POST requests
-		if r.Method != http.MethodPost {
-			streamableServer.ServeHTTP(w, r)
-			return
-		}
-
-		// Use a buffer to capture the response
-		buf := &bytes.Buffer{}
-		iw := &interceptingResponseWriter{
-			ResponseWriter: w,
-			body:           buf,
-		}
-
-		streamableServer.ServeHTTP(iw, r)
-
-		// mcp-go uses SSE format even in POST responses for streamable HTTP.
-		// We need to process each line and filter any 'data: ' blocks that contain tool lists.
-		lines := bytes.Split(buf.Bytes(), []byte("\n"))
-		var finalBody bytes.Buffer
-
-		for _, line := range lines {
-			if after, ok := bytes.CutPrefix(line, []byte("data: ")); ok {
-				jsonData := after
-
-				// Try to parse the JSON to see if it's a tools/list result
-				var jsonResp struct {
-					JSONRPC string `json:"jsonrpc"`
-					ID      any    `json:"id"`
-					Result  struct {
-						Tools []mcp.Tool `json:"tools"`
-					} `json:"result"`
-				}
-
-				if err := json.Unmarshal(jsonData, &jsonResp); err == nil && len(jsonResp.Result.Tools) > 0 {
-					filteredTools := s.filterToolsList(jsonResp.Result.Tools)
-
-					// Update the result and re-marshal
-					jsonResp.Result.Tools = filteredTools
-					newJSON, _ := json.Marshal(jsonResp)
-					finalBody.Write([]byte("data: "))
-					finalBody.Write(newJSON)
-					finalBody.Write([]byte("\n"))
-					continue
-				}
-			}
-			// Not a tool list or not a data line, keep as is
-			finalBody.Write(line)
-			finalBody.Write([]byte("\n"))
-		}
-
-		// Update Content-Length header if it was set
-		if w.Header().Get("Content-Length") != "" {
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", finalBody.Len()))
-		}
-		_, _ = w.Write(finalBody.Bytes())
-	})
-
-	mcpHandler := http.StripPrefix("/mcp", filteredStreamable)
+	// mcp-go applies the configured tool filter during tools/list and call
+	// dispatch. Keep the SDK handler directly mounted so Streamable HTTP can
+	// negotiate and flush SSE responses without an interception buffer.
+	mcpHandler := http.StripPrefix("/mcp", streamableServer)
 	authenticatedMCP := s.AuthHandler(mcpHandler, scopeMCP, false)
 	mux.Handle("/mcp/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isAllowedMCPPreflight(r) {
@@ -939,6 +894,16 @@ func testToolsEnabled() bool {
 
 // Admission Controller
 func (s *Server) validateTool(t *Tool) error {
+	if t.Spec.RateLimit != nil {
+		if err := t.Spec.RateLimit.Validate(); err != nil {
+			return fmt.Errorf("invalid spec.rateLimit: %w", err)
+		}
+	}
+	if t.Spec.Concurrency != nil {
+		if err := t.Spec.Concurrency.Validate(); err != nil {
+			return fmt.Errorf("invalid spec.concurrency: %w", err)
+		}
+	}
 	if err := credentials.ValidateCredentialSource(t.Spec.Security.CredentialSource); err != nil {
 		return fmt.Errorf("invalid security.credentialSource: %w", err)
 	}
@@ -1083,13 +1048,17 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{pluginErrorField: ErrPluginProcessingFailed.Error()})
 			return
 		}
+		if fault, ok := faults.As(err); ok {
+			writeToolExecutionHTTPError(w, newToolExecutionResult(fault))
+			return
+		}
 		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check tool and plugin health, then retry")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if mcpResult.IsError {
-		writeControlPlaneError(w, http.StatusBadGateway, ErrorUpstreamUnreachable, "tool execution failed", "check the upstream ERP service and tool configuration")
+		writeToolExecutionHTTPError(w, mcpResult)
 		return
 	}
 
@@ -1235,20 +1204,4 @@ func (s *Server) handleLogRecent(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprintf(w, "%s", string(l))
 	}
 	_, _ = fmt.Fprintf(w, "]")
-}
-
-// interceptingResponseWriter wraps http.ResponseWriter to capture the body.
-type interceptingResponseWriter struct {
-	http.ResponseWriter
-	body *bytes.Buffer
-}
-
-func (iw *interceptingResponseWriter) Write(b []byte) (int, error) {
-	return iw.body.Write(b)
-}
-
-func (iw *interceptingResponseWriter) Flush() {
-	if flusher, ok := iw.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
 }

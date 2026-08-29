@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -41,7 +42,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 	res, err = handler(ctx, req)
 	assert.NoError(t, err)
 	assert.True(t, res.IsError)
-	assert.Contains(t, res.Content[0].(mcp.TextContent).Text, "rate limit exceeded")
+	assert.Contains(t, res.Content[0].(mcp.TextContent).Text, "temporarily rate limited")
 }
 
 func TestRateLimitMiddleware_UsesReservationDelayForDirectOutcome(t *testing.T) {
@@ -59,6 +60,110 @@ func TestRateLimitMiddleware_UsesReservationDelayForDirectOutcome(t *testing.T) 
 	require.True(t, blocked.IsError)
 	require.True(t, outcome.limited)
 	require.GreaterOrEqual(t, rateLimitRetryAfterSeconds(outcome.retryAfter), int64(1))
+}
+
+func TestToolRateLimitMiddlewareIsIndependentPerTool(t *testing.T) {
+	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	tools := make(map[string]*Tool)
+	handlers := make(map[string]mcpserver.ToolHandlerFunc)
+	for _, name := range []string{"limited-a", "limited-b"} {
+		tool := &Tool{
+			Metadata: Metadata{Name: name, Version: testVersion100},
+			Spec: ToolSpec{
+				RateLimit: &ToolRateLimit{RequestsPerSecond: 100, Burst: 1},
+			},
+			Handler: func(context.Context, map[string]any) (*ToolResult, error) {
+				return &ToolResult{Result: map[string]any{"ok": true}}, nil
+			},
+		}
+		s.RegisterTool(tool)
+		tools[name] = tool
+		handlers[name] = s.applyToolMiddlewares(tool, s.handleMCPToolCall(name))
+	}
+
+	call := func(name string) *mcp.CallToolResult {
+		request := mcp.CallToolRequest{}
+		request.Params.Name = name
+		request.Params.Arguments = map[string]any{}
+		result, err := handlers[name](context.Background(), request)
+		require.NoError(t, err)
+		return result
+	}
+
+	require.False(t, call("limited-a").IsError)
+	handlers["limited-a"] = s.applyToolMiddlewares(tools["limited-a"], s.handleMCPToolCall("limited-a"))
+	require.True(t, call("limited-a").IsError)
+	require.False(t, call("limited-b").IsError)
+}
+
+func TestToolConcurrencyLimiterDoesNotEvictActiveEntriesAtCapacity(t *testing.T) {
+	m := NewToolConcurrencyLimiter()
+	now := time.Date(2026, time.August, 22, 0, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return now }
+	release, ok := m.acquire("active-tool", "principal", ToolConcurrency{Limit: 1, PerPrincipal: true})
+	require.True(t, ok)
+	m.entries["active-tool\x00principal"].lastSeen = now.Add(-limiterIdleTTL - time.Second)
+	for i := 1; i < maxLimiterEntries; i++ {
+		m.entries[fmt.Sprintf("occupied-%d", i)] = &concurrencyEntry{
+			slots:        make(chan struct{}, 1),
+			lastSeen:     now.Add(-limiterIdleTTL - time.Second),
+			active:       1,
+			limit:        1,
+			perPrincipal: true,
+		}
+	}
+
+	_, ok = m.acquire("new-tool", "principal", ToolConcurrency{Limit: 1, PerPrincipal: true})
+	require.False(t, ok)
+	_, stillActive := m.entries["active-tool\x00principal"]
+	require.True(t, stillActive)
+	release()
+}
+
+func TestToolConcurrencyLimitRejectsAndReleases(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls int
+	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	tool := &Tool{
+		Metadata: Metadata{Name: "concurrent-tool", Version: testVersion100},
+		Spec:     ToolSpec{Concurrency: &ToolConcurrency{Limit: 1, PerPrincipal: true}},
+		Handler: func(context.Context, map[string]any) (*ToolResult, error) {
+			calls++
+			if calls == 1 {
+				close(started)
+				<-release
+				return nil, errors.New("first call failed")
+			}
+			return &ToolResult{Result: map[string]any{"ok": true}}, nil
+		},
+	}
+	s.RegisterTool(tool)
+	handler := s.applyToolMiddlewares(tool, s.handleMCPToolCall(tool.Metadata.Name))
+	request := mcp.CallToolRequest{}
+	request.Params.Name = tool.Metadata.Name
+	request.Params.Arguments = map[string]any{}
+	ctx := WithRateLimitPrincipal(context.Background(), "principal-a")
+
+	first := make(chan *mcp.CallToolResult, 1)
+	go func() {
+		result, err := handler(ctx, request)
+		require.NoError(t, err)
+		first <- result
+	}()
+	<-started
+
+	second, err := handler(ctx, request)
+	require.NoError(t, err)
+	require.True(t, second.IsError)
+	require.Equal(t, "concurrency_limit", second.Meta.AdditionalFields["com.erpbridge/error"].(map[string]any)["type"])
+
+	close(release)
+	require.True(t, (<-first).IsError)
+
+	third, err := handler(ctx, request)
+	require.NoError(t, err)
+	require.False(t, third.IsError)
 }
 
 func TestRateLimitMiddleware_SupportsLowRateReservation(t *testing.T) {
@@ -88,6 +193,23 @@ func TestRateLimitMiddleware_EvictsIdleEntries(t *testing.T) {
 
 	m.getLimiter("new")
 	assert.Len(t, m.limiters, 1)
+}
+
+func TestRateLimitMiddleware_RejectsNewEntriesAtHardLimit(t *testing.T) {
+	m := NewRateLimitMiddleware(2, 1)
+	now := time.Date(2026, time.August, 22, 0, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return now }
+	m.limiters = make(map[string]*limiterEntry, maxLimiterEntries)
+	for i := 0; i < maxLimiterEntries; i++ {
+		m.limiters[fmt.Sprintf("active-%d", i)] = &limiterEntry{
+			limiter:  rate.NewLimiter(rate.Limit(1), 1),
+			lastSeen: now,
+		}
+	}
+
+	limiter := m.getLimiter("new")
+	assert.False(t, limiter.Allow())
+	assert.Len(t, m.limiters, maxLimiterEntries)
 }
 
 type rateLimitTestSession struct {

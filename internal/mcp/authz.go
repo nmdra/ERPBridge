@@ -2,11 +2,13 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/nmdra/ERPBridge/internal/faults"
 )
 
 const roleSelectorField = "role"
@@ -42,6 +44,15 @@ func roleBadRequest(reason string) *RoleAuthorizationError {
 	return &RoleAuthorizationError{Status: http.StatusBadRequest, Reason: reason}
 }
 
+func roleErrorResult(err error) *mcp.CallToolResult {
+	kind := faults.KindInvalidInput
+	var roleErr *RoleAuthorizationError
+	if errors.As(err, &roleErr) && roleErr.Status == http.StatusForbidden {
+		kind = faults.KindPermissionDenied
+	}
+	return newToolExecutionResult(faults.New(kind, err.Error(), false, 0, err))
+}
+
 // RoleAuthzMiddleware verifies the role selector for guarded MCP tools before
 // the cache and execution handlers run.
 func (s *Server) RoleAuthzMiddleware(t *Tool) server.ToolHandlerMiddleware {
@@ -53,23 +64,23 @@ func (s *Server) RoleAuthzMiddleware(t *Tool) server.ToolHandlerMiddleware {
 
 			args, err := callArguments(request)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return roleErrorResult(err), nil
 			}
 			selectedRole, selectedInArgs, err := roleSelector(args)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return roleErrorResult(err), nil
 			}
 			if !selectedInArgs {
 				selectedRole, selectedInArgs = CallerRoleFromContext(ctx)
 			}
 			if !selectedInArgs {
 				err := roleDenied("a verified identity and role selector are required")
-				return mcp.NewToolResultError(err.Error()), nil
+				return roleErrorResult(err), nil
 			}
 
 			authorizedContext, err := authorizeRole(ctx, t, selectedRole)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return roleErrorResult(err), nil
 			}
 			if _, roleWasInArgs := args[roleSelectorField]; roleWasInArgs {
 				cleanArgs := make(map[string]any, len(args)-1)

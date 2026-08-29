@@ -12,10 +12,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/connector"
+	"github.com/nmdra/ERPBridge/internal/faults"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -219,12 +221,71 @@ func TestServerPlugin_RawRunsBeforeNormalizationAndAfterResponse(t *testing.T) {
 	require.Nil(t, calls[1].RawResponse)
 }
 
+func TestServerPlugin_RawDependencyFaultPreservesRetryability(t *testing.T) {
+	t.Setenv("API_AUTH_TOKEN", "admin-token")
+	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+	tool := rawResponseTool("raw-timeout-tool")
+	client := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+		return nil, faults.New(faults.KindDependencyTimeout, "the ERP service timed out; retry later", true, 10*time.Second, errors.New("private timeout"))
+	}}
+	s := NewServer(client, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	s.RegisterTool(tool)
+	raw := validPluginBindingForTest()
+	raw.Metadata.Name = "raw-timeout-phase"
+	raw.Spec.ToolRef.Name = tool.Metadata.Name
+	raw.Spec.Phase = PluginPhaseRawResponse
+	installActivePluginBindings(s, tool, raw)
+	require.Len(t, s.pluginRegistry.RuntimeBindingsForToolPhase(tool.Metadata.Name, tool.Metadata.Version, PluginPhaseRawResponse), 1)
+
+	result, err := s.executeTool(context.Background(), tool, nil)
+
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	fault, ok := faults.As(result.Error.(error))
+	require.True(t, ok)
+	require.Equal(t, faults.KindDependencyTimeout, fault.Kind)
+	require.True(t, fault.Retryable)
+	require.Equal(t, 10*time.Second, fault.RetryAfter)
+}
+
+func TestServerPlugin_RawPluginFailurePreservesCapturedRetryMetadata(t *testing.T) {
+	t.Setenv(authTokenEnv, "admin-token")
+	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
+	tool := rawResponseTool("raw-plugin-failure-tool")
+	client := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     http.Header{"Content-Type": []string{"application/json"}, "Retry-After": []string{"9"}},
+			Body:       io.NopCloser(bytes.NewBufferString(`{"message":"busy"}`)),
+		}, nil
+	}}
+	s := NewServer(client, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	s.RegisterTool(tool)
+	raw := validPluginBindingForTest()
+	raw.Metadata.Name = "raw-plugin-failure-phase"
+	raw.Spec.ToolRef.Name = tool.Metadata.Name
+	raw.Spec.Phase = PluginPhaseRawResponse
+	installActivePluginBindings(s, tool, raw)
+	s.pluginClient = &fakePluginProcessor{process: func(PluginInvocation) (*PluginResponse, error) {
+		return nil, errors.New("plugin unavailable")
+	}}
+
+	result, err := s.executeTool(context.Background(), tool, nil)
+
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	fault, ok := faults.As(result.Error.(error))
+	require.True(t, ok)
+	require.Equal(t, faults.KindRateLimited, fault.Kind)
+	require.Equal(t, 9*time.Second, fault.RetryAfter)
+}
+
 func TestServerPlugin_RawTerminalErrorPreservesStatusAndSkipsAfterResponse(t *testing.T) {
 	t.Setenv(authTokenEnv, "admin-token")
 	t.Setenv("PLUGIN_ENDPOINT_ALLOWLIST", "plugin.example.test:80")
 	tool := rawResponseTool("raw-error-tool")
 	connector := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewBufferString(`{"message":"not found"}`))}, nil
+		return &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{"Content-Type": []string{"application/json"}, "Retry-After": []string{"7"}}, Body: io.NopCloser(bytes.NewBufferString(`{"message":"not found"}`))}, nil
 	}}
 	s := NewServer(connector, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 	s.RegisterTool(tool)
@@ -249,6 +310,10 @@ func TestServerPlugin_RawTerminalErrorPreservesStatusAndSkipsAfterResponse(t *te
 	require.NoError(t, err)
 	require.True(t, result.IsError)
 	require.Equal(t, map[string]any{"text": "handled error"}, result.Result)
+	fault, ok := faults.As(result.Error.(error))
+	require.True(t, ok)
+	require.Equal(t, faults.KindRateLimited, fault.Kind)
+	require.Equal(t, 7*time.Second, fault.RetryAfter)
 	require.Len(t, processor.Calls(), 1)
 }
 

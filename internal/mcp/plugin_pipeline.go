@@ -11,6 +11,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/nmdra/ERPBridge/internal/connector"
+	"github.com/nmdra/ERPBridge/internal/faults"
 )
 
 const (
@@ -28,31 +29,26 @@ func (s *Server) executeToolCall(ctx context.Context, tool *Tool, args map[strin
 		return nil, err
 	}
 	if result == nil {
-		return nil, errors.New("tool returned no result")
+		return nil, faults.NewProtocol(faults.KindInternal, "internal server error", errors.New("tool returned no result"))
+	}
+	if result.IsError {
+		return newToolExecutionResult(toolResultError(result.Error)), nil
 	}
 
 	value := result.Result
-	if result.IsError && result.Error != nil {
-		value = result.Error
-	}
 	encoded, marshalErr := json.Marshal(value)
 	if marshalErr != nil {
-		return nil, errors.New("encode tool result")
+		return nil, faults.NewProtocol(faults.KindInternal, "internal server error", marshalErr)
 	}
 	text := string(encoded)
-	if result.IsError {
-		if message, ok := result.Error.(string); ok {
-			text = message
-		}
-	} else if object, ok := result.Result.(map[string]any); ok {
+	if object, ok := result.Result.(map[string]any); ok {
 		if outputText, ok := object["text"].(string); ok {
 			text = outputText
 		}
 	}
 
 	mcpResult := mcp.NewToolResultText(text)
-	mcpResult.IsError = result.IsError
-	if !result.IsError && tool.Spec.OutputSchema != nil {
+	if tool.Spec.OutputSchema != nil {
 		if _, ok := result.Result.(map[string]any); ok {
 			mcpResult.StructuredContent = result.Result
 		}
@@ -78,7 +74,7 @@ func (s *Server) executeTool(ctx context.Context, tool *Tool, args map[string]an
 		return result, nil
 	}
 	if validationErr := tool.ValidateResult(result.Result); validationErr != nil {
-		result.Error = fmt.Sprintf("response validation failed: %v", validationErr)
+		result.Error = faults.New(faults.KindInternal, "the ERP response did not match the tool contract", false, 0, validationErr)
 		result.IsError = true
 		return result, nil
 	}
@@ -92,10 +88,17 @@ func (s *Server) executeRawTool(ctx context.Context, tool *Tool, args map[string
 	}
 	captured, err := tool.CallERP(ctx, args, s.connector, connector.CallOptions{PreserveErrorResponses: true, DisableRedirects: true})
 	if err != nil {
+		if fault, ok := faults.As(err); ok {
+			recordDependencyFault(fault)
+			return &ToolResult{Error: fault, IsError: true}, nil
+		}
 		return s.rawProcessingFailure(ctx, tool, first, nil, afterBindings, err)
 	}
 	if captured == nil {
 		return s.rawProcessingFailure(ctx, tool, first, nil, afterBindings, errors.New("ERP response is unavailable"))
+	}
+	if captured.Status < 200 || captured.Status >= 300 {
+		recordDependencyFault(faultForHTTPStatus(captured.Status, captured.RetryAfter))
 	}
 
 	rawResponse := rawResponseFromERP(captured)
@@ -131,6 +134,7 @@ func (s *Server) executeRawTool(ctx context.Context, tool *Tool, args map[string
 
 	result := &ToolResult{Result: transformed, IsError: captured.Status < 200 || captured.Status >= 300}
 	if result.IsError {
+		result.Error = faultForHTTPStatus(captured.Status, captured.RetryAfter)
 		return result, nil
 	}
 	if tool.Spec.Execution.ResponsePath != "" {
@@ -221,7 +225,10 @@ func (s *Server) rawProcessingFailure(ctx context.Context, tool *Tool, active *A
 	if failureErr := s.handlePluginFailure(tool, active, cause); failureErr != nil {
 		return nil, failureErr
 	}
-	if captured != nil && captured.Status >= 200 && captured.Status < 300 {
+	if captured != nil {
+		if captured.Status < 200 || captured.Status >= 300 {
+			return &ToolResult{Error: faultForHTTPStatus(captured.Status, captured.RetryAfter), IsError: true}, nil
+		}
 		fallback, fallbackErr := normalizeCapturedERPResponse(tool, captured)
 		if fallbackErr == nil && fallback != nil && !fallback.IsError {
 			return s.processAfterResponseBindings(ctx, tool, fallback, afterBindings)

@@ -8,7 +8,7 @@ This transport is the MCP streamable HTTP specification. It suits stateless or w
 
 - **Base URL:** `http://localhost:8080/mcp/`
 - **Handshake:** `POST /mcp/` with a JSON-RPC `initialize` request
-- **Transport Specification:** MCP 2025-03-26. The server negotiates up to `2025-11-25` when the client supports it.
+- **Transport Specification:** MCP 2025-11-25. The server negotiates older supported protocol versions for compatible clients.
 - **Features:**
     - Request and response via standard POST.
     - Session management via the `Mcp-Session-Id` header.
@@ -84,13 +84,25 @@ ERPBridge includes built-in protection for underlying ERP systems.
 - **Rate Limiting:** Tool execution uses a token bucket. Authenticated HTTP
   requests are keyed by token principal; unauthenticated stateful MCP requests
   use their session, and stdio uses its process fallback.
-- **Default Limits:** 5 requests per second with a burst of 10 (configurable via
-  `RATE_LIMIT_RPS` and `RATE_LIMIT_BURST`).
+- **Default Limits:** 10 requests per second with a burst of 20 (configurable
+  via `RATE_LIMIT_RPS` and `RATE_LIMIT_BURST`).
 
 Excess direct `/api/tools/invoke` calls return HTTP `429`, stable error
 `RATE_LIMITED`, and a whole-second `Retry-After` value. Streamable HTTP MCP
 `tools/call` requests remain HTTP `200` and carry `result.isError=true`.
 `tools/list` is not subject to tool-execution throttling.
+
+MCP protocol failures use JSON-RPC errors. Malformed JSON uses `-32700`,
+invalid requests use `-32600`, unsupported methods use `-32601`, invalid
+protocol parameters use `-32602`, and unexpected server failures use `-32603`.
+Valid tool calls that fail during execution return `isError: true` instead.
+These results may include the namespaced `com.erpbridge/error` metadata with a
+safe error type, retryability, and a bounded `retryAfterMs` value.
+
+ERP retries are bounded by three attempts and a 30-second overall deadline.
+`Retry-After` is honored when supplied. Automatic retries are limited to
+GET, HEAD, and OPTIONS so POST, PUT, PATCH, and DELETE operations are not
+blindly replayed without an idempotency mechanism.
 
 ## 5. Monitoring & Health
 

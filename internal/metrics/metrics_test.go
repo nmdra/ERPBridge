@@ -20,6 +20,9 @@ func TestMetricsRegistration(t *testing.T) {
 	if ToolLatency == nil {
 		t.Error("ToolLatency is not initialized")
 	}
+	if ToolErrorsTotal == nil || ToolActiveCalls == nil || RateLimitedTotal == nil || DependencyErrorsTotal == nil || MCPRequestsTotal == nil {
+		t.Error("MCP outcome metrics are not initialized")
+	}
 	if CacheHitsTotal == nil {
 		t.Error("CacheHitsTotal is not initialized")
 	}
@@ -37,6 +40,12 @@ func TestMetricsUsage(_ *testing.T) {
 	ERPLatency.With(prometheus.Labels{labelMethod: "GET", labelPath: "/test"}).Observe(0.1)
 	ToolInvocationsTotal.With(prometheus.Labels{labelTool: "test-tool", labelCacheStatus: "hit"}).Inc()
 	ToolLatency.With(prometheus.Labels{labelTool: "test-tool"}).Observe(0.5)
+	ToolErrorsTotal.With(prometheus.Labels{labelTool: "test-tool", labelErrorType: "rate_limit"}).Inc()
+	ToolActiveCalls.With(prometheus.Labels{labelTool: "test-tool"}).Inc()
+	ToolActiveCalls.With(prometheus.Labels{labelTool: "test-tool"}).Dec()
+	RateLimitedTotal.With(prometheus.Labels{labelTool: "test-tool", labelScope: "principal"}).Inc()
+	DependencyErrorsTotal.With(prometheus.Labels{"dependency": "erp", labelErrorType: "timeout"}).Inc()
+	MCPRequestsTotal.With(prometheus.Labels{"method": "tools/call", labelStatus: "success"}).Inc()
 	CacheHitsTotal.With(prometheus.Labels{"type": "exact"}).Inc()
 	CacheMissesTotal.Inc()
 	CredentialResolutionsTotal.WithLabelValues("file", "success").Inc()

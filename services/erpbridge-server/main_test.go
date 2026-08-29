@@ -77,6 +77,15 @@ func TestParseRateLimitConfigRejectsInvalidAndTrailingValues(t *testing.T) {
 	}
 }
 
+func TestParseRateLimitConfigUsesIncreasedDefaults(t *testing.T) {
+	t.Setenv("RATE_LIMIT_RPS", "")
+	t.Setenv("RATE_LIMIT_BURST", "")
+	config, err := parseRateLimitConfig()
+	require.NoError(t, err)
+	require.Equal(t, 10.0, config.RequestsPerSecond)
+	require.Equal(t, 20, config.Burst)
+}
+
 func TestParseRateLimitConfigAcceptsSubsecondRate(t *testing.T) {
 	t.Setenv("RATE_LIMIT_RPS", "0.5")
 	t.Setenv("RATE_LIMIT_BURST", "2")

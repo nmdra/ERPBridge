@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -10,10 +11,186 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/nmdra/ERPBridge/internal/credentials"
+	"github.com/nmdra/ERPBridge/internal/faults"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/metrics"
 	"golang.org/x/time/rate"
 )
+
+// RecoveryMiddleware converts tool-handler panics into sanitized protocol-level
+// internal errors while retaining only the panic type in logs.
+func RecoveryMiddleware(log *slog.Logger) server.ToolHandlerMiddleware {
+	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
+		return func(ctx context.Context, req mcp.CallToolRequest) (result *mcp.CallToolResult, err error) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					log.ErrorContext(ctx, "tool handler panic recovered",
+						slog.String("tool_name", req.Params.Name),
+						slog.String("panic_type", fmt.Sprintf("%T", recovered)),
+					)
+					result = nil
+					err = faults.NewProtocol(faults.KindInternal, "internal server error", fmt.Errorf("tool handler panic: %T", recovered))
+				}
+			}()
+			return next(ctx, req)
+		}
+	}
+}
+
+// ToolConcurrencyLimiter bounds active calls by tool and, when configured,
+// authenticated principal or MCP session.
+type ToolConcurrencyLimiter struct {
+	entries map[string]*concurrencyEntry
+	mutex   sync.Mutex
+	now     func() time.Time
+}
+
+type concurrencyEntry struct {
+	slots        chan struct{}
+	lastSeen     time.Time
+	active       int
+	limit        int
+	perPrincipal bool
+}
+
+// NewToolConcurrencyLimiter creates a bounded principal/tool concurrency manager.
+func NewToolConcurrencyLimiter() *ToolConcurrencyLimiter {
+	return &ToolConcurrencyLimiter{
+		entries: make(map[string]*concurrencyEntry),
+		now:     time.Now,
+	}
+}
+
+func (m *ToolConcurrencyLimiter) acquire(toolName, principal string, config ToolConcurrency) (func(), bool) {
+	if m == nil || config.Limit <= 0 {
+		return func() {}, true
+	}
+	key := toolName
+	if config.PerPrincipal {
+		key += "\x00" + principal
+	}
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	now := m.now()
+	if entry, exists := m.entries[key]; exists {
+		if entry.limit != config.Limit || entry.perPrincipal != config.PerPrincipal {
+			if entry.active > 0 {
+				return nil, false
+			}
+			delete(m.entries, key)
+		} else {
+			select {
+			case entry.slots <- struct{}{}:
+				entry.active++
+				return m.releaseFunc(key, entry), true
+			default:
+				return nil, false
+			}
+		}
+	}
+	if len(m.entries) >= maxLimiterEntries {
+		for existingKey, entry := range m.entries {
+			if entry.active == 0 && now.Sub(entry.lastSeen) > limiterIdleTTL {
+				delete(m.entries, existingKey)
+			}
+		}
+		if len(m.entries) >= maxLimiterEntries {
+			return nil, false
+		}
+	}
+	entry := &concurrencyEntry{
+		slots:        make(chan struct{}, config.Limit),
+		lastSeen:     now,
+		active:       1,
+		limit:        config.Limit,
+		perPrincipal: config.PerPrincipal,
+	}
+	m.entries[key] = entry
+	entry.slots <- struct{}{}
+	return m.releaseFunc(key, entry), true
+}
+
+func (m *ToolConcurrencyLimiter) releaseFunc(key string, entry *concurrencyEntry) func() {
+	return func() {
+		m.mutex.Lock()
+		defer m.mutex.Unlock()
+		if current, ok := m.entries[key]; !ok || current != entry {
+			return
+		}
+		select {
+		case <-entry.slots:
+			if entry.active > 0 {
+				entry.active--
+			}
+			entry.lastSeen = m.now()
+		default:
+		}
+	}
+}
+
+func executionPrincipal(ctx context.Context) string {
+	if principal := rateLimitPrincipal(ctx); principal != "" {
+		return principal
+	}
+	if session := server.ClientSessionFromContext(ctx); session != nil {
+		return session.SessionID()
+	}
+	return anonymousPrincipal
+}
+
+func rateLimitScope(ctx context.Context) string {
+	if rateLimitPrincipal(ctx) != "" {
+		return "principal"
+	}
+	if server.ClientSessionFromContext(ctx) != nil {
+		return "session"
+	}
+	return anonymousPrincipal
+}
+
+// toolRateLimitMiddleware applies one persistent independent token bucket to a
+// tool, including direct REST invocations that build their handler per request.
+func (s *Server) toolRateLimitMiddleware(t *Tool) server.ToolHandlerMiddleware {
+	if t == nil || t.Spec.RateLimit == nil {
+		return func(next server.ToolHandlerFunc) server.ToolHandlerFunc { return next }
+	}
+	key := t.Metadata.Name + "\x00" + t.Metadata.Version
+	s.toolRateLimitMu.Lock()
+	if s.toolRateLimiters == nil {
+		s.toolRateLimiters = make(map[string]*RateLimitMiddleware)
+	}
+	limiter := s.toolRateLimiters[key]
+	if limiter == nil || limiter.rate != rate.Limit(t.Spec.RateLimit.RequestsPerSecond) || limiter.burst != t.Spec.RateLimit.Burst {
+		limiter = NewRateLimitMiddleware(t.Spec.RateLimit.RequestsPerSecond, t.Spec.RateLimit.Burst)
+		s.toolRateLimiters[key] = limiter
+	}
+	s.toolRateLimitMu.Unlock()
+	return limiter.Handle()
+}
+
+// ConcurrencyMiddleware applies an optional bounded active-call limit.
+func (s *Server) ConcurrencyMiddleware(t *Tool) server.ToolHandlerMiddleware {
+	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
+		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			if t == nil || t.Spec.Concurrency == nil {
+				return next(ctx, req)
+			}
+			release, ok := s.concurrency.acquire(t.Metadata.Name, executionPrincipal(ctx), *t.Spec.Concurrency)
+			if !ok {
+				return newToolExecutionResult(faults.New(
+					faults.KindConcurrencyLimited,
+					"the tool is at its concurrency limit; retry later",
+					true,
+					time.Second,
+					nil,
+				)), nil
+			}
+			defer release()
+			return next(ctx, req)
+		}
+	}
+}
 
 // RateLimitMiddleware provides principal- or session-scoped rate limiting for tool execution.
 type RateLimitMiddleware struct {
@@ -30,6 +207,7 @@ type limiterEntry struct {
 }
 
 const (
+	anonymousPrincipal           = "anonymous"
 	maxLimiterEntries            = 10000
 	limiterIdleTTL               = 15 * time.Minute
 	cacheBackendOperationTimeout = time.Second
@@ -47,7 +225,7 @@ func NewRateLimitMiddleware(requestsPerSecond float64, burst int) *RateLimitMidd
 
 func (m *RateLimitMiddleware) getLimiter(sessionID string) *rate.Limiter {
 	if sessionID == "" {
-		sessionID = "anonymous"
+		sessionID = anonymousPrincipal
 	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -63,6 +241,9 @@ func (m *RateLimitMiddleware) getLimiter(sessionID string) *rate.Limiter {
 			if now.Sub(entry.lastSeen) > limiterIdleTTL {
 				delete(m.limiters, key)
 			}
+		}
+		if len(m.limiters) >= maxLimiterEntries {
+			return rate.NewLimiter(0, 0)
 		}
 	}
 
@@ -121,25 +302,42 @@ func rateLimitPrincipal(ctx context.Context) string {
 func (m *RateLimitMiddleware) Handle() server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			sessionID := rateLimitPrincipal(ctx)
-			if sess := server.ClientSessionFromContext(ctx); sess != nil {
-				if sessionID == "" {
-					sessionID = sess.SessionID()
-				}
-			}
+			sessionID := executionPrincipal(ctx)
 			limiter := m.getLimiter(sessionID)
 			now := m.now()
 			reservation := limiter.ReserveN(now, 1)
 			if !reservation.OK() {
 				recordRateLimitOutcome(ctx, time.Second)
-				return mcp.NewToolResultError(ErrorRateLimited + ": rate limit exceeded"), nil
+				logger.FromContext(ctx).WarnContext(ctx, "tool request rate limited",
+					slog.String("tool_name", req.Params.Name),
+					slog.String("scope", rateLimitScope(ctx)),
+				)
+				metrics.RateLimitedTotal.WithLabelValues(req.Params.Name, rateLimitScope(ctx)).Inc()
+				return newToolExecutionResult(faults.New(
+					faults.KindRateLimited,
+					"the service is temporarily rate limited; retry after "+retryAfterText(time.Second),
+					true,
+					time.Second,
+					nil,
+				)), nil
 			}
 
 			delay := reservation.DelayFrom(now)
 			if delay > 0 {
 				reservation.CancelAt(now)
 				recordRateLimitOutcome(ctx, delay)
-				return mcp.NewToolResultError(ErrorRateLimited + ": rate limit exceeded"), nil
+				logger.FromContext(ctx).WarnContext(ctx, "tool request rate limited",
+					slog.String("tool_name", req.Params.Name),
+					slog.String("scope", rateLimitScope(ctx)),
+				)
+				metrics.RateLimitedTotal.WithLabelValues(req.Params.Name, rateLimitScope(ctx)).Inc()
+				return newToolExecutionResult(faults.New(
+					faults.KindRateLimited,
+					"the service is temporarily rate limited; retry after "+retryAfterText(delay),
+					true,
+					delay,
+					nil,
+				)), nil
 			}
 
 			return next(ctx, req)
@@ -171,12 +369,19 @@ func LoggingMiddleware(log *slog.Logger) server.ToolHandlerMiddleware {
 			result, err := next(ctx, req)
 
 			duration := time.Since(start)
-			if err != nil {
-				toolLog.ErrorContext(ctx, "tool execution failed",
+			switch {
+			case err != nil:
+				toolLog.ErrorContext(ctx, "protocol or infrastructure failure",
 					slog.Duration("duration", duration),
 					slog.String("error", err.Error()),
+					slog.String("error_kind", dataClassInternal),
 				)
-			} else {
+			case result != nil && result.IsError:
+				toolLog.WarnContext(ctx, "tool execution failed",
+					slog.Duration("duration", duration),
+					slog.String("error_kind", toolResultErrorType(result)),
+				)
+			default:
 				toolLog.InfoContext(ctx, "tool execution completed",
 					slog.Duration("duration", duration),
 				)
@@ -192,6 +397,9 @@ func MetricsMiddleware() server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			start := time.Now()
+			metrics.ToolActiveCalls.WithLabelValues(req.Params.Name).Inc()
+			defer metrics.ToolActiveCalls.WithLabelValues(req.Params.Name).Dec()
+
 			result, err := next(ctx, req)
 			duration := time.Since(start)
 
@@ -202,6 +410,11 @@ func MetricsMiddleware() server.ToolHandlerMiddleware {
 
 			metrics.ToolInvocationsTotal.WithLabelValues(req.Params.Name, status).Inc()
 			metrics.ToolLatency.WithLabelValues(req.Params.Name).Observe(duration.Seconds())
+			if err != nil {
+				metrics.ToolErrorsTotal.WithLabelValues(req.Params.Name, "internal").Inc()
+			} else if result != nil && result.IsError {
+				metrics.ToolErrorsTotal.WithLabelValues(req.Params.Name, toolResultErrorType(result)).Inc()
+			}
 
 			return result, err
 		}

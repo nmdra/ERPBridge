@@ -14,10 +14,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nmdra/ERPBridge/internal/cache"
 	"github.com/nmdra/ERPBridge/internal/connector"
 	"github.com/nmdra/ERPBridge/internal/credentials"
+	"github.com/nmdra/ERPBridge/internal/faults"
+	"github.com/nmdra/ERPBridge/internal/metrics"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -51,6 +54,8 @@ type Metadata struct {
 type ToolSpec struct {
 	Description  Description      `json:"description"`
 	Annotations  *ToolAnnotations `json:"annotations,omitempty"`
+	RateLimit    *ToolRateLimit   `json:"rateLimit,omitempty"`
+	Concurrency  *ToolConcurrency `json:"concurrency,omitempty"`
 	InputSchema  InputSchema      `json:"inputSchema"`
 	OutputSchema *any             `json:"outputSchema,omitempty"`
 	Execution    Execution        `json:"execution"`
@@ -75,6 +80,31 @@ type ToolAnnotations struct {
 	DestructiveHint *bool  `json:"destructiveHint,omitempty"`
 	IdempotentHint  *bool  `json:"idempotentHint,omitempty"`
 	OpenWorldHint   *bool  `json:"openWorldHint,omitempty"`
+}
+
+// ToolRateLimit optionally adds an independent token bucket for one tool.
+type ToolRateLimit struct {
+	RequestsPerSecond float64 `json:"requestsPerSecond"`
+	Burst             int     `json:"burst"`
+}
+
+// Validate checks that the optional per-tool rate limit can make progress.
+func (r ToolRateLimit) Validate() error {
+	return RateLimitConfig(r).Validate()
+}
+
+// ToolConcurrency optionally bounds simultaneous executions of one tool.
+type ToolConcurrency struct {
+	Limit        int  `json:"limit"`
+	PerPrincipal bool `json:"perPrincipal,omitempty"`
+}
+
+// Validate checks that the optional concurrency limit is positive.
+func (c ToolConcurrency) Validate() error {
+	if c.Limit <= 0 {
+		return errors.New("tool concurrency limit must be positive")
+	}
+	return nil
 }
 
 // InputSchema defines the structure of arguments required by a tool.
@@ -162,6 +192,7 @@ type ERPResponse struct {
 	Status      int
 	ContentType string
 	Body        []byte
+	RetryAfter  time.Duration `json:"-"`
 }
 
 func (t *Tool) prepareERPCall(args map[string]any) (connector.EndpointConfig, url.Values, io.Reader, error) {
@@ -321,7 +352,8 @@ func (t *Tool) CallERP(ctx context.Context, args map[string]any, conn ERPConnect
 	} else {
 		contentType = "application/octet-stream"
 	}
-	return &ERPResponse{Status: resp.StatusCode, ContentType: contentType, Body: body}, nil
+	retryAfter, _ := connector.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+	return &ERPResponse{Status: resp.StatusCode, ContentType: contentType, Body: body, RetryAfter: retryAfter}, nil
 }
 
 // Execute performs the actual tool invocation by calling either a native handler or the underlying ERP API.
@@ -329,12 +361,32 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 	if t.Handler != nil {
 		return t.Handler(ctx, args)
 	}
-	resp, err := t.callERPResponse(ctx, args, conn, connector.CallOptions{})
+	options := connector.CallOptions{}
+	if _, ok := conn.(ERPResponseConnector); ok {
+		options.PreserveErrorResponses = true
+	}
+	resp, err := t.callERPResponse(ctx, args, conn, options)
 	if err != nil {
-		return nil, fmt.Errorf("erp call failed: %w", err)
+		if failure, ok := faults.As(err); ok {
+			recordDependencyFault(failure)
+			return nil, failure
+		}
+		failure := faults.New(faults.KindInternal, "the tool could not prepare the ERP request; check server logs", false, 0, err)
+		recordDependencyFault(failure)
+		return nil, failure
 	}
 	if resp == nil {
-		return nil, errors.New("erp response is unavailable")
+		failure := faults.New(faults.KindDependencyUnavailable, "the ERP response was unavailable; retry later", true, 0, errors.New("nil ERP response"))
+		recordDependencyFault(failure)
+		return nil, failure
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		failure := faultForHTTPResponse(resp)
+		recordDependencyFault(failure)
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		return &ToolResult{Error: failure, IsError: true}, nil
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 &&
 		(strings.EqualFold(t.Spec.Execution.Method, http.MethodHead) || resp.StatusCode == http.StatusNoContent) {
@@ -344,26 +396,71 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 		return &ToolResult{Result: nil}, nil
 	}
 	if resp.Body == nil {
-		return nil, errors.New("erp response body is unavailable")
+		failure := faults.New(faults.KindDependencyUnavailable, "the ERP response body was unavailable; retry later", true, 0, errors.New("nil ERP response body"))
+		recordDependencyFault(failure)
+		return nil, failure
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	var resultData any
 	if err := json.NewDecoder(resp.Body).Decode(&resultData); err != nil {
-		return nil, fmt.Errorf("decode erp response: %w", err)
+		failure := faults.New(faults.KindDependencyUnavailable, "the ERP response was invalid; retry later", true, 0, err)
+		recordDependencyFault(failure)
+		return nil, failure
 	}
 	if t.Spec.Execution.ResponsePath != "" && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		resultData, err = resolveResponsePath(resultData, t.Spec.Execution.ResponsePath)
 		if err != nil {
-			return nil, err
+			failure := faults.New(faults.KindInternal, "the ERP response did not match the tool contract", false, 0, err)
+			return nil, failure
 		}
 	}
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		if err := t.ValidateResult(resultData); err != nil {
-			return &ToolResult{Result: resultData, Error: fmt.Sprintf("response validation failed: %v", err), IsError: true}, nil
-		}
+	if err := t.ValidateResult(resultData); err != nil {
+		return &ToolResult{
+			Error:   faults.New(faults.KindInternal, "the ERP response did not match the tool contract", false, 0, err),
+			IsError: true,
+		}, nil
 	}
-	return &ToolResult{Result: resultData, IsError: resp.StatusCode >= 400}, nil
+	return &ToolResult{Result: resultData}, nil
+}
+
+func recordDependencyFault(err error) {
+	fault, ok := faults.As(err)
+	if !ok {
+		return
+	}
+	metrics.DependencyErrorsTotal.WithLabelValues("erp", faultTypeName(fault.Kind)).Inc()
+}
+
+func faultForHTTPResponse(resp *http.Response) *faults.Error {
+	retryAfter, _ := connector.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+	return faultForHTTPStatus(resp.StatusCode, retryAfter)
+}
+
+func faultForHTTPStatus(status int, retryAfter time.Duration) *faults.Error {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return faults.New(faults.KindInvalidInput, "the ERP rejected the request; review the tool arguments", false, 0, nil)
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return faults.New(faults.KindPermissionDenied, "the ERP denied this operation; verify access", false, 0, nil)
+	case http.StatusNotFound:
+		return faults.New(faults.KindNotFound, "the requested ERP resource was not found; check the arguments", false, 0, nil)
+	case http.StatusConflict:
+		return faults.New(faults.KindConflict, "the ERP operation conflicted with current state; review before retrying", false, 0, nil)
+	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
+		return faults.New(faults.KindDependencyTimeout, "the ERP service timed out; retry later", true, retryAfter, nil)
+	case http.StatusTooManyRequests:
+		message := "the ERP service is temporarily rate limited; retry later"
+		if retryAfter > 0 {
+			message = "the ERP service is temporarily rate limited; retry after " + retryAfterText(retryAfter)
+		}
+		return faults.New(faults.KindRateLimited, message, true, retryAfter, nil)
+	default:
+		if status >= 500 {
+			return faults.New(faults.KindDependencyUnavailable, "the ERP service is temporarily unavailable; retry later", true, retryAfter, nil)
+		}
+		return faults.New(faults.KindInternal, "the ERP returned an unexpected response; check server logs", false, 0, nil)
+	}
 }
 
 type responsePathToken struct {

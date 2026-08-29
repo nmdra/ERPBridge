@@ -587,6 +587,57 @@ func TestServer_DirectInvokeRateLimitUsesStableRESTOutcome(t *testing.T) {
 	assert.Equal(t, 1, called)
 }
 
+func TestServer_DirectInvokeMapsDownstreamRateLimit(t *testing.T) {
+	client := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     http.Header{"Retry-After": []string{"10"}},
+			Body:       io.NopCloser(bytes.NewBufferString(`{"error":"private downstream response"}`)),
+		}, nil
+	}}
+	s := NewServer(client, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	s.RegisterTool(&Tool{
+		Metadata: Metadata{Name: "downstream-rate-limit", Version: testVersion100},
+		Spec:     ToolSpec{Execution: Execution{Method: http.MethodGet, Endpoint: "https://erp.example.test/resource"}},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/tools/invoke", bytes.NewBufferString(`{"name":"downstream-rate-limit","arguments":{}}`))
+	s.handleDirectInvoke(recorder, request)
+
+	assert.Equal(t, http.StatusTooManyRequests, recorder.Code)
+	assert.Equal(t, "10", recorder.Header().Get("Retry-After"))
+	var envelope controlPlaneErrorEnvelope
+	assert.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	assert.Equal(t, ErrorRateLimited, envelope.Error)
+	assert.NotContains(t, recorder.Body.String(), "private downstream response")
+}
+
+func TestServer_MCPToolCallMapsDownstreamRateLimitToToolResult(t *testing.T) {
+	client := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, _ connector.CallOptions) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     http.Header{"Retry-After": []string{"10"}},
+			Body:       io.NopCloser(bytes.NewBufferString(`{"error":"private downstream response"}`)),
+		}, nil
+	}}
+	s := NewServer(client, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	s.RegisterTool(&Tool{
+		Metadata: Metadata{Name: "mcp-downstream-rate-limit", Version: testVersion100},
+		Spec:     ToolSpec{Execution: Execution{Method: http.MethodGet, Endpoint: "https://erp.example.test/resource"}},
+	})
+
+	response := s.MCPServer().HandleMessage(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"mcp-downstream-rate-limit","arguments":{}}}`))
+	rpcResponse, ok := response.(mcp.JSONRPCResponse)
+	assert.True(t, ok)
+	result, ok := rpcResponse.Result.(*mcp.CallToolResult)
+	assert.True(t, ok)
+	assert.True(t, result.IsError)
+	assert.Equal(t, "rate_limit", result.Meta.AdditionalFields["com.erpbridge/error"].(map[string]any)["type"])
+	assert.Contains(t, result.Content[0].(mcp.TextContent).Text, "retry after 10 seconds")
+	assert.NotContains(t, result.Content[0].(mcp.TextContent).Text, "private downstream response")
+}
+
 func TestServer_DirectInvoke(t *testing.T) {
 	log := logger.Init()
 	s := NewServer(nil, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")

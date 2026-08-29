@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/nmdra/ERPBridge/internal/connector"
+	"github.com/nmdra/ERPBridge/internal/faults"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -147,6 +149,30 @@ func TestToolAnnotationsAreOptionalAndPreserveExplicitFalse(t *testing.T) {
 	spec := payload["spec"].(map[string]any)
 	annotations := spec["annotations"].(map[string]any)
 	assert.Equal(t, false, annotations["destructiveHint"])
+}
+
+func TestTool_ExecuteMapsDownstreamRateLimitToSafeFault(t *testing.T) {
+	mockConn := &MockConnector{CallWithOptionsFunc: func(_ context.Context, _ connector.EndpointConfig, _ url.Values, _ io.Reader, options connector.CallOptions) (*http.Response, error) {
+		require.True(t, options.PreserveErrorResponses)
+		return &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     http.Header{"Retry-After": []string{"10"}},
+			Body:       io.NopCloser(bytes.NewBufferString(`{"error":"private downstream details"}`)),
+		}, nil
+	}}
+	tool := &Tool{Metadata: Metadata{Name: testToolName}, Spec: ToolSpec{Execution: Execution{Method: http.MethodGet, Endpoint: testEndpoint}}}
+
+	result, err := tool.Execute(context.Background(), map[string]any{}, mockConn)
+
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Nil(t, result.Result)
+	fault, ok := faults.As(result.Error.(error))
+	require.True(t, ok)
+	require.Equal(t, faults.KindRateLimited, fault.Kind)
+	require.True(t, fault.Retryable)
+	require.Equal(t, 10*time.Second, fault.RetryAfter)
+	require.NotContains(t, fault.Error(), "private")
 }
 
 func TestTool_CallERP_CapturesResponseBeforeDecoding(t *testing.T) {
@@ -332,7 +358,7 @@ func TestTool_Execute_MalformedNonEmptyResponseRemainsError(t *testing.T) {
 
 	_, err := tool.Execute(context.Background(), nil, mockConn)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "decode erp response")
+	require.Equal(t, "the ERP response was invalid; retry later", err.Error())
 }
 
 func TestTool_Execute_Error(t *testing.T) {
@@ -385,7 +411,7 @@ func TestTool_Execute_MissingCredentialRefFailsClosed(t *testing.T) {
 	_, err := tool.Execute(context.Background(), nil, mockConn)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "credential reference")
+	assert.Equal(t, "the tool could not prepare the ERP request; check server logs", err.Error())
 	assert.False(t, called, "the connector must not receive a call when a credential reference is unresolved")
 }
 
@@ -450,5 +476,5 @@ func TestTool_Execute_MissingResponsePathReturnsError(t *testing.T) {
 	_, err := tool.Execute(context.Background(), nil, mockConn)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "response path")
+	assert.Equal(t, "the ERP response did not match the tool contract", err.Error())
 }

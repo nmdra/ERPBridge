@@ -53,6 +53,28 @@ func TestValidateToolDataClassRequiresRoles(t *testing.T) {
 	assert.Contains(t, err.Error(), "dataClass")
 }
 
+func TestValidateToolRateAndConcurrencyPolicies(t *testing.T) {
+	s := &Server{}
+	tool := &Tool{
+		Metadata: Metadata{Name: "policy-tool", Version: testVersion100},
+		Spec: ToolSpec{
+			RateLimit:   &ToolRateLimit{RequestsPerSecond: 0, Burst: 1},
+			Concurrency: &ToolConcurrency{Limit: 0},
+		},
+	}
+
+	err := s.validateTool(tool)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rateLimit")
+
+	tool.Spec.RateLimit = &ToolRateLimit{RequestsPerSecond: 1, Burst: 1}
+	require.Error(t, s.validateTool(tool))
+	assert.Contains(t, s.validateTool(tool).Error(), "concurrency")
+
+	tool.Spec.Concurrency = &ToolConcurrency{Limit: 1, PerPrincipal: true}
+	require.NoError(t, s.validateTool(tool))
+}
+
 func TestValidateToolAllowedRoles(t *testing.T) {
 	s := &Server{}
 	tool := &Tool{

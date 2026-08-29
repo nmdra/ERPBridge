@@ -16,8 +16,8 @@ The server reads these variables directly from the environment. It does not load
 | `REDIS_INSIGHT_BIND_ADDRESS` | `127.0.0.1` | Host address for the RedisInsight binding in Compose. |
 | `REDIS_INSIGHT_HOST_PORT` | `8001` | Host port for RedisInsight in Compose. |
 | `CACHE_MEMORY_MAX_ENTRIES` | `10000` | Maximum number of entries in the in-memory cache when `REDIS_URL` is empty. `0` disables memory-cache storage. Invalid or negative values use the default. |
-| `RATE_LIMIT_RPS` | `5.0` | Positive finite tool-execution requests per second (token bucket). |
-| `RATE_LIMIT_BURST` | `10` | Positive token bucket burst size. Invalid values stop startup. |
+| `RATE_LIMIT_RPS` | `10.0` | Positive finite tool-execution requests per second (token bucket). |
+| `RATE_LIMIT_BURST` | `20` | Positive token bucket burst size. Invalid values stop startup. |
 | `BASE_URL` | `http://localhost:<MCP_PORT>` | Public URL of the server. Used for log lines and telemetry only. |
 | `ERP_BASE_URL` | `http://localhost:8081` | Base URL of the underlying ERP system. Used by tool execution. |
 | `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, or `error`. |

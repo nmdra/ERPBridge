@@ -5,23 +5,149 @@ package connector
 import (
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"math/big"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/avast/retry-go/v4"
+	"github.com/nmdra/ERPBridge/internal/faults"
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/nmdra/ERPBridge/internal/metrics"
 	"github.com/nmdra/ERPBridge/internal/security"
 	"github.com/sony/gobreaker"
 )
 
-const authTypeBearer = "bearer"
+const (
+	authTypeBearer   = "bearer"
+	maxRetryAttempts = 3
+	retryDelayBase   = 500 * time.Millisecond
+	retryDelayJitter = 100 * time.Millisecond
+	maxRetryAfter    = 30 * time.Second
+	maxCallDuration  = 30 * time.Second
+)
+
+func retrySafeMethod(method string) bool {
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
+}
+
+type retryAttemptError struct {
+	err           error
+	statusCode    int
+	retryAfter    time.Duration
+	hasRetryAfter bool
+}
+
+func (e *retryAttemptError) Error() string { return e.err.Error() }
+func (e *retryAttemptError) Unwrap() error { return e.err }
+
+// ParseRetryAfter parses either the delta-seconds or HTTP-date form of the
+// standard Retry-After response header.
+func ParseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil && seconds >= 0 {
+		if seconds > int64(maxRetryAfter/time.Second) {
+			return maxRetryAfter, true
+		}
+		return time.Duration(seconds) * time.Second, true
+	}
+	when, err := http.ParseTime(value)
+	if err != nil {
+		return 0, false
+	}
+	if when.Before(now) {
+		return 0, true
+	}
+	return boundedRetryAfter(when.Sub(now)), true
+}
+
+func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	return ParseRetryAfter(value, now)
+}
+
+func boundedRetryAfter(delay time.Duration) time.Duration {
+	if delay < 0 {
+		return 0
+	}
+	if delay > maxRetryAfter {
+		return maxRetryAfter
+	}
+	return delay
+}
+
+func retryDelay(_ uint, err error, _ *retry.Config) time.Duration {
+	var attemptErr *retryAttemptError
+	if errors.As(err, &attemptErr) && attemptErr.hasRetryAfter {
+		return boundedRetryAfter(attemptErr.retryAfter)
+	}
+	jitter, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(retryDelayJitter)+1))
+	if err != nil {
+		return retryDelayBase
+	}
+	return retryDelayBase + time.Duration(jitter.Int64())
+}
+
+func faultKind(err error) faults.Kind {
+	if fault, ok := faults.As(err); ok {
+		return fault.Kind
+	}
+	return faults.KindInternal
+}
+
+func classifyCallError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var attemptErr *retryAttemptError
+	cause := err
+	retryAfter := time.Duration(0)
+	if errors.As(err, &attemptErr) && attemptErr != nil {
+		cause = attemptErr.err
+		if attemptErr.hasRetryAfter {
+			retryAfter = boundedRetryAfter(attemptErr.retryAfter)
+		}
+		if attemptErr.statusCode == http.StatusTooManyRequests {
+			message := "the ERP service is temporarily rate limited; retry later"
+			if retryAfter > 0 {
+				message = fmt.Sprintf("the ERP service is temporarily rate limited; retry after %d seconds", int64((retryAfter+time.Second-1)/time.Second))
+			}
+			return faults.New(faults.KindRateLimited, message, true, retryAfter, cause)
+		}
+	}
+	if errors.Is(cause, context.DeadlineExceeded) {
+		return faults.New(faults.KindDependencyTimeout, "the ERP service timed out; retry later", true, 0, cause)
+	}
+	if errors.Is(cause, context.Canceled) {
+		return faults.New(faults.KindDependencyTimeout, "the ERP request was canceled", false, 0, cause)
+	}
+	var netErr net.Error
+	if errors.As(cause, &netErr) && netErr.Timeout() {
+		return faults.New(faults.KindDependencyTimeout, "the ERP service timed out; retry later", true, 0, cause)
+	}
+	if errors.Is(cause, gobreaker.ErrOpenState) {
+		return faults.New(faults.KindDependencyUnavailable, "the ERP dependency circuit breaker is open; retry later", true, 0, cause)
+	}
+	if errors.Is(cause, gobreaker.ErrTooManyRequests) {
+		return faults.New(faults.KindDependencyUnavailable, "the ERP dependency is busy; retry later", true, 0, cause)
+	}
+	return faults.New(faults.KindDependencyUnavailable, "the ERP service is unavailable; retry later", true, 0, cause)
+}
 
 // AuthConfig defines the authentication credentials for an ERP request.
 type AuthConfig struct {
@@ -172,6 +298,8 @@ func (c *Client) CallWithOptions(ctx context.Context, ep EndpointConfig, queryPa
 func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Values, body io.Reader, options CallOptions) (*http.Response, error) {
 	start := time.Now()
 	log := logger.FromContext(ctx)
+	callCtx, cancel := context.WithTimeout(ctx, maxCallDuration)
+	defer cancel()
 
 	target := ep.BaseURL + ep.Path
 	if len(queryParams) > 0 {
@@ -203,6 +331,10 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 	res, err := c.cb.Execute(func() (any, error) {
 		var lastResp *http.Response
 		var lastTransientResp *http.Response
+		attempts := uint(1)
+		if retrySafeMethod(ep.Method) {
+			attempts = maxRetryAttempts
+		}
 		err := retry.Do(
 			func() error {
 				var currentBody io.Reader
@@ -210,7 +342,7 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 					currentBody = bytes.NewReader(bodyBytes)
 				}
 
-				req, err := http.NewRequestWithContext(ctx, ep.Method, target, currentBody)
+				req, err := http.NewRequestWithContext(callCtx, ep.Method, target, currentBody)
 				if err != nil {
 					return retry.Unrecoverable(fmt.Errorf("build request: %w", err))
 				}
@@ -226,7 +358,7 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 
 				resp, err := outboundClient.Do(req)
 				if err != nil {
-					return err // Retry on network error
+					return &retryAttemptError{err: err}
 				}
 
 				if resp.StatusCode == http.StatusTooManyRequests ||
@@ -234,8 +366,14 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 					if lastTransientResp != nil {
 						_ = lastTransientResp.Body.Close()
 					}
+					retryAfter, hasRetryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 					lastTransientResp = resp
-					return fmt.Errorf("transient erp error: %d", resp.StatusCode)
+					return &retryAttemptError{
+						err:           fmt.Errorf("transient erp error: %d", resp.StatusCode),
+						statusCode:    resp.StatusCode,
+						retryAfter:    retryAfter,
+						hasRetryAfter: hasRetryAfter,
+					}
 				}
 
 				if lastTransientResp != nil {
@@ -245,10 +383,9 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 				lastResp = resp
 				return nil
 			},
-			retry.Context(ctx),
-			retry.Attempts(3),
-			retry.Delay(500*time.Millisecond),
-			retry.MaxJitter(100*time.Millisecond),
+			retry.Context(callCtx),
+			retry.Attempts(attempts),
+			retry.DelayType(retryDelay),
 			retry.LastErrorOnly(true),
 		)
 		if err != nil && options.PreserveErrorResponses && lastTransientResp != nil {
@@ -269,11 +406,13 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 	}
 
 	if err != nil {
+		classified := classifyCallError(err)
 		log.Error("erp request failed",
 			slog.String("endpoint", endpoint),
 			slog.String("error_type", fmt.Sprintf("%T", err)),
+			slog.String("error_kind", string(faultKind(classified))),
 		)
-		return nil, err
+		return nil, classified
 	}
 
 	resp := res.(*http.Response)

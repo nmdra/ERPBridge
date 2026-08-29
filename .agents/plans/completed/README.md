@@ -13,3 +13,7 @@ work queues.
   — selected MCP tools render only their direct execution paths.
 - [`[COMPLETED]Plan-Topology-Collapsible-Filters.md`](./%5BCOMPLETED%5DPlan-Topology-Collapsible-Filters.md)
   — topology filters collapse until requested.
+- [`[COMPLETED]Plan-Rate-Limit-Defaults.md`](./%5BCOMPLETED%5DPlan-Rate-Limit-Defaults.md)
+  — default tool-execution limit increased to 10 RPS / burst 20.
+- [`[COMPLETED]Plan-MCP-2025-11-25-Error-Resilience.md`](./%5BCOMPLETED%5DPlan-MCP-2025-11-25-Error-Resilience.md)
+  — MCP protocol errors, tool execution failures, retry safety, and bounded concurrency.

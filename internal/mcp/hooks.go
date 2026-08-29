@@ -38,6 +38,8 @@ func (h *TelemetryHooks) Register(s *server.MCPServer) {
 	hooks.AddOnUnregisterSession(h.OnSessionEnd)
 	hooks.AddBeforeCallTool(h.OnBeforeCallTool)
 	hooks.AddAfterCallTool(h.OnAfterCallTool)
+	hooks.AddOnSuccess(h.OnRequestSuccess)
+	hooks.AddOnError(h.OnRequestError)
 }
 
 // OnServerStart records telemetry when the MCP server starts.
@@ -85,6 +87,16 @@ func (h *TelemetryHooks) OnAfterCallTool(_ context.Context, id any, message *mcp
 		slog.String("tool", message.Params.Name),
 		slog.Duration("duration", duration),
 	)
+}
+
+// OnRequestSuccess records protocol requests that produced a JSON-RPC result.
+func (h *TelemetryHooks) OnRequestSuccess(_ context.Context, _ any, method mcp.MCPMethod, _ any, _ any) {
+	metrics.MCPRequestsTotal.WithLabelValues(string(method), "success").Inc()
+}
+
+// OnRequestError records protocol requests that produced a JSON-RPC error.
+func (h *TelemetryHooks) OnRequestError(_ context.Context, _ any, method mcp.MCPMethod, _ any, _ error) {
+	metrics.MCPRequestsTotal.WithLabelValues(string(method), "error").Inc()
 }
 
 // BusinessHooks implements custom business logic callbacks.

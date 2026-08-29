@@ -12,9 +12,17 @@ const (
 	labelStatus      = "status"
 	labelTool        = "tool"
 	labelCacheStatus = "cache_status"
+	labelErrorType   = "error_type"
+	labelScope       = "scope"
 )
 
 var (
+	// MCPRequestsTotal counts protocol requests by method and outcome.
+	MCPRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "mcp_requests_total",
+		Help: "Total number of MCP protocol requests",
+	}, []string{"method", labelStatus})
+
 	// ERPRequestsTotal counts outbound ERP HTTP requests.
 	ERPRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "erp_requests_total",
@@ -40,6 +48,30 @@ var (
 		Help:    "Latency of MCP tool calls",
 		Buckets: prometheus.DefBuckets,
 	}, []string{labelTool})
+
+	// ToolErrorsTotal counts classified tool execution failures.
+	ToolErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "mcp_tool_errors_total",
+		Help: "Total number of MCP tool execution errors",
+	}, []string{labelTool, labelErrorType})
+
+	// ToolActiveCalls tracks currently executing tool calls.
+	ToolActiveCalls = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "mcp_active_tool_calls",
+		Help: "Number of active MCP tool calls",
+	}, []string{labelTool})
+
+	// RateLimitedTotal counts tool requests rejected by a limiter.
+	RateLimitedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "mcp_rate_limited_total",
+		Help: "Total number of MCP tool requests rejected by rate limiting",
+	}, []string{labelTool, labelScope})
+
+	// DependencyErrorsTotal counts classified downstream dependency failures.
+	DependencyErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "mcp_dependency_errors_total",
+		Help: "Total number of MCP dependency errors",
+	}, []string{"dependency", labelErrorType})
 
 	// CacheHitsTotal counts cache hits by type.
 	CacheHitsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
