@@ -208,8 +208,9 @@ ERP endpoint count, and match-state summary. The overview displays at most 24 co
 search, and filters expose additional components. Focused layouts collapse
 collections larger than ten members and can expand them on demand.
 
-The topology opens as a bounded component overview. Select a component or MCP
-tool in the component sidebar to drill down to its connected tools, exact ERP
+The topology opens as a bounded component overview. From a Tool Details page,
+select **View in topology** to open that tool's focused execution path. Select
+a component or MCP tool in the component sidebar to drill down to its connected tools, exact ERP
 endpoint, bindings, plugins, and relationships. Selecting an MCP tool narrows
 the canvas to its direct execution path: MCP transport, that tool, its ERP API
 component, its exact ERP endpoint, and any attached plugin binding and plugin.

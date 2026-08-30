@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { AlertTriangle, Filter, X } from "lucide-react";
+import { useSearch } from "wouter";
 
 import { PageHeader } from "../components/layout/PageHeader";
 import { Card, CardContent } from "../components/ui/card";
@@ -151,6 +152,35 @@ function edgeSearchText(edge: TopologyEdge) {
 
 function nodeContextState(node: TopologyNode) {
   return node.contextState || "unassigned";
+}
+
+function focusedToolComponent(
+  components: ReturnType<typeof buildEndpointComponents>,
+  toolID: string,
+) {
+  const candidates = components.filter((component) =>
+    component.memberNodeIds.includes(toolID),
+  );
+  return candidates.sort((left, right) => {
+    const priority = (component: (typeof candidates)[number]) =>
+      Math.min(
+        ...component.memberEdges
+          .filter((edge) => edge.source === toolID || edge.target === toolID)
+          .map((edge) =>
+            edge.authoritative && edge.matchKind === "exact"
+              ? 0
+              : edge.matchKind === "exact"
+                ? 1
+                : edge.matchKind === "base-prefix"
+                  ? 2
+                  : edge.matchKind === "ambiguous"
+                    ? 3
+                    : 4,
+          ),
+        5,
+      );
+    return priority(left) - priority(right);
+  })[0];
 }
 
 function TopologyInspector({
@@ -343,8 +373,19 @@ function TopologyInspector({
   );
 }
 
-export function Topology({ contextName }: { contextName: string }) {
+export function Topology({
+  contextName,
+  focusedToolName,
+}: {
+  contextName: string;
+  focusedToolName?: string | null;
+}) {
   const topology = useTopology(contextName);
+  const searchQuery = useSearch();
+  const requestedToolName = useMemo(
+    () => focusedToolName ?? new URLSearchParams(searchQuery).get("tool"),
+    [focusedToolName, searchQuery],
+  );
   const [search, setSearch] = useState("");
   const [selectedKinds, setSelectedKinds] = useState<TopologyNodeKind[]>([]);
   const [selectedMatches, setSelectedMatches] = useState<TopologyMatchKind[]>(
@@ -417,14 +458,27 @@ export function Topology({ contextName }: { contextName: string }) {
     () => buildEndpointComponents(visibleNodes, visibleEdges),
     [visibleEdges, visibleNodes],
   );
-  const compactMode = !focusedComponentID;
   const compactComponents = endpointComponents.slice(
     0,
     compactTopologyComponentLimit,
   );
-  const focusedComponent = allEndpointComponents.find(
-    (component) => component.endpoint.id === focusedComponentID,
-  );
+  const requestedTool = requestedToolName
+    ? allNodes.find(
+        (node) =>
+          node.kind === "mcp-tool" &&
+          (node.tool?.name === requestedToolName ||
+            node.label === requestedToolName),
+      )
+    : undefined;
+  const requestedToolComponent = requestedTool
+    ? focusedToolComponent(allEndpointComponents, requestedTool.id)
+    : undefined;
+  const focusedComponent =
+    allEndpointComponents.find(
+      (component) => component.endpoint.id === focusedComponentID,
+    ) ?? requestedToolComponent;
+  const effectiveFocusedComponentID = focusedComponent?.endpoint.id ?? null;
+  const compactMode = !focusedComponent;
   const topologyMode = focusedComponent ? "focused" : "overview";
   const visualGraph = useMemo(
     () =>
@@ -434,7 +488,7 @@ export function Topology({ contextName }: { contextName: string }) {
           : compactComponents,
         edges: focusedComponent ? allEdges : visibleEdges,
         expandedClusters,
-        focusedComponentID,
+        focusedComponentID: effectiveFocusedComponentID,
         mode: topologyMode,
         nodes: focusedComponent ? allNodes : visibleNodes,
         selection,
@@ -446,7 +500,7 @@ export function Topology({ contextName }: { contextName: string }) {
       compactComponents,
       expandedClusters,
       focusedComponent,
-      focusedComponentID,
+      effectiveFocusedComponentID,
       selection,
       topologyMode,
       visibleEdges,
@@ -469,6 +523,22 @@ export function Topology({ contextName }: { contextName: string }) {
     setExpandedClusters(new Set());
     setActiveTab("topology");
   }, [contextName]);
+
+  useEffect(() => {
+    if (!requestedToolName) return;
+    const tool = allNodes.find(
+      (node) =>
+        node.kind === "mcp-tool" && node.tool?.name === requestedToolName,
+    );
+    if (!tool) return;
+    const component = focusedToolComponent(allEndpointComponents, tool.id);
+    if (!component) return;
+
+    setExpandedClusters(new Set());
+    setFocusedComponentID(component.endpoint.id);
+    setSelection({ kind: "node", id: tool.id });
+    setActiveTab("topology");
+  }, [allEndpointComponents, allNodes, requestedToolName]);
 
   useEffect(() => {
     if (
@@ -891,7 +961,7 @@ export function Topology({ contextName }: { contextName: string }) {
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <TopologyComponentSidebar
               components={endpointComponents}
-              focusedComponentID={focusedComponentID}
+              focusedComponentID={effectiveFocusedComponentID}
               onFocus={focusComponent}
               tools={visibleNodes.filter((node) => node.kind === "mcp-tool")}
             />

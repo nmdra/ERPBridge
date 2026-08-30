@@ -157,6 +157,9 @@ test("renders a user-friendly tool manifest", async () => {
   expect(screen.getByText("Find employees")).toBeInTheDocument();
   expect(screen.getByText("company")).toBeInTheDocument();
   expect(screen.getByText("GET")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "View in topology" }),
+  ).toHaveAttribute("href", "/topology?tool=list-employees");
   expect(screen.getAllByText("/api/resource/Employee").length).toBeGreaterThan(
     0,
   );

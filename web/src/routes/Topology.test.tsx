@@ -132,6 +132,18 @@ test("renders accessible topology relationships", async () => {
   ).toBeGreaterThan(0);
 });
 
+test("focuses a tool's connected topology from the tool query parameter", async () => {
+  render(<Topology contextName="local" focusedToolName="list-invoices" />);
+
+  expect(
+    await screen.findByRole("button", { name: "Back to compact overview" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Selected topology node" })).toHaveTextContent(
+    "list-invoices",
+  );
+
+});
+
 test("filters plugin nodes without placing them in the MCP tools facet", async () => {
   const user = userEvent.setup();
   render(<Topology contextName="local" />);

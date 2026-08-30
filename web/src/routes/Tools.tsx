@@ -486,10 +486,18 @@ export function ToolDetails({
       </Link>
       <PageHeader
         actions={
-          <StatusBadge
-            label={toolStatus(tool)}
-            tone={tool.active ? "success" : "neutral"}
-          />
+          <>
+            <Link
+              className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              href={`/topology?tool=${encodeURIComponent(tool.name)}`}
+            >
+              View in topology
+            </Link>
+            <StatusBadge
+              label={toolStatus(tool)}
+              tone={tool.active ? "success" : "neutral"}
+            />
+          </>
         }
         description={`${tool.module ?? "Unassigned module"} · version ${tool.version}`}
         eyebrow="MCP tool"
