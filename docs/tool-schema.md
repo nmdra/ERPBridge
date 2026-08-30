@@ -101,6 +101,16 @@ Standard JSON Schema defining the arguments. **Strict typing is mandatory.**
 - Nested objects use nested `properties` and `required`; arrays use `items`.
 - **Avoid "filters" strings**: Break down complex query requirements into individual typed properties.
 
+### `spec.outputSchema`
+
+Optional JSON Schema for a successful ERP response. When set, it must have a
+non-empty top-level string `type`, such as `object` or `array`.
+
+`bridgectl tool validate` rejects an untyped output schema. ERPBridge omits an
+untyped legacy schema from MCP discovery. It still accepts any JSON result at
+runtime. OpenAPI generation omits an output schema when the response has no
+top-level type.
+
 ### `spec.execution`
 
 Technical mapping to the ERP API.

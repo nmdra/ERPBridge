@@ -25,6 +25,9 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
   bounded retry/concurrency metadata is available through namespaced `_meta`.
 - Preserve registered upstream authentication headers in generated and
   declarative MCP tools, including `X-API-Key` for API-key services.
+- Require a concrete top-level `type` for declared output schemas. The local
+  validator rejects untyped schemas, and MCP discovery omits legacy untyped
+  schemas.
 - Refresh the bundled `bridgectl-ops` skill for file-backed credential
   rotation, split tool generation, MCP annotation and `_meta` guidance, and
   safe embedded-skill installation.

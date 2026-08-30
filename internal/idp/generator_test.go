@@ -478,6 +478,32 @@ paths:
 	require.Equal(t, "string", tool.Spec.InputSchema.Properties["body"].Items.Type)
 }
 
+func TestGenerator_OpenAPIOmitsUntypedOutputSchema(t *testing.T) {
+	spec := `
+openapi: 3.0.0
+info: {title: Untyped response API, version: 1.0.0}
+paths:
+  /orders:
+    get:
+      operationId: listOrders
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {}
+`
+	path := filepath.Join(t.TempDir(), "openapi.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(spec), 0600))
+
+	tools, err := NewGenerator(t.TempDir(), logger.Init()).GenerateFromOpenAPI(context.Background(), API{
+		Module: "sales", AuthType: "bearer", CredentialRef: "ERP_API_KEY", // #nosec G101 -- test-only credential reference.
+	}, path)
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	assert.Nil(t, tools[0].Spec.OutputSchema)
+}
+
 func TestDereferenceSchema_RemovesRefsAndRejectsUnknownRefs(t *testing.T) {
 	component := openapi3.NewStringSchema()
 	doc := &openapi3.T{Components: &openapi3.Components{

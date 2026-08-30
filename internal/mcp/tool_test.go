@@ -43,6 +43,29 @@ func TestServer_RegisterToolAdvertisesOutputSchema(t *testing.T) {
 	require.Equal(t, schemaTypeObject, payload["outputSchema"].(map[string]any)["type"])
 }
 
+func TestServer_RegisterToolOmitsUntypedOutputSchema(t *testing.T) {
+	log := logger.Init()
+	s := NewServer(&MockConnector{}, nil, log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	schema := any(map[string]any{})
+	tool := &Tool{
+		Metadata: Metadata{Name: "untyped-output-schema", Version: testVersion100},
+		Spec: ToolSpec{
+			Description:  Description{Short: "untyped output schema"},
+			InputSchema:  InputSchema{Type: schemaTypeObject},
+			OutputSchema: &schema,
+		},
+	}
+
+	s.RegisterTool(tool)
+
+	registered := s.mcpServer.ListTools()[tool.Metadata.Name]
+	encoded, err := json.Marshal(registered.Tool)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &payload))
+	assert.NotContains(t, payload, "outputSchema")
+}
+
 func TestServer_RegisterTool(t *testing.T) {
 	log := logger.Init()
 	mockConn := &MockConnector{}

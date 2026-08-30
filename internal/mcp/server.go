@@ -612,13 +612,15 @@ func (s *Server) RegisterTool(t *Tool) {
 
 	// Explicitly clear structured input fields because RawInputSchema is used.
 	mcpTool.InputSchema = mcp.ToolInputSchema{}
-	if t.Spec.OutputSchema != nil {
+	if HasConcreteOutputSchema(t.Spec.OutputSchema) {
 		outputSchemaJSON, err := json.Marshal(*t.Spec.OutputSchema)
 		if err != nil {
 			s.log.Error("failed to prepare output schema", slog.String("tool_name", t.Metadata.Name), slog.String("error", err.Error()))
 			return
 		}
 		mcpTool.RawOutputSchema = json.RawMessage(outputSchemaJSON)
+	} else if t.Spec.OutputSchema != nil {
+		s.log.Warn("omitting invalid MCP output schema", slog.String("tool_name", t.Metadata.Name))
 	}
 
 	// Add tool to server with the shared middleware and execution seam.

@@ -65,6 +65,20 @@ type ToolSpec struct {
 	Lifecycle    *Lifecycle       `json:"lifecycle,omitempty"`
 }
 
+// HasConcreteOutputSchema reports whether an output schema can be advertised
+// to MCP clients, which require a concrete top-level JSON Schema type.
+func HasConcreteOutputSchema(schema *any) bool {
+	if schema == nil {
+		return false
+	}
+	object, ok := (*schema).(map[string]any)
+	if !ok {
+		return false
+	}
+	typeName, ok := object["type"].(string)
+	return ok && strings.TrimSpace(typeName) != ""
+}
+
 // Description provides rich semantic information to the LLM.
 type Description struct {
 	Short        string   `json:"short"`

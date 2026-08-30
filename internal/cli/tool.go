@@ -419,22 +419,32 @@ var toolValidateCmd = &cobra.Command{
 			}
 		}
 
-		if tool.Metadata.Name == "" {
-			return fmt.Errorf("validation failed: metadata.name is missing")
-		}
-		if tool.Metadata.Version == "" {
-			return fmt.Errorf("validation failed: metadata.version is missing")
-		}
-		if err := credentials.ValidateCredentialSource(tool.Spec.Security.CredentialSource); err != nil {
-			return fmt.Errorf("validation failed: %w", err)
-		}
-		if credentials.IsFileBacked(tool.Spec.Security.CredentialSource) && tool.Spec.Security.CredentialRef == "" {
-			return fmt.Errorf("validation failed: security.credentialRef is required for file credentials")
+		if err := validateToolManifest(&tool); err != nil {
+			return err
 		}
 
 		fmt.Printf("✓ tool %s@%s is locally valid\n", tool.Metadata.Name, tool.Metadata.Version)
 		return nil
 	},
+}
+
+func validateToolManifest(tool *mcp.Tool) error {
+	if tool.Metadata.Name == "" {
+		return fmt.Errorf("validation failed: metadata.name is missing")
+	}
+	if tool.Metadata.Version == "" {
+		return fmt.Errorf("validation failed: metadata.version is missing")
+	}
+	if tool.Spec.OutputSchema != nil && !mcp.HasConcreteOutputSchema(tool.Spec.OutputSchema) {
+		return fmt.Errorf("validation failed: spec.outputSchema.type is required when outputSchema is set")
+	}
+	if err := credentials.ValidateCredentialSource(tool.Spec.Security.CredentialSource); err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+	if credentials.IsFileBacked(tool.Spec.Security.CredentialSource) && tool.Spec.Security.CredentialRef == "" {
+		return fmt.Errorf("validation failed: security.credentialRef is required for file credentials")
+	}
+	return nil
 }
 
 var toolGenerateCmd = &cobra.Command{

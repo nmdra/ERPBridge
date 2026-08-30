@@ -69,6 +69,16 @@ func TestToolGetCmd(t *testing.T) {
 	}
 }
 
+func TestValidateToolManifestRejectsUntypedOutputSchema(t *testing.T) {
+	schema := any(map[string]any{})
+	err := validateToolManifest(&mcp.Tool{
+		Metadata: mcp.Metadata{Name: "list-orders", Version: "1.0.0"},
+		Spec:     mcp.ToolSpec{OutputSchema: &schema},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "spec.outputSchema.type")
+}
+
 func TestToolDeleteCmd_Errors(t *testing.T) {
 	err := toolDeleteCmd.Args(toolDeleteCmd, []string{})
 	require.Error(t, err)

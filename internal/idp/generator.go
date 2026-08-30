@@ -658,6 +658,9 @@ func responseSchemaForOperation(doc *openapi3.T, op *openapi3.Operation, toolNam
 			}
 		}
 	}
+	if !mcp.HasConcreteOutputSchema(&output) {
+		return responsePath, nil, nil
+	}
 	return responsePath, &output, nil
 }
 
