@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Add deterministic cache/request microbenchmarks and a bounded concurrent
+  in-memory cache-hit stress benchmark with documented local baselines.
 - Add a Tool Details action that opens the selected tool's focused integration topology path.
 - Refactor the read-only topology console into a progressive component explorer
 with ELK layout, expandable high-cardinality groups, custom React Flow node

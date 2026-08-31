@@ -25,6 +25,7 @@ Welcome to the ERPBridge documentation. This wiki-style guide helps you understa
 - **[CLI Tool Management](./cli/bridgectl_tool.md)**: Managing the live tool registry using `apply`, `get`, and `validate`.
 - **[CLI Plugin Management](./cli/bridgectl_plugin.md)**: Managing external plugins and exact-version bindings with `bridgectl plugin`.
 - **[CLI Cache Management](./cli/bridgectl_cache.md)**: Monitoring and flushing the exact match cache.
+- **[Benchmarking](./benchmarking.md)**: Run deterministic Go microbenchmarks for cache and request preparation paths.
 - **[Public Documentation Site](https://blog.nimendra.xyz/erpbridge-docs/)**: Published Server, Bridgectl, and SDK guides.
 
 ## 🔌 Integration Guides

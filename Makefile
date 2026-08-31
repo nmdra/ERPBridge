@@ -10,7 +10,7 @@ MOCK_ERP_OPENAPI_URL ?= https://raw.githubusercontent.com/nmdra/mockerp/v$(MOCK_
 MOCK_ERP_OPENAPI_FILE ?= /tmp/mockerp-openapi-v$(MOCK_ERP_VERSION).yaml
 SERVER_PORT=8080
 
-.PHONY: all build clean test lint dev-up run-mock run-server generate-tools setup test-plugin-integration web-install web-build web-test web-lint
+.PHONY: all build clean test bench stress lint dev-up run-mock run-server generate-tools setup test-plugin-integration web-install web-build web-test web-lint
 
 all: build
 
@@ -48,6 +48,14 @@ web-lint: web-install
 test:
 	@echo "Running tests..."
 	@go test ./...
+
+# Run deterministic in-process Go microbenchmarks without ordinary tests.
+bench:
+	@go test -run '^$$' -bench . -benchmem ./internal/cache ./internal/mcp
+
+# Stress the in-memory cache-hit path with concurrent callers.
+stress:
+	@go test -run '^$$' -bench '^BenchmarkCacheMiddleware/hit_parallel$$' -benchmem -cpu=1,8 -benchtime=5s ./internal/mcp
 
 # Run linter (requires golangci-lint)
 lint:
@@ -97,6 +105,8 @@ help:
 	@echo "  build           Build server and CLI binaries"
 	@echo "  clean           Remove binaries and data"
 	@echo "  test            Run Go tests"
+	@echo "  bench           Run Go microbenchmarks"
+	@echo "  stress          Stress concurrent in-memory cache hits"
 	@echo "  lint            Run Go linter"
 	@echo "  dev-up          Start the local Compose stack safely"
 	@echo "  run-mock        Start the pinned Mock ERP Docker image"
