@@ -30,7 +30,7 @@ spec:
 
 ### `metadata`
 
-Identity and grouping information.
+Identity and grouping information. On first apply, ERPBridge canonicalizes the executable resource and records `resourceDigest` plus server-authored `admission` bookkeeping. The SHA-256 digest includes the API version, kind, identity, descriptive contract, schemas, policy, and execution mapping. It excludes runtime `status`, `isActive`, `isServing`, the digest itself, and review bookkeeping. The first active version becomes serving. Applying an admitted version with `metadata.isServing: true` moves the unqualified-name pointer without changing either revision's executable digest. Reapplying identical content is idempotent. Applying different executable content with the same name and version returns `REGISTRY_CONFLICT`; use a new version and review it before applying.
 
 - **`name`**: (String) Unique identifier. Use **intent-based names** (e.g., `list_employees`) instead of technical ones (e.g., `get_resource_employee`).
 - **`version`**: (String) SemVer version (e.g., `1.0.0`).
@@ -87,6 +87,11 @@ During MCP `tools/list`, ERPBridge projects existing guidance into namespaced
 - `io.erpbridge/whenNotToUse`
 - `io.erpbridge/examples`
 - `io.erpbridge/allowedRoles`
+- `toolplane.resourceDigest`
+- `toolplane.resourceVersion`
+- `toolplane.serving`
+
+Every active revision is also exposed under a protocol-safe exact name ending in `.rev_<encoded-version>`. The `.rev_` marker is reserved and cannot occur in a declarative tool name. A call can bind the unqualified name to a discovered revision with `params._meta.toolplane.resourceDigest`. Exact-name and digest-bound calls validate and execute that active revision or return a rediscovery-required error; they do not fall forward. The runtime clones the selected resource before schema validation, middleware, and execution, so a serving-pointer transition cannot change an in-flight call. Cache entries are scoped by resource digest, or by version for programmatic tools without a digest.
 
 The values are informational. `allowedRoles` describes the server's tool
 allow-list; it does not grant access or replace server-side authorization. MCP
@@ -117,6 +122,7 @@ Technical mapping to the ERP API.
 
 - **`method`**: (String) `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, or `TRACE`.
 - **`endpoint`**: (String) The ERP API URL path.
+- **`approvedOrigins`**: (Array) Exact normalized `scheme://host[:port]` values allowed after runtime endpoint rewriting. When omitted, apply binds the effective origin derived from `endpoint` and the current `ERP_BASE_URL`. A later rewrite to another origin fails before connector entry.
 - **`mapping`**: (Map) Optional. Maps LLM arg names to ERP parameter names.
 - **`parameterLocations`**: (Map) Generated metadata mapping each LLM argument to `path`, `query`, `header`, or `body`. If absent, GET arguments use the query and other methods use one JSON object body for compatibility.
 - **`bodyArgument`**: (String) Generated complete-body argument for primitive or array JSON request bodies. Its value is serialized as the complete body instead of an object property.

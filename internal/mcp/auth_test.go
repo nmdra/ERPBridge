@@ -343,7 +343,10 @@ func TestServer_PersistedToolMetadataSurvivesReconcileAndHTTPDiscovery(t *testin
 	legacyWire := found[legacy.Metadata.Name]
 	require.NotNil(t, legacyWire)
 	assert.Empty(t, legacyWire["annotations"].(map[string]any))
-	assert.NotContains(t, legacyWire, "_meta")
+	legacyMeta := legacyWire["_meta"].(map[string]any)
+	assert.Len(t, legacyMeta["toolplane.resourceDigest"], 64)
+	assert.Equal(t, testVersion100, legacyMeta["toolplane.resourceVersion"])
+	assert.Equal(t, true, legacyMeta["toolplane.serving"])
 }
 
 func setMCPHeaders(request *http.Request, token, sessionID string) {

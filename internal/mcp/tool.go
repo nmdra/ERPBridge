@@ -43,11 +43,14 @@ type Tool struct {
 
 // Metadata contains identity and lifecycle information for a tool.
 type Metadata struct {
-	Name     string `json:"name"`
-	Version  string `json:"version"` // SemVer
-	Module   string `json:"module"`
-	Status   string `json:"status,omitempty"`   // ready, degraded
-	IsActive bool   `json:"isActive,omitempty"` // for soft-delete/visibility
+	Name           string           `json:"name"`
+	Version        string           `json:"version"` // SemVer
+	Module         string           `json:"module"`
+	Status         string           `json:"status,omitempty"`         // ready, degraded
+	IsActive       bool             `json:"isActive,omitempty"`       // eligible for exact invocation
+	IsServing      bool             `json:"isServing,omitempty"`      // selected for unqualified invocation
+	ResourceDigest string           `json:"resourceDigest,omitempty"` // canonical executable-content SHA-256
+	Admission      *AdmissionRecord `json:"admission,omitempty"`      // review bookkeeping bound to ResourceDigest
 }
 
 // ToolSpec defines the behavior, interface, and execution details of a tool.
@@ -144,6 +147,7 @@ type Execution struct {
 	Type               string            `json:"type"` // "http"
 	Method             string            `json:"method"`
 	Endpoint           string            `json:"endpoint"`
+	ApprovedOrigins    []string          `json:"approvedOrigins,omitempty"`    // exact runtime scheme/host bindings
 	Mapping            map[string]string `json:"mapping,omitempty"`            // Maps LLM arg name -> ERP arg name
 	ParameterLocations map[string]string `json:"parameterLocations,omitempty"` // Maps LLM arg name -> path/query/header/body
 	BodyArgument       string            `json:"bodyArgument,omitempty"`       // Complete primitive/array request-body argument
@@ -291,26 +295,7 @@ func (t *Tool) prepareERPCall(args map[string]any) (connector.EndpointConfig, ur
 		body = strings.NewReader(string(data))
 	}
 
-	envBaseURL := os.Getenv("ERP_BASE_URL")
-	if envBaseURL != "" {
-		u, err := url.Parse(fullURL)
-		if err == nil {
-			if u.IsAbs() {
-				if isLocalEndpoint(u) {
-					base, err := url.Parse(envBaseURL)
-					if err == nil {
-						u.Scheme = base.Scheme
-						u.Host = base.Host
-						fullURL = u.String()
-					}
-				}
-			} else {
-				fullURL = strings.TrimSuffix(envBaseURL, "/") + "/" + strings.TrimPrefix(fullURL, "/")
-			}
-		}
-	} else if !strings.HasPrefix(fullURL, "http") {
-		fullURL = "http://localhost:8081" + "/" + strings.TrimPrefix(fullURL, "/")
-	}
+	fullURL = resolveEffectiveEndpoint(fullURL, os.Getenv("ERP_BASE_URL"))
 
 	cred, err := resolveCredential(t.Spec.Security.CredentialRef, t.Spec.Security.CredentialSource)
 	if err != nil {
@@ -383,6 +368,16 @@ func (t *Tool) Execute(ctx context.Context, args map[string]any, conn ERPConnect
 	}
 	resp, err := t.callERPResponse(ctx, args, conn, options)
 	if err != nil {
+		if errors.Is(err, ErrRevisionInactive) {
+			failure := faults.New(faults.KindConflict, "the selected tool revision is no longer active; rediscover tools", false, 0, err)
+			recordDependencyFault(failure)
+			return nil, failure
+		}
+		if errors.Is(err, ErrOriginDenied) {
+			failure := faults.New(faults.KindPermissionDenied, "the effective ERP origin is not approved", false, 0, err)
+			recordDependencyFault(failure)
+			return nil, failure
+		}
 		if failure, ok := faults.As(err); ok {
 			recordDependencyFault(failure)
 			return nil, failure
@@ -560,6 +555,30 @@ func parseResponsePath(responsePath string) ([]responsePathToken, error) {
 		}
 	}
 	return tokens, nil
+}
+
+func resolveEffectiveEndpoint(endpoint, envBaseURL string) string {
+	fullURL := endpoint
+	if envBaseURL != "" {
+		u, err := url.Parse(fullURL)
+		if err == nil {
+			if u.IsAbs() {
+				if isLocalEndpoint(u) {
+					base, baseErr := url.Parse(envBaseURL)
+					if baseErr == nil {
+						u.Scheme = base.Scheme
+						u.Host = base.Host
+						fullURL = u.String()
+					}
+				}
+			} else {
+				fullURL = strings.TrimSuffix(envBaseURL, "/") + "/" + strings.TrimPrefix(fullURL, "/")
+			}
+		}
+	} else if !strings.HasPrefix(fullURL, "http") {
+		fullURL = "http://localhost:8081" + "/" + strings.TrimPrefix(fullURL, "/")
+	}
+	return fullURL
 }
 
 func isLocalEndpoint(u *url.URL) bool {

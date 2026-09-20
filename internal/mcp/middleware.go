@@ -444,7 +444,7 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 				s.pluginLifecycleMu.RLock()
 				cacheGeneration = s.lifecycleGeneration
 				cacheContext, cacheCancel := context.WithTimeout(ctx, cacheBackendOperationTimeout)
-				entry, err := s.cache.Get(cacheContext, t.Metadata.Name, role, args, *t.Spec.Cache)
+				entry, err := s.cache.GetRevision(cacheContext, t.Metadata.Name, toolCacheRevision(t), role, args, *t.Spec.Cache)
 				cacheCancel()
 				s.pluginLifecycleMu.RUnlock()
 				if err == nil && entry != nil && entry.HitType != "miss" {
@@ -475,7 +475,7 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 					s.pluginLifecycleMu.RLock()
 					if cacheGeneration == s.lifecycleGeneration {
 						cacheContext, cacheCancel := context.WithTimeout(ctx, cacheBackendOperationTimeout)
-						cacheErr := s.cache.Set(cacheContext, t.Metadata.Name, role, args, respJSON, *t.Spec.Cache)
+						cacheErr := s.cache.SetRevision(cacheContext, t.Metadata.Name, toolCacheRevision(t), role, args, respJSON, *t.Spec.Cache)
 						cacheCancel()
 						if cacheErr != nil {
 							s.log.Warn("failed to cache result", slog.String("error", cacheErr.Error()))
@@ -500,19 +500,19 @@ func (s *Server) CacheMiddleware(t *Tool) server.ToolHandlerMiddleware {
 	}
 }
 
-// cacheBypassedForCredential uses the current registered tool metadata before
-// cache access. This avoids stale middleware closures serving a result after a
-// tool switches from environment to file-backed credentials.
-func (s *Server) cacheBypassedForCredential(fallback *Tool) bool {
-	current := fallback
-	if s != nil && s.registry != nil && fallback != nil {
-		s.mu.RLock()
-		resolved, err := s.registry.Resolve(fallback.Metadata.Name, "")
-		s.mu.RUnlock()
-		if err == nil && resolved != nil {
-			current = resolved
-		}
+func toolCacheRevision(tool *Tool) string {
+	if tool == nil {
+		return ""
 	}
+	if tool.Metadata.ResourceDigest != "" {
+		return tool.Metadata.ResourceDigest
+	}
+	return tool.Metadata.Version
+}
+
+// cacheBypassedForCredential uses the immutable invocation snapshot. Exact
+// revisions must not inherit cache policy from the current serving revision.
+func (s *Server) cacheBypassedForCredential(current *Tool) bool {
 	if current != nil && credentials.IsFileBacked(current.Spec.Security.CredentialSource) {
 		return true
 	}

@@ -252,7 +252,10 @@ func TestStdioProtocolListsPersistedToolMetadata(t *testing.T) {
 	legacyWire := found[legacy.Metadata.Name]
 	require.NotNil(t, legacyWire)
 	require.Empty(t, legacyWire["annotations"].(map[string]any))
-	require.NotContains(t, legacyWire, "_meta")
+	legacyMeta := legacyWire["_meta"].(map[string]any)
+	require.Len(t, legacyMeta["toolplane.resourceDigest"], 64)
+	require.Equal(t, "1.0.0", legacyMeta["toolplane.resourceVersion"])
+	require.Equal(t, true, legacyMeta["toolplane.serving"])
 
 	require.NoError(t, stdin.Close())
 	select {

@@ -57,13 +57,14 @@ func (s *Server) executeToolCall(ctx context.Context, tool *Tool, args map[strin
 }
 
 func (s *Server) executeTool(ctx context.Context, tool *Tool, args map[string]any) (*ToolResult, error) {
+	authorizedConnector := s.authorizedERPConnector(tool)
 	rawBindings := s.pluginRegistry.RuntimeBindingsForToolPhase(tool.Metadata.Name, tool.Metadata.Version, PluginPhaseRawResponse)
 	afterBindings := s.pluginRegistry.RuntimeBindingsForToolPhase(tool.Metadata.Name, tool.Metadata.Version, PluginPhaseAfterResponse)
 	if len(rawBindings) > 0 {
-		return s.executeRawTool(ctx, tool, args, rawBindings, afterBindings)
+		return s.executeRawTool(ctx, tool, args, authorizedConnector, rawBindings, afterBindings)
 	}
 
-	result, err := tool.Execute(ctx, args, s.connector)
+	result, err := tool.Execute(ctx, args, authorizedConnector)
 	if err != nil {
 		return nil, err
 	}
@@ -81,13 +82,23 @@ func (s *Server) executeTool(ctx context.Context, tool *Tool, args map[string]an
 	return s.processAfterResponseBindings(ctx, tool, result, afterBindings)
 }
 
-func (s *Server) executeRawTool(ctx context.Context, tool *Tool, args map[string]any, rawBindings, afterBindings []*ActivePluginBinding) (*ToolResult, error) {
+func (s *Server) executeRawTool(ctx context.Context, tool *Tool, args map[string]any, erpConnector ERPConnector, rawBindings, afterBindings []*ActivePluginBinding) (*ToolResult, error) {
 	first := rawBindings[0]
 	if tool.Handler != nil || tool.Spec.Execution.Type != pluginSchemeHTTP || !hasObjectOutputSchema(tool) {
 		return s.rawProcessingFailure(ctx, tool, first, nil, afterBindings, errors.New("raw response binding is not valid for this tool"))
 	}
-	captured, err := tool.CallERP(ctx, args, s.connector, connector.CallOptions{PreserveErrorResponses: true, DisableRedirects: true})
+	captured, err := tool.CallERP(ctx, args, erpConnector, connector.CallOptions{PreserveErrorResponses: true, DisableRedirects: true})
 	if err != nil {
+		if errors.Is(err, ErrRevisionInactive) {
+			fault := faults.New(faults.KindConflict, "the selected tool revision is no longer active; rediscover tools", false, 0, err)
+			recordDependencyFault(fault)
+			return &ToolResult{Error: fault, IsError: true}, nil
+		}
+		if errors.Is(err, ErrOriginDenied) {
+			fault := faults.New(faults.KindPermissionDenied, "the effective ERP origin is not approved", false, 0, err)
+			recordDependencyFault(fault)
+			return &ToolResult{Error: fault, IsError: true}, nil
+		}
 		if fault, ok := faults.As(err); ok {
 			recordDependencyFault(fault)
 			return &ToolResult{Error: fault, IsError: true}, nil

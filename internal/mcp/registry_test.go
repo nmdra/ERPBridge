@@ -48,6 +48,8 @@ func TestToolRegistry_Resolve(t *testing.T) {
 	for _, tool := range tools {
 		require.NoError(t, registry.Add(tool))
 	}
+	require.NoError(t, registry.SetServing(testTool1, testVersion110))
+	require.NoError(t, registry.SetServing(testTool2, "1.0.0-rc.2"))
 
 	t.Run("Exact version", func(t *testing.T) {
 		tool, err := registry.Resolve(testTool1, testVersion100)
@@ -71,16 +73,16 @@ func TestToolRegistry_Resolve(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("Default to latest stable", func(t *testing.T) {
+	t.Run("Default to operator-selected serving revision", func(t *testing.T) {
 		tool, err := registry.Resolve("tool1", "")
 		require.NoError(t, err)
-		assert.Equal(t, "1.1.0", tool.Metadata.Version) // skips 2.0.0-beta.1
+		assert.Equal(t, "1.1.0", tool.Metadata.Version)
 	})
 
-	t.Run("Fallback to absolute latest if no stable", func(t *testing.T) {
+	t.Run("Serving revision may be a prerelease", func(t *testing.T) {
 		tool, err := registry.Resolve("tool2", "")
 		require.NoError(t, err)
-		assert.Equal(t, "1.0.0-rc.2", tool.Metadata.Version) // should pick rc.2 over rc.1
+		assert.Equal(t, "1.0.0-rc.2", tool.Metadata.Version)
 	})
 
 	t.Run("Not found", func(t *testing.T) {
@@ -92,16 +94,44 @@ func TestToolRegistry_Resolve(t *testing.T) {
 func TestToolRegistry_ListStable(t *testing.T) {
 	registry := NewToolRegistry()
 
-	require.NoError(t, registry.Add(&Tool{Metadata: Metadata{Name: "b_tool", Version: testVersion100, IsActive: true}}))
+	require.NoError(t, registry.Add(&Tool{Metadata: Metadata{Name: "b_tool", Version: testVersion100, IsActive: true, IsServing: true}}))
 	require.NoError(t, registry.Add(&Tool{Metadata: Metadata{Name: "b_tool", Version: testVersion110, IsActive: true}}))
-	require.NoError(t, registry.Add(&Tool{Metadata: Metadata{Name: "a_tool", Version: "2.0.0", IsActive: true}}))
+	require.NoError(t, registry.Add(&Tool{Metadata: Metadata{Name: "a_tool", Version: "2.0.0", IsActive: true, IsServing: true}}))
 
 	stable := registry.ListStable()
 	require.Len(t, stable, 2)
 	assert.Equal(t, "a_tool", stable[0].Metadata.Name)
 	assert.Equal(t, "2.0.0", stable[0].Metadata.Version)
 	assert.Equal(t, "b_tool", stable[1].Metadata.Name)
-	assert.Equal(t, testVersion110, stable[1].Metadata.Version)
+	assert.Equal(t, testVersion100, stable[1].Metadata.Version)
+}
+
+func TestToolRegistry_ActiveNonServingAndImmutableSnapshot(t *testing.T) {
+	registry := NewToolRegistry()
+	v1 := &Tool{Metadata: Metadata{Name: testTool1, Version: testVersion100, IsActive: true, IsServing: true}}
+	v1.Spec.Description.Short = "v1"
+	v2 := &Tool{Metadata: Metadata{Name: testTool1, Version: testVersion110, IsActive: true}}
+	v2.Spec.Description.Short = "v2"
+	require.NoError(t, registry.Add(v1))
+	require.NoError(t, registry.Add(v2))
+
+	servingSnapshot, err := registry.Resolve(testTool1, "")
+	require.NoError(t, err)
+	require.Equal(t, testVersion100, servingSnapshot.Metadata.Version)
+
+	exactV2, err := registry.Resolve(testTool1, testVersion110)
+	require.NoError(t, err)
+	require.Equal(t, "v2", exactV2.Spec.Description.Short)
+
+	require.NoError(t, registry.SetServing(testTool1, testVersion110))
+	registry.Remove(testTool1, testVersion100)
+	require.True(t, servingSnapshot.Metadata.IsActive)
+	require.True(t, servingSnapshot.Metadata.IsServing)
+	require.Equal(t, "v1", servingSnapshot.Spec.Description.Short)
+
+	current, err := registry.Resolve(testTool1, "")
+	require.NoError(t, err)
+	require.Equal(t, testVersion110, current.Metadata.Version)
 }
 
 func TestToolRegistry_ListAll(t *testing.T) {

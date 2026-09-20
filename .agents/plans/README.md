@@ -24,6 +24,7 @@ promotion to `active/`.
 
 ## Completed
 
+- [`[COMPLETED]Plan-ToolPlane-Conformance-Evidence.md`](./completed/%5BCOMPLETED%5DPlan-ToolPlane-Conformance-Evidence.md) — approval-to-execution binding, revision snapshots, withdrawal authority, origin enforcement, and recovery evidence.
 - [`[COMPLETED]Plan-Tool-Details-Topology-Focus.md`](./completed/%5BCOMPLETED%5DPlan-Tool-Details-Topology-Focus.md) — open a tool's connected execution path from its details page.
 - [`[COMPLETED]Plan-MCP-Output-Schema-Compatibility.md`](./completed/%5BCOMPLETED%5DPlan-MCP-Output-Schema-Compatibility.md) — valid MCP output-schema advertising and the Purchase Order live repair.
 - [`[COMPLETED]Plan-Bridgectl-Ops-Persistent-Knowledge.md`](./completed/%5BCOMPLETED%5DPlan-Bridgectl-Ops-Persistent-Knowledge.md) — optional project-local operational memory, bounded retrieval, redacted evidence, and gated skill evolution.

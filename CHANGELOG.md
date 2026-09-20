@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Scope MCP validation and cache entries to the resolved immutable tool revision, refresh serving metadata for every exact descriptor, and reserve the `.rev_` generated-name namespace.
+- Make serving transitions transactional, migrate legacy revisions to canonical admission records with semantic-version-compatible serving selection, and preserve intentional no-fallback withdrawals across restarts.
+- Force redirect suppression at the ERP authority boundary, propagate authority failures through raw-response plugins, and invoke authority observers outside the commitment lock.
+- Treat tool-registration failures and persisted serving-pointer differences as reconciliation failures until the runtime actually converges.
+- Bind each admitted tool name and version to a canonical executable-content
+  digest and server-authored review record. Identical apply requests remain
+  idempotent; changed same-version content now returns `REGISTRY_CONFLICT`.
+- Persist an operator-selected serving revision, expose active revisions through
+  protocol-safe exact MCP names and digest metadata, and carry one cloned tool
+  snapshot through middleware and execution without revision fall-forward.
+- Serialize single-process withdrawal with final connector commitment, expose
+  acknowledged sanitized authority events for tests, and reject effective ERP
+  origins that are not bound to the admitted tool revision.
+- Expose safe process-local reconciliation attempt, success, error, desired-hash,
+  observed-generation, and convergence status; retain periodic recovery after a
+  complete failed interval without requiring a restart.
 - Add deterministic cache/request microbenchmarks and a bounded concurrent
   in-memory cache-hit stress benchmark with documented local baselines.
 - Add a Tool Details action that opens the selected tool's focused integration topology path.

@@ -8,12 +8,13 @@ import (
 
 // ServerInfo contains safe build and runtime metadata.
 type ServerInfo struct {
-	Version         string    `json:"version"`
-	Commit          string    `json:"commit,omitempty"`
-	Date            string    `json:"date,omitempty"`
-	CacheBackend    string    `json:"cacheBackend"`
-	ActiveToolCount int       `json:"activeToolCount"`
-	ObservedAt      time.Time `json:"observedAt"`
+	Version         string               `json:"version"`
+	Commit          string               `json:"commit,omitempty"`
+	Date            string               `json:"date,omitempty"`
+	CacheBackend    string               `json:"cacheBackend"`
+	ActiveToolCount int                  `json:"activeToolCount"`
+	Reconciliation  ReconciliationStatus `json:"reconciliation"`
+	ObservedAt      time.Time            `json:"observedAt"`
 }
 
 // SetServerInfo supplies safe build identity to the server.
@@ -43,6 +44,7 @@ func (s *Server) CurrentServerInfo() ServerInfo {
 			}
 		}
 	}
+	info.Reconciliation = s.ReconciliationStatus()
 	info.ObservedAt = time.Now().UTC()
 	return info
 }

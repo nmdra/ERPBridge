@@ -2,6 +2,8 @@
 
 ERPBridge V2 adopts a **Declarative Control Plane** architecture, inspired by Kubernetes. This design moves away from static, file-system-bound configurations toward a live API-managed resource system for MCP tools.
 
+For implementation details about revision binding and execution authority, read [ToolPlane conformance mechanisms](./toolplane-conformance.md).
+
 ## 🏗 High-Level Overview
 
 The system is divided into three distinct layers:
@@ -39,11 +41,13 @@ One of the most important concepts in ERPBridge V2 is the distinction between re
 
 Instead of loading files from a directory, the server maintains an internal **Tool Registry** backed by **SQLite**. This registry stores multiple versions of the same tool, allowing for safe rollouts and rollbacks.
 
-Each tool includes an `IsActive` flag. When a tool is "deleted" via the CLI, it is not immediately purged from the database. Instead, it is marked as `IsActive = false`. This "soft-delete" pattern allows the system to manage visibility without breaking existing MCP sessions.
+Each admitted name and version is immutable executable content identified by a canonical SHA-256 digest and server-authored admission record. A changed definition requires a new version. `IsActive` controls exact-revision eligibility, while `IsServing` selects the active revision used by future unqualified calls. Soft deletion retains the resource but removes execution authority.
 
-### 2. Version Resolver
+### 2. Version resolver and invocation snapshot
 
-When an AI agent requests a tool (e.g., `list_employees`), the **Version Resolver** automatically selects the **latest stable version** (e.g., `list_employees@1.2.0`). It explicitly ignores any tools marked as inactive.
+An unqualified request such as `list_employees` selects the operator-controlled serving revision, not the highest semantic version. Every active revision is also exposed through a protocol-safe exact name, and clients can bind an unqualified call with the digest published in MCP `_meta`. Exact requests never fall forward.
+
+ERPBridge clones the selected resource before argument validation and middleware construction. Validation, authorization, mapping, revision-scoped caching, response processing, and output use that one snapshot even if the serving pointer changes concurrently.
 
 ### 3. Visibility Filtering (JSON-RPC Interception)
 
@@ -53,7 +57,13 @@ Because the underlying MCP runtime does not always support dynamic removal of to
 - **The Solution**: ERPBridge wraps the MCP server's HTTP handler and intercepts the `tools/list` response. Before the JSON-RPC result reaches the client, ERPBridge parses the list and removes any tools marked as `IsActive = false` in the internal registry.
 - **Result**: The client receives a truthful list of tools. The list matches the desired state of the control plane. This works even when the underlying runtime still knows the "ghost" tools.
 
-### 4. Reconciliation Controller
+### 4. Final execution authority and target origin
+
+Immediately before connector entry, ERPBridge validates the final effective request origin against the origins bound at admission. This check includes `ERP_BASE_URL` rewrites. The authority wrapper forces the production connector to return redirect responses without following them.
+
+Withdrawal and connector commitment use one process-local synchronization boundary. If withdrawal commits first, the queued call fails with no connector entry. If connector commitment commits first, that call can complete before withdrawal is acknowledged. This is a single-process guarantee; it is not distributed revocation. Protected cache-hit revocation is outside this boundary and requires a separate release check.
+
+### 5. Reconciliation Controller
 
 The server runs a background reconciliation controller. It keeps the in-memory MCP registry in sync with the SQLite database.
 
@@ -65,11 +75,13 @@ The controller runs every 10 seconds. It compares the database state against the
 
 Each check uses a SHA-256 state hash from the store. The hash covers ordered tool, plugin, and binding identity, activity, update timestamp, and stored resource data. If the hash is unchanged, the controller skips the pass. This keeps the check cheap.
 
+The authenticated `/api/info` response exposes process-local reconciliation attempt count, last attempt, last success, safe error state, desired-state hash, observed generation, and convergence. Desired resources and soft-delete tombstones remain durable in SQLite; cycle timestamps and counters reset with the process. The periodic scan continues after failed intervals and can converge when dependencies recover without a restart.
+
 When the registry changes, the controller sends the `notifications/tools/list_changed` notification to all active MCP sessions.
 
 The controller also runs immediately after a `tool apply` HTTP request. The tool is visible to agents right after apply. It does not wait for the next 10-second tick.
 
-### 5. External response plugins
+### 6. External response plugins
 
 ERPBridge invokes an already-running external plugin. The control plane stores
 only the plugin endpoint and exact version. It never installs, starts, upgrades,

@@ -405,7 +405,7 @@ func TestCacheMiddleware_BypassesFileBackedCredentials(t *testing.T) {
 	assert.Equal(t, 2, called)
 }
 
-func TestCacheMiddleware_UsesCurrentToolSourceMetadata(t *testing.T) {
+func TestCacheMiddleware_UsesInvocationSnapshotForCredentialPolicy(t *testing.T) {
 	log := logger.Init()
 	s := NewServer(nil, cache.NewMemoryManager(10, log), log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 	current := &Tool{
@@ -435,7 +435,7 @@ func TestCacheMiddleware_UsesCurrentToolSourceMetadata(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = handler(context.Background(), req)
 	assert.NoError(t, err)
-	assert.Equal(t, 2, called)
+	assert.Equal(t, 1, called)
 }
 
 func TestCacheMiddleware_BypassesFileBackedPluginCredentials(t *testing.T) {

@@ -49,7 +49,7 @@ POST /apis/erpbridge.io/v1/tools
 Content-Type: application/json
 ```
 
-Body: one JSON tool definition (kind `MCPTool`). Returns `201 Created` on success. The `bridgectl tool apply` command also accepts the YAML sequence or multi-document YAML emitted by `bridgectl tool generate` and sends each tool definition separately.
+Body: one JSON tool definition (kind `MCPTool`). Tool names cannot contain the reserved `.rev_` exact-revision marker. Returns `201 Created` with the canonical executable-content `resourceDigest` on success. The authenticated apply is the admission decision; ERPBridge stores server-authored reviewer bookkeeping with the digest. Reapplying identical content is idempotent. Different content under an admitted name and version returns `409 REGISTRY_CONFLICT`, so the operator must create and review a new version. The digest excludes runtime lifecycle state and admission bookkeeping. The `bridgectl tool apply` command also accepts the YAML sequence or multi-document YAML emitted by `bridgectl tool generate` and sends each tool definition separately.
 
 ### Delete a Tool
 
@@ -255,6 +255,8 @@ SHA-256 hash.
 | :--- | :--- | :--- |
 | `/metrics` | `GET` | Prometheus-formatted metrics. |
 | `/api/info` | `GET` | Authenticated safe build and runtime metadata. |
+
+`/api/info` also returns safe process-local reconciliation status: attempt count, last attempt and success, safe error state, desired-state hash, observed generation, and convergence. These cycle measurements reset on restart; desired resources and withdrawal tombstones remain in SQLite.
 
 `/api/info` returns the server version, optional commit and build date, cache
 backend label, active tool count, and observation time. It does not return

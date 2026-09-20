@@ -5,6 +5,7 @@ Welcome to the ERPBridge documentation. This wiki-style guide helps you understa
 ## 📖 Core Documentation
 
 - **[Architecture Overview](./architecture.md)**: Understanding the Declarative Control Plane, SQLite registry, and reconciliation loop.
+- **[ToolPlane Conformance Mechanisms](./toolplane-conformance.md)**: Admission digests, serving revisions, invocation snapshots, dispatch authority, origin binding, and recovery status.
 - **[Onboarding New APIs](./onboarding.md)**: Standard workflow for registering APIs and generating MCP tools.
 - **[Tool Schema Reference (V2)](./tool-schema.md)**: Detailed guide to creating versioned, intent-based MCP tool definitions.
 - **[External Plugin Resource Schema](./plugin-schema.md)**: Define exact plugin versions, bindings, and the bounded HTTP contract.

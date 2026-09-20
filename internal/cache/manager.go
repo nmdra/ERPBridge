@@ -56,8 +56,13 @@ func NewManagerWithBackend(backend Backend, rootLog *slog.Logger) *Manager {
 	}
 }
 
-// Get tries exact match.
+// Get tries an exact match in the legacy unversioned cache namespace.
 func (m *Manager) Get(ctx context.Context, tool, role string, args map[string]any, cfg Config) (*Entry, error) {
+	return m.GetRevision(ctx, tool, "", role, args, cfg)
+}
+
+// GetRevision tries an exact match scoped to one immutable tool revision.
+func (m *Manager) GetRevision(ctx context.Context, tool, revision, role string, args map[string]any, cfg Config) (*Entry, error) {
 	if !cfg.Enabled {
 		return &Entry{HitType: "miss"}, nil
 	}
@@ -66,7 +71,7 @@ func (m *Manager) Get(ctx context.Context, tool, role string, args map[string]an
 	roleKey := roleScope(role, cfg.IsReadOnly)
 
 	// Layer 1 — exact match
-	key := exactKey(tool, roleKey, args)
+	key := exactRevisionKey(tool, revision, roleKey, args)
 	if entry, err := m.exactGet(ctx, key); err == nil && entry != nil {
 		entry.HitType = "exact"
 		log.Info("cache hit", slog.String("type", "exact"), slog.String("key", key))
@@ -77,8 +82,13 @@ func (m *Manager) Get(ctx context.Context, tool, role string, args map[string]an
 	return &Entry{HitType: "miss"}, nil
 }
 
-// Set stores a response in the exact cache.
+// Set stores a response in the legacy unversioned exact cache namespace.
 func (m *Manager) Set(ctx context.Context, tool, role string, args map[string]any, response json.RawMessage, cfg Config) error {
+	return m.SetRevision(ctx, tool, "", role, args, response, cfg)
+}
+
+// SetRevision stores a response scoped to one immutable tool revision.
+func (m *Manager) SetRevision(ctx context.Context, tool, revision, role string, args map[string]any, response json.RawMessage, cfg Config) error {
 	if !cfg.Enabled {
 		return nil
 	}
@@ -88,7 +98,7 @@ func (m *Manager) Set(ctx context.Context, tool, role string, args map[string]an
 	ttl := time.Duration(cfg.TTLSeconds) * time.Second
 
 	// Exact cache
-	key := exactKey(tool, roleKey, args)
+	key := exactRevisionKey(tool, revision, roleKey, args)
 	envelope := cacheEnvelope{
 		Response: append(json.RawMessage(nil), response...),
 		CachedAt: time.Now().UTC(),
@@ -109,7 +119,14 @@ func (m *Manager) Set(ctx context.Context, tool, role string, args map[string]an
 // --- helpers ---
 
 func exactKey(tool, roleKey string, args map[string]any) string {
-	return fmt.Sprintf("exact:%s:%s:%s", tool, roleKey, argsHash(args))
+	return exactRevisionKey(tool, "", roleKey, args)
+}
+
+func exactRevisionKey(tool, revision, roleKey string, args map[string]any) string {
+	if revision == "" {
+		return fmt.Sprintf("exact:%s:%s:%s", tool, roleKey, argsHash(args))
+	}
+	return fmt.Sprintf("exact:%s:%s:%s:%s", tool, revision, roleKey, argsHash(args))
 }
 
 func argsHash(args map[string]any) string {

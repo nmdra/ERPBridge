@@ -29,29 +29,37 @@ import (
 
 // Server is the primary MCP server implementation for ERPBridge.
 type Server struct {
-	mcpServer           *server.MCPServer
-	connector           ERPConnector
-	cache               *cache.Manager
-	log                 *slog.Logger
-	mu                  sync.RWMutex
-	pluginLifecycleMu   sync.RWMutex
-	store               *Store
-	registry            *ToolRegistry
-	pluginRegistry      *PluginRegistry
-	pluginClient        PluginProcessor
-	concurrency         *ToolConcurrencyLimiter
-	toolRateLimitMu     sync.Mutex
-	toolRateLimiters    map[string]*RateLimitMiddleware
-	lifecycleGeneration uint64
-	lastDesiredHash     string
-	resources           map[string]*Resource
-	prompts             map[string]*Prompt
-	Notifier            *CustomNotifier
-	TelemetryHooks      *TelemetryHooks
-	BusinessHooks       *BusinessHooks
-	toolMiddlewares     []server.ToolHandlerMiddleware
-	authWarnOnce        sync.Once
-	serverInfo          ServerInfo
+	mcpServer              *server.MCPServer
+	connector              ERPConnector
+	cache                  *cache.Manager
+	log                    *slog.Logger
+	mu                     sync.RWMutex
+	authorityMu            sync.RWMutex
+	authorityEventMu       sync.Mutex
+	authoritySequence      uint64
+	AuthorityHooks         *AuthorityHooks
+	reconcileStatusMu      sync.RWMutex
+	reconcileStatus        ReconciliationStatus
+	reconciliationInterval time.Duration
+	ReconciliationHooks    *ReconciliationHooks
+	pluginLifecycleMu      sync.RWMutex
+	store                  *Store
+	registry               *ToolRegistry
+	pluginRegistry         *PluginRegistry
+	pluginClient           PluginProcessor
+	concurrency            *ToolConcurrencyLimiter
+	toolRateLimitMu        sync.Mutex
+	toolRateLimiters       map[string]*RateLimitMiddleware
+	lifecycleGeneration    uint64
+	lastDesiredHash        string
+	resources              map[string]*Resource
+	prompts                map[string]*Prompt
+	Notifier               *CustomNotifier
+	TelemetryHooks         *TelemetryHooks
+	BusinessHooks          *BusinessHooks
+	toolMiddlewares        []server.ToolHandlerMiddleware
+	authWarnOnce           sync.Once
+	serverInfo             ServerInfo
 }
 
 const (
@@ -90,8 +98,6 @@ func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Lo
 		server.WithLogging(),
 		server.WithResourceCompletionProvider(&ResourceCompletionProvider{}),
 		server.WithPromptCompletionProvider(&PromptCompletionProvider{}),
-		server.WithInputSchemaValidation(),
-		server.WithOutputSchemaValidation(),
 		server.WithHooks(&server.Hooks{}),
 		server.WithToolFilter(func(_ context.Context, tools []mcp.Tool) []mcp.Tool {
 			if bridgeServer == nil {
@@ -384,7 +390,7 @@ func (s *Server) handleMCPPromptGet(_ context.Context, request mcp.GetPromptRequ
 func (s *Server) StartController(ctx context.Context) {
 	s.log.Info("starting reconciliation controller")
 	s.Reconcile(ctx)
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(s.reconciliationIntervalValue())
 	defer ticker.Stop()
 
 	for {
@@ -399,9 +405,9 @@ func (s *Server) StartController(ctx context.Context) {
 
 // Reconcile ensures the MCP runtime matches the desired state in the SQLite store.
 func (s *Server) Reconcile(ctx context.Context) {
-	s.pluginLifecycleMu.Lock()
-	defer s.pluginLifecycleMu.Unlock()
-	_ = s.reconcileLocked(ctx)
+	if err := s.runReconciliationAttempt(ctx); err != nil && s.log != nil {
+		s.log.Error("reconciliation attempt failed", slog.String("error", err.Error()))
+	}
 }
 
 func (s *Server) reconcileLocked(ctx context.Context) error {
@@ -470,11 +476,15 @@ func (s *Server) reconcileLocked(ctx context.Context) error {
 		key := fmt.Sprintf("%s@%s", dt.Metadata.Name, dt.Metadata.Version)
 		desiredMap[key] = true
 
-		// Existing logic: Register any tool that is in the store but not in registry
-		existing, err := s.registry.Resolve(dt.Metadata.Name, dt.Metadata.Version)
-		if err != nil || existing == nil {
+		// Register missing content and apply persisted lifecycle or serving changes.
+		s.mu.RLock()
+		existing, resolveErr := s.registry.Resolve(dt.Metadata.Name, dt.Metadata.Version)
+		s.mu.RUnlock()
+		if resolveErr != nil || existing == nil || existing.Metadata.ResourceDigest != dt.Metadata.ResourceDigest || existing.Metadata.IsServing != dt.Metadata.IsServing {
 			s.log.Info("reconciling tool (adding/updating)", slog.String("name", dt.Metadata.Name), slog.String("version", dt.Metadata.Version))
-			s.RegisterTool(dt)
+			if err := s.registerTool(dt, false); err != nil {
+				return fmt.Errorf("register tool %s@%s: %w", dt.Metadata.Name, dt.Metadata.Version, err)
+			}
 		}
 	}
 
@@ -501,10 +511,23 @@ func (s *Server) reconcileLocked(ctx context.Context) error {
 
 // DeregisterTool removes a tool from the server's registry and active MCP server.
 func (s *Server) DeregisterTool(name, version string) {
+	// Withdrawal and connector commitment serialize on authorityMu. A call that
+	// has not committed before this write lock is acquired must recheck and fail.
+	s.authorityMu.Lock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
+	selected, _ := s.registry.Resolve(name, version)
 	s.registry.Remove(name, version)
+	_ = s.refreshMCPToolsLocked(name)
+	s.mu.Unlock()
+	var withdrawalEvent *AuthorityEvent
+	if selected != nil {
+		event := s.nextAuthorityEvent("withdrawal_committed", selected)
+		withdrawalEvent = &event
+	}
+	s.authorityMu.Unlock()
+	if withdrawalEvent != nil {
+		s.deliverAuthorityEvent(*withdrawalEvent)
+	}
 
 	s.log.Info("tool removed from active registry", slog.String("tool_name", name), slog.String("version", version))
 
@@ -526,7 +549,11 @@ func (s *Server) filterToolsList(tools []mcp.Tool) []mcp.Tool {
 			filtered = append(filtered, tool)
 			continue
 		}
-		entry, err := s.registry.Resolve(tool.Name, "")
+		name, version, qualified := ParseQualifiedToolName(tool.Name)
+		if !qualified {
+			name = tool.Name
+		}
+		entry, err := s.registry.Resolve(name, version)
 		if err == nil && entry.Metadata.IsActive {
 			filtered = append(filtered, tool)
 		}
@@ -564,6 +591,11 @@ func projectToolMeta(t *Tool) *mcp.Meta {
 	addValues("io.erpbridge/whenNotToUse", t.Spec.Description.WhenNotToUse)
 	addValues("io.erpbridge/examples", t.Spec.Description.Examples)
 	addValues("io.erpbridge/allowedRoles", t.Spec.Security.AllowedRoles)
+	if t.Metadata.ResourceDigest != "" {
+		fields["toolplane.resourceDigest"] = t.Metadata.ResourceDigest
+		fields["toolplane.resourceVersion"] = t.Metadata.Version
+		fields["toolplane.serving"] = t.Metadata.IsServing
+	}
 	if len(fields) == 0 {
 		return nil
 	}
@@ -572,83 +604,156 @@ func projectToolMeta(t *Tool) *mcp.Meta {
 
 // RegisterTool adds a tool to the server's registry and active MCP server.
 func (s *Server) RegisterTool(t *Tool) {
+	_ = s.registerTool(t, true)
+}
+
+func (s *Server) registerTool(t *Tool, allowServingDefault bool) error {
 	if err := s.validateTool(t); err != nil {
 		if s.log != nil {
 			s.log.Error("rejected invalid tool", slog.String("tool_name", t.Metadata.Name), slog.String("error", err.Error()))
 		}
-		return
+		return err
+	}
+
+	t.Metadata.IsActive = true
+	if _, err := mcpToolForRevision(t); err != nil {
+		return err
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	t.Metadata.IsActive = true // Ensure it is marked as active when registered
-	if err := s.registry.Add(t); err != nil {
-		s.log.Error("failed to add tool to registry", slog.String("tool", t.Metadata.Name), slog.String("error", err.Error()))
-		return
+	var addErr error
+	if allowServingDefault {
+		addErr = s.registry.Add(t)
+	} else {
+		addErr = s.registry.AddExplicit(t)
 	}
+	if addErr != nil {
+		s.mu.Unlock()
+		if s.log != nil {
+			s.log.Error("failed to add tool to registry", slog.String("tool", t.Metadata.Name), slog.String("error", addErr.Error()))
+		}
+		return addErr
+	}
+	if err := s.refreshMCPToolsLocked(t.Metadata.Name); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.mu.Unlock()
 
-	// Serialize the input schema to JSON.RawMessage
+	metrics.InitializeToolMetrics(t.Metadata.Name)
+	if s.log != nil {
+		s.log.Info("registered MCP tool", slog.String("tool_name", t.Metadata.Name), slog.String("version", t.Metadata.Version))
+	}
+	s.mcpServer.SendNotificationToAllClients("notifications/tools/list_changed", nil)
+	return nil
+}
+
+func mcpToolForRevision(t *Tool) (mcp.Tool, error) {
 	inputSchema, err := schemaForMCP(t)
 	if err != nil {
-		s.log.Error("failed to prepare input schema", slog.String("tool_name", t.Metadata.Name), slog.String("error", err.Error()))
-		return
+		return mcp.Tool{}, fmt.Errorf("prepare input schema: %w", err)
 	}
 	schemaJSON, err := json.Marshal(inputSchema)
 	if err != nil {
-		s.log.Error("failed to marshal input schema", slog.String("tool_name", t.Metadata.Name), slog.String("error", err.Error()))
-		return
+		return mcp.Tool{}, fmt.Errorf("marshal input schema: %w", err)
 	}
-
-	// Use versioned name internally for MCP registration if it's not the default?
-	// Actually, the spec says we should use stable aliases.
-	// For now, we register with the base name and let the handler resolve.
 	mcpTool := mcp.NewToolWithRawSchema(t.Metadata.Name, t.Spec.Description.Short, json.RawMessage(schemaJSON))
 	if t.Spec.Annotations != nil {
 		mcpTool.Title = t.Spec.Annotations.Title
 	}
 	mcpTool.Annotations = projectToolAnnotations(t.Spec.Annotations)
 	mcpTool.Meta = projectToolMeta(t)
-
-	// Explicitly clear structured input fields because RawInputSchema is used.
 	mcpTool.InputSchema = mcp.ToolInputSchema{}
 	if HasConcreteOutputSchema(t.Spec.OutputSchema) {
-		outputSchemaJSON, err := json.Marshal(*t.Spec.OutputSchema)
-		if err != nil {
-			s.log.Error("failed to prepare output schema", slog.String("tool_name", t.Metadata.Name), slog.String("error", err.Error()))
-			return
+		outputSchemaJSON, marshalErr := json.Marshal(*t.Spec.OutputSchema)
+		if marshalErr != nil {
+			return mcp.Tool{}, fmt.Errorf("prepare output schema: %w", marshalErr)
 		}
 		mcpTool.RawOutputSchema = json.RawMessage(outputSchemaJSON)
-	} else if t.Spec.OutputSchema != nil {
-		s.log.Warn("omitting invalid MCP output schema", slog.String("tool_name", t.Metadata.Name))
 	}
+	return mcpTool, nil
+}
 
-	// Add tool to server with the shared middleware and execution seam.
-	handler := s.applyToolMiddlewares(t, s.handleMCPToolCall(t.Metadata.Name))
-
-	s.mcpServer.AddTool(mcpTool, handler)
-	metrics.InitializeToolMetrics(t.Metadata.Name)
-	s.log.Info("registered MCP tool", slog.String("tool_name", t.Metadata.Name), slog.String("version", t.Metadata.Version))
-
-	// Notify clients that tools have changed
-	s.mcpServer.SendNotificationToAllClients("notifications/tools/list_changed", nil)
+// refreshMCPToolsLocked republishes exact descriptors after a serving change so
+// discovery metadata and the unqualified alias describe the registry snapshot.
+// The caller must hold s.mu.
+func (s *Server) refreshMCPToolsLocked(name string) error {
+	for _, revision := range s.registry.ListActive() {
+		if revision.Metadata.Name != name {
+			continue
+		}
+		definition, err := mcpToolForRevision(revision)
+		if err != nil {
+			return err
+		}
+		definition.Name = QualifiedToolName(name, revision.Metadata.Version)
+		s.mcpServer.AddTool(definition, s.handleBoundMCPToolRevisionCall(name, revision.Metadata.Version))
+	}
+	serving, err := s.registry.Resolve(name, "")
+	if err != nil {
+		s.mcpServer.DeleteTools(name)
+		return nil
+	}
+	alias, err := mcpToolForRevision(serving)
+	if err != nil {
+		return err
+	}
+	s.mcpServer.AddTool(alias, s.handleBoundMCPToolCall(name))
+	return nil
 }
 
 func (s *Server) handleMCPToolCall(name string) server.ToolHandlerFunc {
+	return s.handleMCPToolRevisionCall(name, "", false)
+}
+
+func (s *Server) handleBoundMCPToolCall(name string) server.ToolHandlerFunc {
+	return s.handleMCPToolRevisionCall(name, "", true)
+}
+
+func (s *Server) handleBoundMCPToolRevisionCall(name, version string) server.ToolHandlerFunc {
+	return s.handleMCPToolRevisionCall(name, version, true)
+}
+
+func (s *Server) handleMCPToolRevisionCall(name, version string, withMiddleware bool) server.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		s.mu.RLock()
-		// Resolve the latest stable version for this tool name.
-		t, err := s.registry.Resolve(name, "")
+		var t *Tool
+		var err error
+		switch {
+		case version != "":
+			t, err = s.registry.Resolve(name, version)
+		case request.Params.Meta != nil:
+			if digest, ok := request.Params.Meta.AdditionalFields["toolplane.resourceDigest"].(string); ok && digest != "" {
+				t, err = s.registry.ResolveDigest(name, digest)
+			} else {
+				t, err = s.registry.Resolve(name, "")
+			}
+		default:
+			t, err = s.registry.Resolve(name, "")
+		}
 		s.mu.RUnlock()
 
 		if err != nil {
-			return nil, faults.NewProtocol(faults.KindNotFound, "the requested tool is unavailable", err)
+			return nil, faults.NewProtocol(faults.KindNotFound, "the requested tool revision is unavailable; rediscover tools", err)
 		}
 		args, err := toolArguments(request)
 		if err != nil {
 			return nil, faults.NewProtocol(faults.KindInvalidInput, "tool arguments must be an object", err)
 		}
-		result, err := s.executeToolCall(ctx, t, args)
+		if err := validateToolArguments(t, args); err != nil {
+			return newToolExecutionResult(faults.New(faults.KindInvalidInput, "the tool arguments did not match the selected revision", false, 0, err)), nil
+		}
+
+		execute := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return s.executeToolRequest(ctx, t, request)
+		}
+		handler := server.ToolHandlerFunc(execute)
+		if withMiddleware {
+			// Build middleware only after resolution. Every middleware and
+			// execution stage receives this cloned snapshot.
+			handler = s.applyToolMiddlewares(t, handler)
+		}
+		result, err := handler(ctx, request)
 		if err != nil {
 			if faults.IsProtocol(err) {
 				return nil, err
@@ -673,6 +778,26 @@ func toolArguments(request mcp.CallToolRequest) (map[string]any, error) {
 		return nil, fmt.Errorf("invalid arguments format")
 	}
 	return args, nil
+}
+
+func validateToolArguments(tool *Tool, args map[string]any) error {
+	if tool == nil {
+		return errors.New("tool is required")
+	}
+	schema, err := schemaForMCP(tool)
+	if err != nil {
+		return err
+	}
+	if schema.Type == "" && len(schema.Properties) == 0 && len(schema.Required) == 0 {
+		return nil
+	}
+	if schema.Type == "" {
+		schema.Type = schemaTypeObject
+	}
+	if schema.Properties == nil {
+		schema.Properties = make(map[string]Property)
+	}
+	return validateResponse(args, schema)
 }
 
 func (s *Server) applyToolMiddlewares(tool *Tool, handler server.ToolHandlerFunc) server.ToolHandlerFunc {
@@ -789,15 +914,26 @@ func (s *Server) handleToolApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t.Metadata.IsActive = true // Mark as active before saving
-
-	if err := s.store.Save(&t); err != nil {
+	t.Metadata.IsActive = true // Mark as active before admission.
+	// Admission bookkeeping is server-authored; clients cannot impersonate a
+	// reviewer or alter the approval time.
+	t.Metadata.ResourceDigest = ""
+	t.Metadata.Admission = nil
+	identity, _ := CallerIdentityFromContext(r.Context())
+	if err := s.store.Admit(&t, identity.PrincipalID); err != nil {
+		if errors.Is(err, ErrAdmissionConflict) {
+			writeControlPlaneError(w, http.StatusConflict, ErrorRegistryConflict, "the admitted tool revision has different executable content", "create a new tool version and review it before applying")
+			return
+		}
 		writeControlPlaneInternalError(w, http.StatusInternalServerError, ErrorHealthCheckFailed, "check ERPBridge storage and retry")
 		return
 	}
 
-	// Immediate reconciliation for responsiveness
-	s.RegisterTool(&t)
+	// Immediate reconciliation for responsiveness.
+	if err := s.registerTool(&t, true); err != nil {
+		writeReconciliationPending(w)
+		return
+	}
 	if err := s.reconcileLocked(r.Context()); err != nil {
 		writeReconciliationPending(w)
 		return
@@ -809,6 +945,7 @@ func (s *Server) handleToolApply(w http.ResponseWriter, r *http.Request) {
 		statusKey:          "applied",
 		toolNameQueryParam: t.Metadata.Name,
 		"version":          t.Metadata.Version,
+		"resourceDigest":   t.Metadata.ResourceDigest,
 	})
 }
 
@@ -923,6 +1060,9 @@ func (s *Server) validateTool(t *Tool) error {
 	if t.Metadata.Version == "" {
 		return fmt.Errorf("metadata.version is required")
 	}
+	if strings.Contains(t.Metadata.Name, ".rev_") {
+		return fmt.Errorf("metadata.name uses the reserved exact-revision namespace")
+	}
 	if strings.Contains(strings.ToLower(t.Metadata.Name), "get-") ||
 		strings.Contains(strings.ToLower(t.Metadata.Name), "post-") {
 		return fmt.Errorf("tool name should be intent-based, not include HTTP verbs")
@@ -932,6 +1072,9 @@ func (s *Server) validateTool(t *Tool) error {
 	if strings.Contains(t.Spec.Execution.Endpoint, "token ") ||
 		strings.Contains(t.Spec.Execution.Endpoint, "key=") {
 		return fmt.Errorf("endpoint should not contain raw secrets, use credentialRef instead")
+	}
+	if err := bindApprovedOrigins(t); err != nil {
+		return fmt.Errorf("invalid execution.approvedOrigins: %w", err)
 	}
 
 	switch t.Spec.Security.DataClass {
@@ -1000,9 +1143,9 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	name, version := ParseToolIdentifier(req.Name)
 	s.mu.RLock()
-	// Resolve tool by name (latest stable)
-	t, err := s.registry.Resolve(req.Name, "")
+	t, err := s.registry.Resolve(name, version)
 	s.mu.RUnlock()
 
 	if err != nil {

@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
+
+	"github.com/Masterminds/semver/v3"
 
 	// Register pure Go SQLite driver
 	_ "modernc.org/sqlite"
@@ -133,11 +136,27 @@ func (s *Store) init() error {
 		}
 	}
 
-	return nil
+	return s.migrateLegacyTools()
 }
 
-// Save stores or updates a tool in the database.
+// Save stores or updates runtime lifecycle state for a tool. Control-plane
+// admission must use Admit so executable content cannot replace an admitted
+// name and version.
 func (s *Store) Save(t *Tool) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.saveTool(t)
+}
+
+type toolSQLExecer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func (s *Store) saveTool(t *Tool) error {
+	return saveToolWith(s.db, t)
+}
+
+func saveToolWith(execer toolSQLExecer, t *Tool) error {
 	data, err := json.Marshal(t)
 	if err != nil {
 		return fmt.Errorf("marshal tool: %w", err)
@@ -157,11 +176,240 @@ func (s *Store) Save(t *Tool) error {
 		data = excluded.data,
 		updated_at = (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'));
 	`
-	_, err = s.db.Exec(query, t.Metadata.Name, t.Metadata.Version, t.Metadata.Module, isActive, string(data))
+	_, err = execer.Exec(query, t.Metadata.Name, t.Metadata.Version, t.Metadata.Module, isActive, string(data))
 	if err != nil {
 		return fmt.Errorf("save tool: %w", err)
 	}
 	return nil
+}
+
+// Admit atomically creates an immutable admitted revision or reapplies the
+// identical content. A changed resource cannot replace the same name/version.
+func (s *Store) Admit(t *Tool, actor string) error {
+	requestedServing := t.Metadata.IsServing
+	digest, err := CanonicalToolDigest(t)
+	if err != nil {
+		return err
+	}
+
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tool admission: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.Query(`SELECT data FROM tools WHERE name = ?`, t.Metadata.Name)
+	if err != nil {
+		return fmt.Errorf("read admitted tools: %w", err)
+	}
+	var siblings []*Tool
+	var existing *Tool
+	for rows.Next() {
+		var data string
+		if err := rows.Scan(&data); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan admitted tool: %w", err)
+		}
+		var stored Tool
+		if err := json.Unmarshal([]byte(data), &stored); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("unmarshal admitted tool: %w", err)
+		}
+		siblings = append(siblings, &stored)
+		if stored.Metadata.Version == t.Metadata.Version {
+			existing = &stored
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close admitted tools: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate admitted tools: %w", err)
+	}
+
+	if existing != nil {
+		existingDigest, digestErr := CanonicalToolDigest(existing)
+		if digestErr != nil {
+			return digestErr
+		}
+		if existingDigest != digest {
+			return ErrAdmissionConflict
+		}
+		t.Metadata.ResourceDigest = existingDigest
+		t.Metadata.Admission = existing.Metadata.Admission
+		t.Metadata.IsServing = requestedServing || existing.Metadata.IsServing
+		if t.Metadata.Admission == nil {
+			t.Metadata.Admission = newAdmissionRecord(actor, time.Now())
+		}
+	} else {
+		t.Metadata.ResourceDigest = digest
+		t.Metadata.Admission = newAdmissionRecord(actor, time.Now())
+	}
+
+	hasServing := false
+	for _, sibling := range siblings {
+		if sibling.Metadata.IsActive && sibling.Metadata.IsServing && sibling.Metadata.Version != t.Metadata.Version {
+			hasServing = true
+			break
+		}
+	}
+	if !hasServing && (existing == nil || !existing.Metadata.IsServing) {
+		t.Metadata.IsServing = true
+	}
+	if t.Metadata.IsServing {
+		for _, sibling := range siblings {
+			if sibling.Metadata.Version == t.Metadata.Version || !sibling.Metadata.IsServing {
+				continue
+			}
+			sibling.Metadata.IsServing = false
+			if err := saveToolWith(tx, sibling); err != nil {
+				return err
+			}
+		}
+	}
+	if err := saveToolWith(tx, t); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tool admission: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) migrateLegacyTools() error {
+	rows, err := s.db.Query(`SELECT name, version, module, is_active, data FROM tools ORDER BY name, version`)
+	if err != nil {
+		return fmt.Errorf("query legacy tools: %w", err)
+	}
+	var tools []*Tool
+	for rows.Next() {
+		var name, version, module, data string
+		var isActive int
+		if err := rows.Scan(&name, &version, &module, &isActive, &data); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan legacy tool: %w", err)
+		}
+		var tool Tool
+		if err := json.Unmarshal([]byte(data), &tool); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("unmarshal legacy tool: %w", err)
+		}
+		if tool.Metadata.Name == "" {
+			tool.Metadata.Name = name
+		}
+		if tool.Metadata.Version == "" {
+			tool.Metadata.Version = version
+		}
+		if tool.Metadata.Module == "" {
+			tool.Metadata.Module = module
+		}
+		tool.Metadata.IsActive = isActive != 0
+		tools = append(tools, &tool)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close legacy tools: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate legacy tools: %w", err)
+	}
+	if len(tools) == 0 {
+		return nil
+	}
+
+	byName := make(map[string][]*Tool)
+	legacyNames := make(map[string]bool)
+	changed := false
+	now := time.Now()
+	for _, tool := range tools {
+		if tool.Metadata.ResourceDigest == "" || tool.Metadata.Admission == nil {
+			legacyNames[tool.Metadata.Name] = true
+		}
+		if tool.Spec.Execution.Endpoint != "" && len(tool.Spec.Execution.ApprovedOrigins) == 0 {
+			if err := bindApprovedOrigins(tool); err != nil {
+				return fmt.Errorf("migrate approved origins for %s@%s: %w", tool.Metadata.Name, tool.Metadata.Version, err)
+			}
+			changed = true
+		}
+		if tool.Metadata.ResourceDigest == "" || tool.Metadata.Admission == nil {
+			digest, err := CanonicalToolDigest(tool)
+			if err != nil {
+				return fmt.Errorf("digest legacy tool %s@%s: %w", tool.Metadata.Name, tool.Metadata.Version, err)
+			}
+			tool.Metadata.ResourceDigest = digest
+			if tool.Metadata.Admission == nil {
+				tool.Metadata.Admission = newAdmissionRecord("legacy-migration", now)
+			}
+			changed = true
+		}
+		if tool.Metadata.IsActive {
+			byName[tool.Metadata.Name] = append(byName[tool.Metadata.Name], tool)
+		}
+	}
+	for name, active := range byName {
+		if !legacyNames[name] {
+			continue
+		}
+		servingCount := 0
+		for _, tool := range active {
+			if tool.Metadata.IsServing {
+				servingCount++
+			}
+		}
+		if servingCount == 1 {
+			continue
+		}
+		selected := latestLegacyRevision(active)
+		for _, tool := range active {
+			want := tool == selected
+			if tool.Metadata.IsServing != want {
+				tool.Metadata.IsServing = want
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin legacy tool migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, tool := range tools {
+		if err := saveToolWith(tx, tool); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit legacy tool migration: %w", err)
+	}
+	return nil
+}
+
+func latestLegacyRevision(tools []*Tool) *Tool {
+	var latestStable *semver.Version
+	var latestStableTool *Tool
+	var latestAny *semver.Version
+	var latestAnyTool *Tool
+	for _, tool := range tools {
+		version, err := semver.NewVersion(tool.Metadata.Version)
+		if err != nil {
+			continue
+		}
+		if latestAny == nil || version.GreaterThan(latestAny) {
+			latestAny, latestAnyTool = version, tool
+		}
+		if version.Prerelease() == "" && (latestStable == nil || version.GreaterThan(latestStable)) {
+			latestStable, latestStableTool = version, tool
+		}
+	}
+	if latestStableTool != nil {
+		return latestStableTool
+	}
+	return latestAnyTool
 }
 
 // List returns all tools stored in the database.
@@ -287,6 +535,7 @@ func (s *Store) Delete(name, version string) error {
 	}
 
 	t.Metadata.IsActive = false
+	t.Metadata.IsServing = false
 	return s.Save(t)
 }
 

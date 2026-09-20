@@ -768,3 +768,28 @@ func TestServerPlugin_DeniedAndERPErrorCallsNoPlugin(t *testing.T) {
 	require.True(t, errResult.IsError, "MCP must propagate tool execution errors")
 	require.Empty(t, processor.Calls())
 }
+
+func TestServerPlugin_RawResponsePreservesOriginAuthorityFailure(t *testing.T) {
+	connectorSpy := &recordingERPConnector{}
+	s := NewServer(connectorSpy, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
+	t.Cleanup(func() { require.NoError(t, s.store.Close()) })
+	tool := rawResponseTool("raw-origin-denied")
+	tool.Spec.Execution.Endpoint = "http://denied.example/invoice"
+	tool.Spec.Execution.ApprovedOrigins = []string{"https://approved.example"}
+	s.RegisterTool(tool)
+	binding := validPluginBindingForTest()
+	binding.Spec.ToolRef.Name = tool.Metadata.Name
+	binding.Spec.Phase = PluginPhaseRawResponse
+	binding.Spec.FailurePolicy = PluginFailurePolicyFail
+	installActivePluginBindings(s, tool, binding)
+
+	response := s.MCPServer().HandleMessage(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"raw-origin-denied","arguments":{}}}`))
+	rpcResponse, ok := response.(mcp.JSONRPCResponse)
+	require.True(t, ok)
+	result, ok := rpcResponse.Result.(*mcp.CallToolResult)
+	require.True(t, ok)
+	require.True(t, result.IsError)
+	require.Zero(t, connectorSpy.count())
+	metadata := result.Meta.AdditionalFields["com.erpbridge/error"].(map[string]any)
+	require.Equal(t, "permission_denied", metadata["type"])
+}
