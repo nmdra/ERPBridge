@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.0-alpha.3] - 2026-10-16
+
 ### Changed
 
 - Scope MCP validation and cache entries to the resolved immutable tool revision, refresh serving metadata for every exact descriptor, and reserve the `.rev_` generated-name namespace.
@@ -28,6 +30,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add deterministic cache/request microbenchmarks and a bounded concurrent
   in-memory cache-hit stress benchmark with documented local baselines.
 - Add a Tool Details action that opens the selected tool's focused integration topology path.
+- Require a concrete top-level `type` for declared output schemas. The local
+  validator rejects untyped schemas, and MCP discovery omits legacy untyped
+  schemas.
+
+### Fixed
+
+- Preserve JSON enum types and explicit object extra-property policies from
+  OpenAPI generation through manifest storage, MCP discovery, and argument
+  validation, including nested objects and flattened request bodies
+- Preserve the connector request context until the returned response body reaches
+  EOF, fails to read, or is closed. Delayed success and preserved error bodies can
+  now be consumed after headers arrive while existing deadlines, cancellation,
+  authentication, and unsafe-method no-retry behavior remain enforced.
+
+## [v0.5.0-alpha.2] - 2026-08-30
+
+### Changed
+
 - Refactor the read-only topology console into a progressive component explorer
 with ELK layout, expandable high-cardinality groups, custom React Flow node
 families, semantic edge styling, and an accessible relationship fallback.
@@ -44,9 +64,6 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
   bounded retry/concurrency metadata is available through namespaced `_meta`.
 - Preserve registered upstream authentication headers in generated and
   declarative MCP tools, including `X-API-Key` for API-key services.
-- Require a concrete top-level `type` for declared output schemas. The local
-  validator rejects untyped schemas, and MCP discovery omits legacy untyped
-  schemas.
 - Refresh the bundled `bridgectl-ops` skill for file-backed credential
   rotation, split tool generation, MCP annotation and `_meta` guidance, and
   safe embedded-skill installation.
@@ -56,16 +73,6 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
   redacted append-only execution record after verification, supports terminal
   blocked outcomes, and reports absent-memory or append failures without
   inventing evidence or claiming a runtime hook.
-
-### Fixed
-
-- Preserve JSON enum types and explicit object extra-property policies from
-  OpenAPI generation through manifest storage, MCP discovery, and argument
-  validation, including nested objects and flattened request bodies
-- Preserve the connector request context until the returned response body reaches
-  EOF, fails to read, or is closed. Delayed success and preserved error bodies can
-  now be consumed after headers arrive while existing deadlines, cancellation,
-  authentication, and unsafe-method no-retry behavior remain enforced.
 
 ## [v0.5.0-alpha.1] - 2026-08-29
 
@@ -494,7 +501,9 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
 - chore: prepare for versioning and release
 - chore: rename middleware to erpbridge-server
 
-[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.1...HEAD
+[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.3...HEAD
+[v0.5.0-alpha.3]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
+[v0.5.0-alpha.2]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
 [v0.5.0-alpha.1]: https://github.com/nmdra/ERPBridge/compare/v0.4.0-alpha.3...v0.5.0-alpha.1
 [v0.4.0-alpha.1]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.4...v0.4.0-alpha.1
 [v0.3.0-alpha.4]: https://github.com/nmdra/ERPBridge/compare/v0.3.0-alpha.3...v0.3.0-alpha.4

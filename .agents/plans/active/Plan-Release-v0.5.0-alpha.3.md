@@ -136,7 +136,7 @@ gates and is explicitly approved.
   `context canceled`; evidence is bounded and redacted; no product regression
   remains unexplained.
 
-- [ ] **Task 5: Backfill and cut the changelog.** Add the recovered
+- [x] **Task 5: Backfill and cut the changelog.** Add the recovered
   `## [v0.5.0-alpha.2] - 2026-08-30` section from
   `git show v0.5.0-alpha.2:CHANGELOG.md`, cut the remaining `Unreleased`
   entries into `## [v0.5.0-alpha.3]` with the verified release date, leave an
