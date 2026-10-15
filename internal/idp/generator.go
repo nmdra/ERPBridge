@@ -308,6 +308,7 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 						return nil, fmt.Errorf("operation %q path %q: %w", toolName, path, bodyErr)
 					}
 					if bodySchema.Type == generatedObjectType || len(bodySchema.Properties) > 0 {
+						tool.Spec.InputSchema.AdditionalProperties = bodySchema.AdditionalProperties
 						required := make(map[string]struct{}, len(bodySchema.Required))
 						for _, name := range bodySchema.Required {
 							required[name] = struct{}{}
@@ -525,10 +526,11 @@ func propertyFromSchemaValue(value any, location string) (mcp.Property, error) {
 	if defaultValue, ok := object["default"]; ok {
 		property.Default = defaultValue
 	}
+	if policy, ok := object["additionalProperties"]; ok {
+		property.AdditionalProperties = policy
+	}
 	if enumValues, ok := object["enum"].([]any); ok {
-		for _, enumValue := range enumValues {
-			property.Enum = append(property.Enum, fmt.Sprint(enumValue))
-		}
+		property.Enum = enumValues
 	}
 	if required, ok := object["required"].([]any); ok {
 		for _, name := range required {

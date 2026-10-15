@@ -210,7 +210,7 @@ func TestServer_RegisterToolMarshalsRecursiveInputSchema(t *testing.T) {
 			},
 			"tags": {
 				Type:  "array",
-				Items: &Property{Type: schemaTypeString, Enum: []string{"new", "old"}},
+				Items: &Property{Type: schemaTypeString, Enum: []any{"new", "old"}},
 			},
 		},
 		Required: []string{"details"},

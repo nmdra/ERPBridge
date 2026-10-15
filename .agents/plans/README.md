@@ -24,6 +24,8 @@ promotion to `active/`.
 
 ## Completed
 
+- [`[COMPLETED]Plan-Schema-Constraint-Preservation.md`](./completed/%5BCOMPLETED%5DPlan-Schema-Constraint-Preservation.md) — preserve typed enums and object boundaries through generation and both invocation paths; source fix only, no live rollout.
+
 - [`[COMPLETED]Plan-ToolPlane-Conformance-Evidence.md`](./completed/%5BCOMPLETED%5DPlan-ToolPlane-Conformance-Evidence.md) — approval-to-execution binding, revision snapshots, withdrawal authority, origin enforcement, and recovery evidence.
 - [`[COMPLETED]Plan-Tool-Details-Topology-Focus.md`](./completed/%5BCOMPLETED%5DPlan-Tool-Details-Topology-Focus.md) — open a tool's connected execution path from its details page.
 - [`[COMPLETED]Plan-MCP-Output-Schema-Compatibility.md`](./completed/%5BCOMPLETED%5DPlan-MCP-Output-Schema-Compatibility.md) — valid MCP output-schema advertising and the Purchase Order live repair.

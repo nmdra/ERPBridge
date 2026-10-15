@@ -126,20 +126,24 @@ func (c ToolConcurrency) Validate() error {
 
 // InputSchema defines the structure of arguments required by a tool.
 type InputSchema struct {
-	Type       string              `json:"type"`
-	Properties map[string]Property `json:"properties"`
-	Required   []string            `json:"required,omitempty"`
+	// AdditionalProperties is a JSON boolean or schema object; nil preserves legacy omission.
+	AdditionalProperties any                 `json:"additionalProperties,omitempty"`
+	Type                 string              `json:"type"`
+	Properties           map[string]Property `json:"properties"`
+	Required             []string            `json:"required,omitempty"`
 }
 
 // Property describes a single field in a tool's input schema.
 type Property struct {
-	Type        string              `json:"type"`
-	Description string              `json:"description,omitempty"`
-	Enum        []string            `json:"enum,omitempty"`
-	Default     any                 `json:"default,omitempty"`
-	Properties  map[string]Property `json:"properties,omitempty"`
-	Items       *Property           `json:"items,omitempty"`
-	Required    []string            `json:"required,omitempty"`
+	// AdditionalProperties is a JSON boolean or schema object; nil preserves legacy omission.
+	AdditionalProperties any                 `json:"additionalProperties,omitempty"`
+	Type                 string              `json:"type"`
+	Description          string              `json:"description,omitempty"`
+	Enum                 []any               `json:"enum,omitempty"`
+	Default              any                 `json:"default,omitempty"`
+	Properties           map[string]Property `json:"properties,omitempty"`
+	Items                *Property           `json:"items,omitempty"`
+	Required             []string            `json:"required,omitempty"`
 }
 
 // Execution defines how the tool call is mapped to an ERP API.

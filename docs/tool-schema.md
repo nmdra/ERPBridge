@@ -106,6 +106,56 @@ Standard JSON Schema defining the arguments. **Strict typing is mandatory.**
 - Nested objects use nested `properties` and `required`; arrays use `items`.
 - **Avoid "filters" strings**: Break down complex query requirements into individual typed properties.
 
+### Enums and object boundaries
+
+Enum values retain their JSON types. Use `enum: [0]` for an integer draft
+status and `enum: [true]` for a boolean. Quoted values such as `"0"` and
+`"true"` are strings, not substitutes for numbers or booleans. Existing
+string enums keep their meaning.
+
+Set `additionalProperties: false` on every object that must reject undeclared
+fields, including nested objects and objects inside array `items`. Omission
+retains permissive legacy behaviour; explicit `true` permits extra fields.
+A schema-valued `additionalProperties` validates each extra value against
+that schema.
+
+```yaml
+inputSchema:
+  type: object
+  additionalProperties: false
+  properties:
+    docstatus:
+      type: integer
+      enum: [0]
+    flags:
+      type: object
+      additionalProperties: false
+      properties:
+        approved:
+          type: boolean
+          enum: [true]
+      required: [approved]
+  required: [docstatus, flags]
+```
+
+OpenAPI generation preserves these constraints. When an object request body
+is flattened into tool arguments, its extra-property policy applies to the
+generated root object; declared path and query parameters remain valid.
+Primitive and array bodies retain their constraints on the generated body
+argument. Guarded MCP tools still advertise and validate the server-managed
+`role` selector with a closed root object, then remove it before ERP execution.
+
+Input validation uses the selected tool revision before middleware or outbound
+ERP requests. Descriptions and `readOnlyHint` are guidance, not enforcement.
+For example, a closed root rejects an undeclared legacy dispatcher such as
+Frappe's `cmd` before the ERP can interpret it.
+
+This fix does not close legacy manifests automatically or repair enums that
+an older generator already stored as strings. Regenerate or edit the reviewed
+schemas, declare their object boundaries, and admit a new version before
+changing the serving revision. Existing deployments need a separately reviewed
+upgrade; installing source changes alone does not harden their stored tools.
+
 ### `spec.outputSchema`
 
 Optional JSON Schema for a successful ERP response. When set, it must have a
@@ -115,6 +165,11 @@ non-empty top-level string `type`, such as `object` or `array`.
 untyped legacy schema from MCP discovery. It still accepts any JSON result at
 runtime. OpenAPI generation omits an output schema when the response has no
 top-level type.
+
+Output validation rejects responses that do not match the declared schema;
+it does not remove extra fields to create a safe projection. Use a backend
+endpoint with fixed approved fields or an explicit trusted projection when
+the response can contain private data.
 
 ### `spec.execution`
 

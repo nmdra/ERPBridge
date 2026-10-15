@@ -788,7 +788,7 @@ func validateToolArguments(tool *Tool, args map[string]any) error {
 	if err != nil {
 		return err
 	}
-	if schema.Type == "" && len(schema.Properties) == 0 && len(schema.Required) == 0 {
+	if schema.Type == "" && len(schema.Properties) == 0 && len(schema.Required) == 0 && schema.AdditionalProperties == nil {
 		return nil
 	}
 	if schema.Type == "" {
@@ -1120,10 +1120,14 @@ func schemaForMCP(t *Tool) (InputSchema, error) {
 	if err != nil {
 		return InputSchema{}, fmt.Errorf("prepare role selector: %w", err)
 	}
+	roleValues := make([]any, len(roles))
+	for i, role := range roles {
+		roleValues[i] = role
+	}
 	schema.Properties["role"] = Property{
 		Type:        schemaTypeString,
 		Description: "Authorization role used for this tool call",
-		Enum:        roles,
+		Enum:        roleValues,
 	}
 	return schema, nil
 }
@@ -1160,6 +1164,13 @@ func (s *Server) handleDirectInvoke(w http.ResponseWriter, r *http.Request) {
 	directContext, authorizedArgs, authzErr := s.authorizeDirectInvoke(r.Context(), t, args, r.Header.Get("X-ERPBridge-Role"))
 	if authzErr != nil {
 		writeRoleAuthorizationError(w, authzErr)
+		return
+	}
+
+	// Validate the selected revision before middleware or outbound execution,
+	// using the same schema contract as MCP tools/call.
+	if err := validateToolArguments(t, authorizedArgs); err != nil {
+		writeToolExecutionHTTPError(w, newToolExecutionResult(faults.New(faults.KindInvalidInput, "the tool arguments did not match the selected revision", false, 0, err)))
 		return
 	}
 

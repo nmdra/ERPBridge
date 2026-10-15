@@ -400,7 +400,7 @@ components:
 	require.Equal(t, "query", tool.Spec.Execution.ParameterLocations["id__query"])
 	require.Equal(t, "header", tool.Spec.Execution.ParameterLocations["trace"])
 	require.Equal(t, "string", tool.Spec.InputSchema.Properties["details"].Properties["code"].Type)
-	require.Equal(t, []string{"new", "old"}, tool.Spec.InputSchema.Properties["tags"].Items.Enum)
+	require.Equal(t, []any{"new", "old"}, tool.Spec.InputSchema.Properties["tags"].Items.Enum)
 	require.Equal(t, []string{"code"}, tool.Spec.InputSchema.Properties["details"].Required)
 	require.Equal(t, "data", tool.Spec.Execution.ResponsePath)
 	output, ok := (*tool.Spec.OutputSchema).(map[string]any)

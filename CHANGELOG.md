@@ -59,6 +59,9 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
 
 ### Fixed
 
+- Preserve JSON enum types and explicit object extra-property policies from
+  OpenAPI generation through manifest storage, MCP discovery, and argument
+  validation, including nested objects and flattened request bodies
 - Preserve the connector request context until the returned response body reaches
   EOF, fails to read, or is closed. Delayed success and preserved error bodies can
   now be consumed after headers arrive while existing deadlines, cancellation,
