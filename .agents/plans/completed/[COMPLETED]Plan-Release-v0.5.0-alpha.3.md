@@ -147,7 +147,7 @@ gates and is explicitly approved.
   `v0.5.0-alpha.2` tag snapshot plus `git diff v0.5.0-alpha.2..HEAD`; all
   comparison links resolve to existing tags; `git diff --check` clean.
 
-- [ ] **Task 6: Synchronize the public documentation.** Bump
+- [x] **Task 6: Synchronize the public documentation.** Bump
   `ERPBRIDGE_RELEASE` to `v0.5.0-alpha.3`, add the docs-site changelog entry,
   and build the site.
   **Seam:** user-facing docs version truth.
@@ -156,7 +156,7 @@ gates and is explicitly approved.
   **Verify:** `npm run build` green in the docs checkout; commit pushed after
   publication.
 
-- [ ] **Task 7: Execute the approved release.** After Tasks 1–6 are green and
+- [x] **Task 7: Execute the approved release.** After Tasks 1–6 are green and
   the candidate is explicitly approved, create the annotated
   `v0.5.0-alpha.3` tag at the reviewed commit and push only the tag. Confirm the
   release workflow publishes the expected artifacts.
@@ -170,7 +170,7 @@ gates and is explicitly approved.
   report `0.5.0-alpha.3`; `gh release view v0.5.0-alpha.3 --json isPrerelease`
   is `true`.
 
-- [ ] **Task 8: Close the plan and clean up.** Prefix the plan filename with
+- [x] **Task 8: Close the plan and clean up.** Prefix the plan filename with
   `[COMPLETED]`, move it to `completed/`, update the plan index entries, and
   remove the merged `fix/schema-constraint-preservation` and
   `codex/fix-response-body-lifetime` branches when the user approves.
@@ -201,6 +201,28 @@ gates and is explicitly approved.
   coverage came from the connector race tests. The plugin integration fixture
   was not run (no fixture credentials available); the candidate's plugin
   pipeline changes are covered by the `internal/mcp` race tests.
+- **Task 5:** the backfilled `## [v0.5.0-alpha.2]` section is identical to the
+  tag snapshot's `Unreleased` block (line diff clean); the
+  `## [v0.5.0-alpha.3]` section contains exactly the post-`alpha.2` entries;
+  comparison links now point at `v0.5.0-alpha.3`.
+- **Task 7 (2026-10-16):** release workflow run `38803094394` completed
+  successfully; GitHub release assets include all platform archives, SBOMs,
+  `checksums.txt`, and the cosign bundle (`checksums.txt.sig`);
+  `cosign verify-blob --bundle` reported `Verified OK`; all downloaded
+  archives pass `sha256sum -c`; GHCR
+  `ghcr.io/nmdra/erpbridge-server:0.5.0-alpha.3` exposes linux/amd64 and
+  linux/arm64 (image tags intentionally omit the `v` prefix, matching
+  `.goreleaser.yaml` `{{ .Version }}`); `bridgectl version` and the
+  `erpbridge-server --stdio` startup banner both report `0.5.0-alpha.3`
+  (the server has no `--version` flag); the workflow published the release as
+  a prerelease and, per this plan's flag decision, it was then promoted to
+  Latest to mirror the established `alpha.1`/`alpha.2` maintenance pattern.
+- **Task 6:** `ERPBRIDGE_RELEASE` bumped to `v0.5.0-alpha.3` with a docs
+  changelog entry; `npm run build` green; pushed as `95cd569` in
+  `nmdra/erpbridge-docs`.
+- **Task 8:** plan closed and moved to `completed/`; the merged
+  `fix/schema-constraint-preservation` and `codex/fix-response-body-lifetime`
+  branch cleanup remains deferred pending explicit user approval.
 
 ## Verification
 
