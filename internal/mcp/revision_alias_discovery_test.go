@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -30,22 +31,45 @@ func aliasTestServer(t *testing.T) *Server {
 	return s
 }
 
-func advertisedNames(s *Server) map[string]bool {
-	registered := s.MCPServer().ListTools()
-	tools := make([]mcp.Tool, 0, len(registered))
-	for _, entry := range registered {
-		tools = append(tools, entry.Tool)
+func advertisedNames(t *testing.T, s *Server) map[string]bool {
+	t.Helper()
+	response := s.MCPServer().HandleMessage(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+	rpc, ok := response.(mcp.JSONRPCResponse)
+	require.True(t, ok)
+	var listed []mcp.Tool
+	switch result := rpc.Result.(type) {
+	case mcp.ListToolsResult:
+		listed = result.Tools
+	case *mcp.ListToolsResult:
+		listed = result.Tools
+	default:
+		require.FailNow(t, "unexpected tools/list result type")
 	}
-	names := make(map[string]bool, len(tools))
-	for _, tool := range s.FilterToolsList(tools) {
+	names := make(map[string]bool, len(listed))
+	for _, tool := range listed {
 		names[tool.Name] = true
 	}
 	return names
 }
 
+func callTool(t *testing.T, s *Server, name string) *mcp.CallToolResult {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+		"params": map[string]any{"name": name, "arguments": map[string]any{}},
+	})
+	require.NoError(t, err)
+	response := s.MCPServer().HandleMessage(context.Background(), payload)
+	rpc, ok := response.(mcp.JSONRPCResponse)
+	require.True(t, ok, "expected a JSON-RPC response")
+	result, ok := rpc.Result.(*mcp.CallToolResult)
+	require.True(t, ok, "expected a tool result, got %T", rpc.Result)
+	return result
+}
+
 func TestRevisionAliasesAreHiddenByDefault(t *testing.T) {
 	s := aliasTestServer(t)
-	names := advertisedNames(s)
+	names := advertisedNames(t, s)
 	require.True(t, names["alias-test"], "the unqualified serving name must stay visible")
 	require.False(t, names[QualifiedToolName("alias-test", "1.0.0")])
 	require.False(t, names[QualifiedToolName("alias-test", "2.0.0")])
@@ -54,7 +78,7 @@ func TestRevisionAliasesAreHiddenByDefault(t *testing.T) {
 func TestRevisionAliasesCanBeAdvertised(t *testing.T) {
 	t.Setenv(advertiseRevisionAliasesEnv, "true")
 	s := aliasTestServer(t)
-	names := advertisedNames(s)
+	names := advertisedNames(t, s)
 	require.True(t, names["alias-test"])
 	require.True(t, names[QualifiedToolName("alias-test", "1.0.0")])
 	require.True(t, names[QualifiedToolName("alias-test", "2.0.0")])
@@ -62,15 +86,14 @@ func TestRevisionAliasesCanBeAdvertised(t *testing.T) {
 
 func TestHiddenRevisionAliasStillExecutes(t *testing.T) {
 	s := aliasTestServer(t)
-	exact := QualifiedToolName("alias-test", "1.0.0")
-	require.NotNil(t, s.MCPServer().GetTool(exact), "the exact revision must remain registered")
+	result := callTool(t, s, QualifiedToolName("alias-test", "1.0.0"))
+	require.False(t, result.IsError)
+	require.Contains(t, result.Content[0].(mcp.TextContent).Text, "v1")
+}
 
-	request := mcp.CallToolRequest{}
-	request.Params.Name = exact
-	request.Params.Arguments = map[string]any{}
-	result, err := s.handleBoundMCPToolRevisionCall("alias-test", "1.0.0")(context.Background(), request)
-	require.NoError(t, err)
-	require.NotNil(t, result)
+func TestUnqualifiedCallStillExecutes(t *testing.T) {
+	s := aliasTestServer(t)
+	result := callTool(t, s, "alias-test")
 	require.False(t, result.IsError)
 	require.Contains(t, result.Content[0].(mcp.TextContent).Text, "v1")
 }

@@ -101,11 +101,12 @@ func (c RateLimitConfig) Validate() error {
 // NewServer creates a new Server instance with the provided connector, cache manager, and logger.
 func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Logger, rateCfg RateLimitConfig, dbPath string) *Server {
 	var bridgeServer *Server
+	hooks := &server.Hooks{}
 	s := server.NewMCPServer("ERPBridge", "1.0.0",
 		server.WithLogging(),
 		server.WithResourceCompletionProvider(&ResourceCompletionProvider{}),
 		server.WithPromptCompletionProvider(&PromptCompletionProvider{}),
-		server.WithHooks(&server.Hooks{}),
+		server.WithHooks(hooks),
 		server.WithToolFilter(func(_ context.Context, tools []mcp.Tool) []mcp.Tool {
 			if bridgeServer == nil {
 				return tools
@@ -142,6 +143,12 @@ func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Lo
 		advertiseRevisionAliases: revisionAliasesAdvertised(),
 	}
 	bridgeServer = srv
+
+	if !srv.advertiseRevisionAliases {
+		// The SDK applies tool filters to tools/call as well as tools/list, so hiding the
+		// exact-revision names there would make them uncallable. Rewrite only the listing.
+		hooks.AddAfterListTools(hideRevisionAliases)
+	}
 
 	srv.TelemetryHooks = NewTelemetryHooks(mcpLog)
 	srv.TelemetryHooks.Register(s)
@@ -558,9 +565,6 @@ func (s *Server) filterToolsList(tools []mcp.Tool) []mcp.Tool {
 			continue
 		}
 		name, version, qualified := ParseQualifiedToolName(tool.Name)
-		if qualified && !s.advertiseRevisionAliases {
-			continue
-		}
 		if !qualified {
 			name = tool.Name
 		}
@@ -1036,6 +1040,22 @@ func (s *Server) handleToolDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// hideRevisionAliases removes exact-revision names from a tools/list result. It runs after the
+// SDK has built the list, so exact-revision calls stay dispatchable.
+func hideRevisionAliases(_ context.Context, _ any, _ *mcp.ListToolsRequest, result *mcp.ListToolsResult) {
+	if result == nil {
+		return
+	}
+	visible := make([]mcp.Tool, 0, len(result.Tools))
+	for _, tool := range result.Tools {
+		if _, _, qualified := ParseQualifiedToolName(tool.Name); qualified {
+			continue
+		}
+		visible = append(visible, tool)
+	}
+	result.Tools = visible
 }
 
 func testToolsEnabled() bool {
