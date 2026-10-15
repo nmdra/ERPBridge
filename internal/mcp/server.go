@@ -60,17 +60,24 @@ type Server struct {
 	toolMiddlewares        []server.ToolHandlerMiddleware
 	authWarnOnce           sync.Once
 	serverInfo             ServerInfo
+	// advertiseRevisionAliases controls whether tools/list exposes the exact-revision names.
+	// Cross-registry exact-revision calls and digest binding keep working either way.
+	advertiseRevisionAliases bool
 }
 
 const (
-	statusKey           = "status"
-	textContentType     = "text"
-	toolNameQueryParam  = "name"
-	testToolsEnv        = "MCP_ENABLE_TEST_TOOLS"
-	dataClassPublic     = "public"
-	dataClassInternal   = "internal"
-	dataClassPII        = "pii"
-	dataClassRestricted = "restricted"
+	statusKey          = "status"
+	textContentType    = "text"
+	toolNameQueryParam = "name"
+	testToolsEnv       = "MCP_ENABLE_TEST_TOOLS"
+	// advertiseRevisionAliasesEnv advertises the exact-revision names in MCP discovery when set
+	// to "true". The default keeps the pre-alpha.3 client view: one name per tool. The revisions
+	// stay registered and callable; only tools/list omits them.
+	advertiseRevisionAliasesEnv = "MCP_ADVERTISE_REVISION_ALIASES"
+	dataClassPublic             = "public"
+	dataClassInternal           = "internal"
+	dataClassPII                = "pii"
+	dataClassRestricted         = "restricted"
 )
 
 // RateLimitConfig defines the configuration for the tool rate limiter.
@@ -119,19 +126,20 @@ func NewServer(connector ERPConnector, cacheMgr *cache.Manager, rootLog *slog.Lo
 	}
 
 	srv := &Server{
-		mcpServer:        s,
-		connector:        connector,
-		cache:            cacheMgr,
-		log:              mcpLog,
-		store:            store,
-		registry:         NewToolRegistry(),
-		pluginRegistry:   NewPluginRegistry(),
-		pluginClient:     NewPluginClientWithLogger(mcpLog),
-		concurrency:      NewToolConcurrencyLimiter(),
-		toolRateLimiters: make(map[string]*RateLimitMiddleware),
-		resources:        make(map[string]*Resource),
-		prompts:          make(map[string]*Prompt),
-		Notifier:         NewCustomNotifier(s),
+		mcpServer:                s,
+		connector:                connector,
+		cache:                    cacheMgr,
+		log:                      mcpLog,
+		store:                    store,
+		registry:                 NewToolRegistry(),
+		pluginRegistry:           NewPluginRegistry(),
+		pluginClient:             NewPluginClientWithLogger(mcpLog),
+		concurrency:              NewToolConcurrencyLimiter(),
+		toolRateLimiters:         make(map[string]*RateLimitMiddleware),
+		resources:                make(map[string]*Resource),
+		prompts:                  make(map[string]*Prompt),
+		Notifier:                 NewCustomNotifier(s),
+		advertiseRevisionAliases: revisionAliasesAdvertised(),
 	}
 	bridgeServer = srv
 
@@ -550,6 +558,9 @@ func (s *Server) filterToolsList(tools []mcp.Tool) []mcp.Tool {
 			continue
 		}
 		name, version, qualified := ParseQualifiedToolName(tool.Name)
+		if qualified && !s.advertiseRevisionAliases {
+			continue
+		}
 		if !qualified {
 			name = tool.Name
 		}
@@ -1029,6 +1040,14 @@ func (s *Server) handleToolDelete(w http.ResponseWriter, r *http.Request) {
 
 func testToolsEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv(testToolsEnv)), "true")
+}
+
+// revisionAliasesAdvertised reports whether MCP discovery lists exact-revision names. The
+// default is false, so clients see one name per tool as they did before v0.5.0-alpha.3.
+// Setting the variable to "true" advertises the exact names; the revisions remain registered
+// and callable either way, and digest binding still pins a reviewed revision.
+func revisionAliasesAdvertised() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv(advertiseRevisionAliasesEnv)), "true")
 }
 
 // Admission Controller

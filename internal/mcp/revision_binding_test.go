@@ -140,6 +140,7 @@ func TestMCPDigestBoundCallUsesSelectedRevisionSchema(t *testing.T) {
 }
 
 func TestMCPExactRevisionCachesAreIsolated(t *testing.T) {
+	t.Setenv(advertiseRevisionAliasesEnv, "true")
 	log := logger.Init()
 	s := NewServer(nil, cache.NewMemoryManager(10, log), log, RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 	t.Cleanup(func() { require.NoError(t, s.store.Close()) })
@@ -173,6 +174,7 @@ func TestMCPExactRevisionCachesAreIsolated(t *testing.T) {
 }
 
 func TestMCPToolsListRefreshesServingMetadataForEveryExactRevision(t *testing.T) {
+	t.Setenv(advertiseRevisionAliasesEnv, "true")
 	s := NewServer(nil, nil, logger.Init(), RateLimitConfig{RequestsPerSecond: 100, Burst: 100}, ":memory:")
 	t.Cleanup(func() { require.NoError(t, s.store.Close()) })
 	v1 := &Tool{Metadata: Metadata{Name: "serving-meta", Version: "1.0.0", IsActive: true, IsServing: true, ResourceDigest: "digest-v1"}}

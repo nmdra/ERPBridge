@@ -12,7 +12,7 @@ The implementation adds these mechanisms:
 
 1. An immutable admission digest for each tool name and version.
 2. A separate serving pointer for unqualified MCP calls.
-3. Exact revision names and digest-bound MCP calls.
+3. Exact revision names (callable, listed only with `MCP_ADVERTISE_REVISION_ALIASES=true`) and digest-bound MCP calls.
 4. One cloned tool resource for all stages of one invocation.
 5. A synchronized boundary between withdrawal and connector entry.
 6. Effective ERP origin validation before connector entry.
@@ -83,6 +83,10 @@ ERPBridge registers every active revision with a protocol-safe exact name:
 ```text
 <tool-name>.rev_<base64url-semver>
 ```
+
+These exact names stay callable but are hidden from `tools/list` by default, so a client sees one
+entry per tool name. Set `MCP_ADVERTISE_REVISION_ALIASES=true` to list them. Digest binding below
+pins a revision without relying on the exact name.
 
 The unqualified serving tool and each exact tool include these MCP `_meta` fields:
 

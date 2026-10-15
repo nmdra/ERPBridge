@@ -66,6 +66,7 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | `RATE_LIMIT_BURST` | Token bucket burst size. | `20` |
 | `INSECURE_AUTH_ALLOWED_HOSTS` | Development-only exact `host:port` exceptions for credentialed HTTP calls. | `mock-erp:8081` |
 | `MCP_ENABLE_TEST_TOOLS` | Development-only registration of `system.*_test` demo tools. | `true` in this Compose path |
+| `MCP_ADVERTISE_REVISION_ALIASES` | Lists exact-revision names in MCP discovery. The default hides them so clients see one entry per tool. | unset |
 | `API_AUTH_TOKEN` | Bearer token for protected admin, MCP, and direct-invoke routes. | unset |
 | `ERPBRIDGE_CREDENTIALS_DIR` | Optional mounted directory used only by resources with `credentialSource: file`. | unset |
 | `PLUGIN_ENDPOINT_ALLOWLIST` | Exact `host:port` values allowed for credentialed plugin resources. | unset |
