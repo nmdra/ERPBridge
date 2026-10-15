@@ -1,0 +1,53 @@
+package idp
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/nmdra/ERPBridge/internal/logger"
+	"github.com/stretchr/testify/require"
+)
+
+func TestGeneratorTypedEnums(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "typed-enums.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`openapi: 3.0.3
+info: {title: Typed enum regression, version: 1.0.0}
+servers: [{url: 'https://erp.example.test/api'}]
+paths:
+  /draft:
+    post:
+      operationId: create_draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [docstatus, synchronous]
+              properties:
+                docstatus: {type: integer, enum: [0]}
+                synchronous: {type: boolean, enum: [true]}
+                rate: {type: number, enum: [1.5]}
+                state: {type: string, enum: [draft]}
+      responses:
+        '200': {description: OK}
+`), 0600))
+	tools, err := NewGenerator(dir, logger.Init()).GenerateFromOpenAPI(context.Background(), API{Name: "fixture"}, path)
+	require.NoError(t, err)
+	require.Len(t, tools, 1)
+	// Assert the manifest's public wire values, not the Go representation.
+	encoded, err := json.Marshal(tools[0])
+	require.NoError(t, err)
+	var tool map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &tool))
+	properties := tool["spec"].(map[string]any)["inputSchema"].(map[string]any)["properties"].(map[string]any)
+	for name, expected := range map[string]any{"docstatus": float64(0), "synchronous": true, "rate": 1.5, "state": "draft"} {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, []any{expected}, properties[name].(map[string]any)["enum"])
+		})
+	}
+}

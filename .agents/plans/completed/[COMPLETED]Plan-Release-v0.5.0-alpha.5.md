@@ -30,12 +30,21 @@ as documented in `v0.5.0-alpha.4`.
   -count=1`.)
 - [x] **Task 3: Quality gate.** Full suite, focused lint, commit hooks. (**Verify:** `make test`;
   `golangci-lint run ./internal/mcp/... ./services/...`.)
-- [ ] **Task 4: Container verification.** Build the local image, run the restore-before-start
+- [x] **Task 4: Container verification.** Build the local image, run the restore-before-start
   sandbox harness, and confirm: one discovery entry per tool, no `.rev_` names listed, a pinned
   name still callable, 46 revisions and 3 token records preserved. (**Verify:** harness report.)
-- [ ] **Task 5: Publish and verify the digest.** Tag `v0.5.0-alpha.5`, push, wait for the release
+- [x] **Task 5: Publish and verify the digest.** Tag `v0.5.0-alpha.5`, push, wait for the release
   workflow, pull the published digest, and repeat the harness against it. (**Verify:** recorded
   digest plus a passing run.)
+
+## Outcome
+
+Published on 2026-10-15 and verified against the published digest
+`ghcr.io/nmdra/erpbridge-server@sha256:2ae683b46d4b7cacd4e23f058cbad8768c520ae73a66619e871ed101a09f0575`.
+The restore-before-start sandbox run reported 46 revisions / 45 names preserved, 45 discovery names
+with no `.rev_` entry, a pinned name that still executes, three unchanged token records, one held
+client token authenticated, eight invalid-input cases rejected on both transports, and no ERP call.
+The local candidate build `erpbridge-local:alpha5-fix` passed the same harness first.
 
 ## Follow-up
 
