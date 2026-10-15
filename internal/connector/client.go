@@ -175,6 +175,26 @@ type Client struct {
 	log  *slog.Logger
 }
 
+// responseBody keeps the call deadline alive after headers arrive. The caller
+// owns the response body and releases the context on close or a terminal read.
+type responseBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *responseBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil {
+		b.cancel()
+	}
+	return n, err
+}
+
+func (b *responseBody) Close() error {
+	defer b.cancel()
+	return b.ReadCloser.Close()
+}
+
 // NewClient creates a new resilient ERP client with the provided root logger.
 func NewClient(rootLog *slog.Logger) *Client {
 	log := logger.Component(rootLog, "connector")
@@ -299,7 +319,12 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 	start := time.Now()
 	log := logger.FromContext(ctx)
 	callCtx, cancel := context.WithTimeout(ctx, maxCallDuration)
-	defer cancel()
+	bodyOwnsCancel := false
+	defer func() {
+		if !bodyOwnsCancel {
+			cancel()
+		}
+	}()
 
 	target := ep.BaseURL + ep.Path
 	if len(queryParams) > 0 {
@@ -429,5 +454,9 @@ func (c *Client) call(ctx context.Context, ep EndpointConfig, queryParams url.Va
 		slog.Int("latency_ms", latency),
 	)
 
+	if resp.Body != nil && resp.Body != http.NoBody {
+		resp.Body = &responseBody{ReadCloser: resp.Body, cancel: cancel}
+		bodyOwnsCancel = true
+	}
 	return resp, nil
 }

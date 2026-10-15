@@ -104,6 +104,16 @@ ERP retries are bounded by three attempts and a 30-second overall deadline.
 GET, HEAD, and OPTIONS so POST, PUT, PATCH, and DELETE operations are not
 blindly replayed without an idempotency mechanism.
 
+The 30-second overall connector deadline continues to cover response-body
+reads after headers arrive. The HTTP client's 15-second timeout and any earlier
+caller deadline or cancellation still apply. Returned bodies own the connector
+context until EOF, a read error, or `Close`; callers must always close the body,
+including when they reject a response or stop reading early. Calls that fail
+without returning a body release their context immediately. This prevents a
+successful upstream HTTP status from becoming a decoding failure because the
+connector canceled the request before the body was read. It does not change
+authentication, tool schemas, retry eligibility, or ERP write semantics.
+
 ## 5. Monitoring & Health
 
 Standard endpoints for system health and observability.
