@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.0-alpha.4] - 2026-10-16
+
+### Changed
+
+- Keep exact-revision names out of MCP `tools/list` by default, so clients show one entry per tool as they did before `v0.5.0-alpha.3`. Exact-revision calls, `name@version` on the direct endpoint, and `_meta.toolplane.resourceDigest` binding all still work. Set `MCP_ADVERTISE_REVISION_ALIASES=true` to list the exact names again.
+
 ## [v0.5.0-alpha.3] - 2026-10-16
 
 ### Changed
@@ -501,7 +507,8 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
 - chore: prepare for versioning and release
 - chore: rename middleware to erpbridge-server
 
-[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.3...HEAD
+[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.4...HEAD
+[v0.5.0-alpha.4]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.3...v0.5.0-alpha.4
 [v0.5.0-alpha.3]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
 [v0.5.0-alpha.2]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
 [v0.5.0-alpha.1]: https://github.com/nmdra/ERPBridge/compare/v0.4.0-alpha.3...v0.5.0-alpha.1
