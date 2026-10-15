@@ -31,9 +31,16 @@ when `MCP_ADVERTISE_REVISION_ALIASES=true`.
   discovery behaviour is described.)
 - [x] **Task 4: Quality gate.** Run the full suite and focused lint. (**Verify:** `make test`;
   `golangci-lint run ./internal/mcp/... ./services/...`.)
-- [ ] **Task 5: Publish.** Commit, tag `v0.5.0-alpha.4`, and push so the release workflow publishes
+- [x] **Task 5: Publish.** Commit, tag `v0.5.0-alpha.4`, and push so the release workflow publishes
   the GitHub release and the `ghcr.io/nmdra/erpbridge-server:0.5.0-alpha.4` image. (**Verify:**
   workflow completes; the image digest is recorded for the deployment step.)
+
+## Outcome
+
+Published on 2026-10-15 as `v0.5.0-alpha.4`. Container verification found one regression: hiding
+the names through the SDK tool filter also removed them from `tools/call` dispatch, so pinned names
+returned `tool not found`. `v0.5.0-alpha.5` fixes this; see
+[`Plan-Release-v0.5.0-alpha.5.md`](../active/Plan-Release-v0.5.0-alpha.5.md).
 
 ## Validation note
 

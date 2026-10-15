@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.0-alpha.5] - 2026-10-16
+
+### Fixed
+
+- Keep exact-revision names callable while they stay out of MCP `tools/list`. Hiding them through the SDK tool filter also removed them from `tools/call` dispatch, so a pinned name such as `get_item.rev_MS4wLjA` returned `tool not found` in `v0.5.0-alpha.4`. The listing is filtered by an `OnAfterListTools` hook instead, so registration and dispatch are unchanged.
+
 ## [v0.5.0-alpha.4] - 2026-10-16
 
 ### Changed
@@ -507,7 +513,8 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
 - chore: prepare for versioning and release
 - chore: rename middleware to erpbridge-server
 
-[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.4...HEAD
+[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.5...HEAD
+[v0.5.0-alpha.5]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.4...v0.5.0-alpha.5
 [v0.5.0-alpha.4]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.3...v0.5.0-alpha.4
 [v0.5.0-alpha.3]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
 [v0.5.0-alpha.2]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
