@@ -7,13 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- Preserve the connector request context until the returned response body reaches
-  EOF, fails to read, or is closed. Delayed success and preserved error bodies can
-  now be consumed after headers arrive while existing deadlines, cancellation,
-  authentication, and unsafe-method no-retry behavior remain enforced.
-
 ### Changed
 
 - Scope MCP validation and cache entries to the resolved immutable tool revision, refresh serving metadata for every exact descriptor, and reserve the `.rev_` generated-name namespace.
@@ -63,6 +56,13 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
   redacted append-only execution record after verification, supports terminal
   blocked outcomes, and reports absent-memory or append failures without
   inventing evidence or claiming a runtime hook.
+
+### Fixed
+
+- Preserve the connector request context until the returned response body reaches
+  EOF, fails to read, or is closed. Delayed success and preserved error bodies can
+  now be consumed after headers arrive while existing deadlines, cancellation,
+  authentication, and unsafe-method no-retry behavior remain enforced.
 
 ## [v0.5.0-alpha.1] - 2026-08-29
 
