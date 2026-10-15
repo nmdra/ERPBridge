@@ -107,7 +107,7 @@ func TestSchemaForMCP_InjectsGuardedRoleSelectorWithoutMutatingTool(t *testing.T
 
 	schema, err := schemaForMCP(tool)
 	require.NoError(t, err)
-	assert.Equal(t, []string{testRoleAlpha, testRoleZeta}, schema.Properties[roleSelectorField].Enum)
+	assert.Equal(t, []any{testRoleAlpha, testRoleZeta}, schema.Properties[roleSelectorField].Enum)
 	assert.NotContains(t, tool.Spec.InputSchema.Properties, roleSelectorField)
 
 	schema.Properties[roleSelectorField] = Property{Type: "integer"}

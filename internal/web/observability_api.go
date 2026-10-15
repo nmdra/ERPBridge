@@ -244,11 +244,20 @@ func projectToolManifest(tool mcp.Tool) *ToolManifestProjection {
 	fields := make([]ToolInputFieldProjection, 0, len(fieldNames))
 	for _, name := range fieldNames {
 		property := tool.Spec.InputSchema.Properties[name]
+		var enumLabels []string
+		for _, value := range property.Enum {
+			if label, ok := value.(string); ok {
+				enumLabels = append(enumLabels, label)
+			} else {
+				encoded, _ := json.Marshal(value)
+				enumLabels = append(enumLabels, string(encoded))
+			}
+		}
 		fields = append(fields, ToolInputFieldProjection{
 			Name:        name,
 			Type:        property.Type,
 			Description: property.Description,
-			Enum:        append([]string(nil), property.Enum...),
+			Enum:        enumLabels,
 			Required:    hasRequired(required, name),
 		})
 	}
