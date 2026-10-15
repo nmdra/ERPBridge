@@ -8,7 +8,6 @@ starting implementation work.
 - [`Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md`](./active/Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md) — portable completion checkpoint for redacted operational knowledge records.
 - [`Plan-Live-E2E-Issue-Fixes.md`](./active/Plan-Live-E2E-Issue-Fixes.md) — remediation of the live E2E product gaps and fixture classifications.
 - [`Plan-API-Key-Header-Propagation.md`](./active/Plan-API-Key-Header-Propagation.md) — preserve registered upstream API-key headers during MCP tool execution.
-- [`Plan-Release-v0.5.0-alpha.3.md`](./active/Plan-Release-v0.5.0-alpha.3.md) — candidate audit, changelog backfill and cut, gates, live validation, and prerelease publication.
 
 ## Upcoming
 - [`Plan-MCP-Upgrade.md`](./upcoming/Plan-MCP-Upgrade.md) — deferred MCP
@@ -25,6 +24,7 @@ promotion to `active/`.
 
 ## Completed
 
+- [`[COMPLETED]Plan-Release-v0.5.0-alpha.3.md`](./completed/%5BCOMPLETED%5DPlan-Release-v0.5.0-alpha.3.md) — candidate audit, changelog backfill and cut, local/live gates, and prerelease publication.
 - [`[COMPLETED]Plan-Schema-Constraint-Preservation.md`](./completed/%5BCOMPLETED%5DPlan-Schema-Constraint-Preservation.md) — preserve typed enums and object boundaries through generation and both invocation paths; source fix only, no live rollout.
 
 - [`[COMPLETED]Plan-ToolPlane-Conformance-Evidence.md`](./completed/%5BCOMPLETED%5DPlan-ToolPlane-Conformance-Evidence.md) — approval-to-execution binding, revision snapshots, withdrawal authority, origin enforcement, and recovery evidence.
