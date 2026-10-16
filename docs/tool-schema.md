@@ -257,7 +257,7 @@ spec:
 ```
 
 Generated GET and HEAD tools default to a shared read-only cache with a
-five-minute TTL. Generated write methods default to `enabled: false`; review
+one-minute TTL. Generated write methods default to `enabled: false`; review
 and change these values only when the operation is safe to cache. Generated
 tools also include method-based annotation hints for all recognized HTTP
 methods. Unknown methods retain only the HTTP-backed open-world hint.

@@ -379,7 +379,7 @@ func (g *Generator) GenerateFromOpenAPI(ctx context.Context, api API, openapiURL
 	return tools, nil
 }
 
-const generatedReadCacheTTLSeconds = 300
+const generatedReadCacheTTLSeconds = 60
 
 func annotationsForHTTPMethod(method string) *mcp.ToolAnnotations {
 	annotations := &mcp.ToolAnnotations{OpenWorldHint: new(true)}

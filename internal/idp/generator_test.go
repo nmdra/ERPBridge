@@ -74,7 +74,7 @@ paths:
 		IdempotentHint:  new(true),
 		OpenWorldHint:   new(true),
 	}, tools[0].Spec.Annotations)
-	assert.Equal(t, &cache.Config{Enabled: true, TTLSeconds: 300, IsReadOnly: true, FlushOn: []string{}}, tools[0].Spec.Cache)
+	assert.Equal(t, &cache.Config{Enabled: true, TTLSeconds: 60, IsReadOnly: true, FlushOn: []string{}}, tools[0].Spec.Cache)
 
 	// Generation is pure. It must not create implicit sibling artifacts.
 	_, err = os.Stat(filepath.Join(tempDir, "finance"))
@@ -141,7 +141,7 @@ func TestGenerator_Generate(t *testing.T) {
 	assert.Equal(t, "A simple test", tool.Spec.Description.Short)
 	assert.Equal(t, []string{"Use when the user asks for: A simple test"}, tool.Spec.Description.WhenToUse)
 	assert.Equal(t, []string{"I need help with: A simple test"}, tool.Spec.Description.Examples)
-	assert.Equal(t, &cache.Config{Enabled: true, TTLSeconds: 300, IsReadOnly: true, FlushOn: []string{}}, tool.Spec.Cache)
+	assert.Equal(t, &cache.Config{Enabled: true, TTLSeconds: 60, IsReadOnly: true, FlushOn: []string{}}, tool.Spec.Cache)
 }
 
 func TestGenerator_GenerateSetsMethodAnnotations(t *testing.T) {
@@ -186,7 +186,7 @@ func TestGenerator_MethodAwareCacheDefaults(t *testing.T) {
 		tool, err := gen.Generate(API{Name: "head-check", Method: method})
 		require.NoError(t, err)
 		require.Equal(t, "HEAD", tool.Spec.Execution.Method)
-		require.Equal(t, &cache.Config{Enabled: true, TTLSeconds: 300, IsReadOnly: true, FlushOn: []string{}}, tool.Spec.Cache)
+		require.Equal(t, &cache.Config{Enabled: true, TTLSeconds: 60, IsReadOnly: true, FlushOn: []string{}}, tool.Spec.Cache)
 	}
 
 	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE"} {
