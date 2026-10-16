@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.0-alpha.6] - 2026-10-15
+
+### Changed
+
+- Default the generated read cache TTL to 60 seconds instead of 300 seconds. Generated GET and HEAD tools keep the shared read-only cache; the shorter TTL reduces stale ERP reads. Generated write methods still default to `enabled: false`.
+
 ## [v0.5.0-alpha.5] - 2026-10-16
 
 ### Fixed
@@ -513,7 +519,8 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
 - chore: prepare for versioning and release
 - chore: rename middleware to erpbridge-server
 
-[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.5...HEAD
+[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.6...HEAD
+[v0.5.0-alpha.6]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.5...v0.5.0-alpha.6
 [v0.5.0-alpha.5]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.4...v0.5.0-alpha.5
 [v0.5.0-alpha.4]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.3...v0.5.0-alpha.4
 [v0.5.0-alpha.3]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
