@@ -80,6 +80,9 @@ suggestions. They do not expose upstream response bodies or credentials.`,
 		cfg, err = config.Load()
 		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
+				if childSnapshotRequested() {
+					return contextChangedError()
+				}
 				return NewError(CodeNotFound, "CONTEXT_NOT_FOUND", err.Error(), "Run 'bridgectl context list' or select a configured context with --context.")
 			}
 			return fmt.Errorf("load config: %w", err)
@@ -91,6 +94,9 @@ suggestions. They do not expose upstream response bodies or credentials.`,
 		contextSettings, err := cfg.EffectiveContext()
 		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
+				if childSnapshotRequested() {
+					return contextChangedError()
+				}
 				return NewError(CodeNotFound, "CONTEXT_NOT_FOUND", err.Error(), "Run 'bridgectl context list' or select a configured context with --context.")
 			}
 			return err

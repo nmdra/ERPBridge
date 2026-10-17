@@ -69,9 +69,12 @@ type deploymentFixture struct {
 
 	mu           sync.Mutex
 	requests     []string
+	authHeaders  []string
 	probeSuccess bool
 	// blockReads delays read endpoints so transport cancellation can be tested.
 	blockReads time.Duration
+	// blockWrites delays write endpoints for the same purpose.
+	blockWrites time.Duration
 }
 
 func newDeploymentFixture(t *testing.T) *deploymentFixture {
@@ -133,9 +136,16 @@ func newDeploymentFixture(t *testing.T) *deploymentFixture {
 	fixture.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fixture.mu.Lock()
 		fixture.requests = append(fixture.requests, r.Method+" "+r.URL.Path)
+		fixture.authHeaders = append(fixture.authHeaders, r.Header.Get("Authorization"))
 		delay := fixture.blockReads
+		if r.Method != http.MethodGet {
+			delay = fixture.blockWrites
+		}
 		fixture.mu.Unlock()
-		if delay > 0 && r.Method == http.MethodGet {
+		if delay > 0 {
+			// Drain the body first, so the server observes a client disconnect
+			// while the handler is still waiting.
+			_, _ = io.Copy(io.Discard, r.Body)
 			// Stop as soon as the caller disconnects, so a cancelled child does
 			// not hold the fixture open for the whole delay.
 			select {
@@ -276,6 +286,22 @@ func writeContextConfigWith(t *testing.T, home string, endpoints map[string]stri
 	}
 	configPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(builder.String()), 0o600); err != nil { // #nosec G304 G703 -- test-owned temporary home
+		t.Fatalf("write config: %v", err)
+	}
+}
+
+// writeContextConfigWithToken writes one saved context that carries a literal
+// token, so a session can be checked for sending the pinned credential.
+func writeContextConfigWithToken(t *testing.T, home, endpoint, token string) {
+	t.Helper()
+	dir := filepath.Join(home, ".bridgectl")
+	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G304 G703 -- test-owned temporary home
+		t.Fatalf("create config directory: %v", err)
+	}
+	configPath := filepath.Join(dir, "config.yaml")
+	content := fmt.Sprintf("current-context: test\ncontexts:\n  test:\n    server: %s\n    mcp-server: %s\n    api-token: %s\n",
+		endpoint, endpoint, token)
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil { // #nosec G304 G703 -- test-owned temporary home
 		t.Fatalf("write config: %v", err)
 	}
 }
@@ -572,6 +598,8 @@ func TestRealChildGenerateFromRegisteredAPI(t *testing.T) {
 }
 
 func TestRealChildUnknownResourceIsNotFound(t *testing.T) {
+	// The child reports this with the recognized RESOURCE_NOT_FOUND code, so the
+	// adapter never has to read prose to classify it.
 	fixture := newDeploymentFixture(t)
 	session := realSession(t, fixture)
 
@@ -819,4 +847,11 @@ func newUnauthorizedFixture(t *testing.T) *httptest.Server {
 	}))
 	t.Cleanup(server.Close)
 	return server
+}
+
+// authorizationHeaders returns the Authorization header seen by the fixture.
+func (f *deploymentFixture) authorizationHeaders() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.authHeaders...)
 }

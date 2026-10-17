@@ -102,11 +102,10 @@ func TestChildEnvironmentPinsSessionAndRemovesInheritedCopies(t *testing.T) {
 	if !containsEntry(env, "ERP_PRIMARY_KEY=erp-secret") {
 		t.Fatal("required inherited credential source was dropped")
 	}
-	if !snapshot.ChildEnvironmentIsPinned(env) {
-		t.Fatal("ChildEnvironmentIsPinned reported false for a pinned environment")
-	}
-	if (Snapshot{ContextName: "other"}).ChildEnvironmentIsPinned(env) {
-		t.Fatal("ChildEnvironmentIsPinned accepted another snapshot")
+	// The child guard recomputes this value and compares it exactly, so the
+	// pinned environment must carry the same fingerprint.
+	if present[ChildSnapshotEnv] != ChildSnapshotEnv+"="+snapshot.Fingerprint() {
+		t.Fatal("the pinned environment does not carry the session fingerprint")
 	}
 }
 

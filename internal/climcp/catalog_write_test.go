@@ -2,6 +2,7 @@ package climcp
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -484,5 +485,173 @@ func TestCacheFlushReportsCounters(t *testing.T) {
 	data := decodeData[CacheFlushData](t, result.Data)
 	if data.Deleted != 12 || data.Target != "module:erp" || data.Verified {
 		t.Fatalf("flush data = %+v", data)
+	}
+}
+
+func TestStagedManifestsUseUniqueNames(t *testing.T) {
+	stager, err := NewStager()
+	if err != nil {
+		t.Fatalf("NewStager: %v", err)
+	}
+	t.Cleanup(func() { _ = stager.Cleanup() })
+
+	first, err := stager.Stage("manifest.json", []byte(`{"one":1}`))
+	if err != nil {
+		t.Fatalf("first stage: %v", err)
+	}
+	second, err := stager.Stage("manifest.json", []byte(`{"two":2}`))
+	if err != nil {
+		t.Fatalf("second stage: %v", err)
+	}
+	if first == second {
+		t.Fatalf("both calls staged the same path %q", first)
+	}
+	// The first file must survive the second stage, so a concurrent call cannot
+	// corrupt the input of an active one.
+	content, err := os.ReadFile(first) // #nosec G304 -- test-owned staging directory
+	if err != nil {
+		t.Fatalf("read first staged file: %v", err)
+	}
+	if string(content) != `{"one":1}` {
+		t.Fatalf("first staged file was overwritten: %s", content)
+	}
+}
+
+func TestApplyConfirmationFailureStagesNothing(t *testing.T) {
+	ic := testInvocationContext(t)
+	descriptor := descriptorNamed(t, "bridgectl_tool_apply")
+	args := validWriteArgs(t, "bridgectl_tool_apply")
+	args["confirmTarget"] = "not-the-target"
+
+	_, failure := descriptor.invoke(ic, args)
+	if failure == nil || failure.Error.Code != CodeConfirmationMismatch {
+		t.Fatalf("failure = %+v, want a confirmation mismatch", failure)
+	}
+	if entries := stagedFileCount(t, stagingDirectory(t, ic)); entries != 0 {
+		t.Fatalf("%d manifest file(s) were staged before confirmation passed", entries)
+	}
+}
+
+func TestInvalidManifestStagesNothing(t *testing.T) {
+	ic := testInvocationContext(t)
+	descriptor := descriptorNamed(t, "bridgectl_tool_validate")
+	_, failure := descriptor.invoke(ic, map[string]any{"manifest": map[string]any{"kind": kindPlugin}})
+	if failure == nil {
+		t.Fatal("an invalid manifest was accepted")
+	}
+	if entries := stagedFileCount(t, stagingDirectory(t, ic)); entries != 0 {
+		t.Fatalf("%d manifest file(s) were staged for an invalid manifest", entries)
+	}
+}
+
+// stagedFileCount counts manifests written to one staging directory.
+func stagedFileCount(t *testing.T, directory string) int {
+	t.Helper()
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return 0
+	}
+	return len(entries)
+}
+
+// stagingDirectory stages one probe file to learn the private directory of an
+// invocation context, then removes the probe again.
+func stagingDirectory(t *testing.T, ic invocationContext) string {
+	t.Helper()
+	probe, err := ic.stage("probe.tmp", []byte("{}"))
+	if err != nil {
+		t.Fatalf("stage probe: %v", err)
+	}
+	directory := filepath.Dir(probe)
+	_ = os.Remove(probe)
+	return directory
+}
+
+func TestWriteSessionRefusesConcurrentSecondCall(t *testing.T) {
+	session := sessionWithGroups(t, GroupResources)
+	if !session.runner.Busy() {
+		descriptor := descriptorNamed(t, "bridgectl_tool_apply")
+		_, failure := descriptor.invoke(testInvocationContext(t), validWriteArgs(t, "bridgectl_tool_apply"))
+		if failure != nil {
+			t.Fatalf("the fixture should be valid: %s", failure.Error.Message)
+		}
+	}
+}
+
+func TestRegistrationAcceptsExplicitNoAuthentication(t *testing.T) {
+	ic := testInvocationContext(t)
+	descriptor := descriptorNamed(t, "bridgectl_api_register")
+	args := validWriteArgs(t, "bridgectl_api_register")
+	args["authType"] = ""
+
+	inv, failure := descriptor.invoke(ic, args)
+	if failure != nil {
+		t.Fatalf("an explicit empty authType was rejected: %s", failure.Error.Message)
+	}
+	for _, argument := range inv.argv {
+		if argument == "--auth-type=" {
+			return
+		}
+	}
+	t.Fatalf("argv = %v, want an empty auth type", inv.argv)
+}
+
+func TestWriteEnvelopeNeverImpliesNoEffect(t *testing.T) {
+	session := sessionWithGroups(t, GroupResources)
+	descriptor := descriptorNamed(t, "bridgectl_tool_apply")
+
+	// A remote rejection can arrive with exit code 2 (the CLI maps remote 400
+	// and validation failures to its bad-arguments code) after the handler ran.
+	envelope := Outcome{ExitCode: 2, Stdout: []byte(`{"error":"VALIDATION_FAILED","message":"remote detail"}`)}
+	result := session.classifyWriteFailure(descriptor, envelope, nil)
+	if result.Error.Code != CodeOutcomeUnknown {
+		t.Fatalf("a remote rejection returned %q, want %q", result.Error.Code, CodeOutcomeUnknown)
+	}
+
+	// Without an envelope the failure is a local parse rejection, so no handler
+	// can have run.
+	plain := Outcome{ExitCode: 2}
+	result = session.classifyWriteFailure(descriptor, plain, nil)
+	if result.Error.Code != CodeInvalidArguments {
+		t.Fatalf("a parse rejection returned %q, want %q", result.Error.Code, CodeInvalidArguments)
+	}
+}
+
+func TestMissingPinnedContextReportsContextChanged(t *testing.T) {
+	session := sessionWithGroups(t, GroupResources)
+	descriptor := descriptorNamed(t, "bridgectl_tool_apply")
+	outcome := Outcome{ExitCode: 7, Stdout: []byte(`{"error":"MCP_CONTEXT_CHANGED"}`)}
+	result := session.classifyWriteFailure(descriptor, outcome, nil)
+	if result.Error.Code != CodeContextChanged {
+		t.Fatalf("code = %q, want %q", result.Error.Code, CodeContextChanged)
+	}
+
+	read := descriptorNamed(t, "bridgectl_api_list")
+	if got := session.classifyExitFailure(read, outcome); got.Error.Code != CodeContextChanged {
+		t.Fatalf("read code = %q, want %q", got.Error.Code, CodeContextChanged)
+	}
+}
+
+func TestMalformedInventoryIsNotAnEmptySuccess(t *testing.T) {
+	cases := []struct {
+		name    string
+		project func([]byte) (any, error)
+		stdout  string
+	}{
+		{"context list", projectContextList, `{}`},
+		{"api list", projectAPIList, `{}`},
+		{"tool list", projectToolList, `{}`},
+		{"plugin list", projectPluginList, `{}`},
+		{"binding list", projectBindingList, `{}`},
+		{"token list", projectTokenList, `{}`},
+		{"cache stats", projectCacheStats, `{}`},
+		{"probe", projectAPITest, `{}`},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, err := testCase.project([]byte(testCase.stdout)); err == nil {
+				t.Fatal("an empty payload was accepted as a successful observation")
+			}
+		})
 	}
 }

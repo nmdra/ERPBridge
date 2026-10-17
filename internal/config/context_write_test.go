@@ -168,22 +168,41 @@ func TestSetCurrentContextRefusesExternalChange(t *testing.T) {
 
 func TestSetCurrentContextRefusesSymlink(t *testing.T) {
 	home := withConfigHome(t)
-	realPath := writeRawConfig(t, home)
-	linkPath := filepath.Join(home, ".bridgectl", "link.yaml")
-	if err := os.Symlink(realPath, linkPath); err != nil {
+	directory := filepath.Join(home, ".bridgectl")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatalf("create config directory: %v", err)
+	}
+	target := filepath.Join(directory, "target.yaml")
+	if err := os.WriteFile(target, []byte(twoContextConfig), 0o600); err != nil {
+		t.Fatalf("write target config: %v", err)
+	}
+	configPath := filepath.Join(directory, "config.yaml")
+	if err := os.Symlink(target, configPath); err != nil {
 		t.Skipf("symlinks are unavailable: %v", err)
 	}
-	t.Setenv("HOME", filepath.Join(home, "unused"))
 
-	// Point the resolution at the symlink by replacing the real config path.
-	if err := os.Remove(realPath); err != nil {
-		t.Fatalf("remove config: %v", err)
+	err := SetCurrentContext("staging")
+	if err == nil {
+		t.Fatal("a configuration symlink was accepted")
 	}
-	if err := os.Symlink(filepath.Join(home, ".bridgectl", "target.yaml"), realPath); err != nil {
-		t.Fatalf("create config symlink: %v", err)
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("error = %v, want a symlink refusal", err)
 	}
-	if err := SetCurrentContext("staging"); err == nil {
-		t.Fatal("a configuration symlink was replaced")
+
+	// The symlink and its target must both survive untouched.
+	info, statErr := os.Lstat(configPath)
+	if statErr != nil {
+		t.Fatalf("lstat config: %v", statErr)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("the configuration symlink was replaced by a regular file")
+	}
+	content, readErr := os.ReadFile(target) // #nosec G304 -- test-owned temporary home
+	if readErr != nil {
+		t.Fatalf("read target: %v", readErr)
+	}
+	if !strings.Contains(string(content), "current-context: local") {
+		t.Fatalf("the symlink target was modified:\n%s", content)
 	}
 }
 

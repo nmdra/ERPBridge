@@ -533,3 +533,109 @@ func TestStdioAcceptanceSignalShutdown(t *testing.T) {
 		t.Fatal("the management server did not stop within the shutdown budget")
 	}
 }
+
+func TestStdioAcceptanceInterruptedWriteReportsUnknownOutcome(t *testing.T) {
+	fixture := newDeploymentFixture(t)
+	fixture.blockWrites = 30 * time.Second
+	session := startSession(t, fixture, string(GroupResources))
+	session.initialize(t)
+
+	payload, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 11, "method": "tools/call",
+		"params": map[string]any{"name": "bridgectl_tool_apply", "arguments": validWriteArgs(t, "bridgectl_tool_apply")},
+	})
+	if err != nil {
+		t.Fatalf("encode tool call: %v", err)
+	}
+	session.send(t, string(payload))
+
+	// Wait until the deployment has received the write, then interrupt it.
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) && len(fixture.methods()) == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(fixture.methods()) == 0 {
+		t.Fatal("the write never reached the deployment")
+	}
+
+	start := time.Now()
+	session.send(t, `{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":11,"reason":"acceptance"}}`)
+	response := session.response(t, 11)
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("interrupting the write took %s", elapsed)
+	}
+
+	result, ok := response["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("interrupted write returned no result: %v", response)
+	}
+	raw, err := json.Marshal(result["structuredContent"])
+	if err != nil {
+		t.Fatalf("marshal structured content: %v", err)
+	}
+	var envelope Result
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("decode envelope: %v", err)
+	}
+	if envelope.Success {
+		t.Fatal("an interrupted write was reported as success")
+	}
+	if envelope.Error.Code != CodeOutcomeUnknown {
+		t.Fatalf("code = %q, want %q", envelope.Error.Code, CodeOutcomeUnknown)
+	}
+	if envelope.Error.Cause == "" {
+		t.Fatal("an unknown outcome carried no cause")
+	}
+	if !strings.Contains(envelope.Error.Suggestion, "Read the target resource") {
+		t.Fatalf("suggestion = %q, want read-back guidance", envelope.Error.Suggestion)
+	}
+	if strings.Contains(string(raw), "roll") {
+		t.Fatalf("the result claims a rollback: %s", raw)
+	}
+
+	// The session stays usable, and an independent read observes the deployment.
+	readback, ok := session.callTool(t, 12, "bridgectl_tool_get", map[string]any{"name": "list_items"})
+	if !ok || !readback.Success {
+		t.Fatalf("readback after an interrupted write failed: %+v", readback.Error)
+	}
+
+	_ = session.closeInput(t)
+}
+
+func TestStdioAcceptanceUsesThePinnedCredential(t *testing.T) {
+	fixture := newDeploymentFixture(t)
+	home := t.TempDir()
+	writeContextConfigWithToken(t, home, fixture.server.URL, "pinned-acceptance-token")
+
+	command := exec.Command(realCLI(t), "mcp", "--stdio", "--context", "test") // #nosec G204 G702 -- fixed test argv
+	command.Env = acceptanceEnvironment(t, home)
+	stdin, err := command.StdinPipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
+	}
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	stderr := &syncBuffer{}
+	command.Stderr = stderr
+	if err := command.Start(); err != nil {
+		t.Fatalf("start management server: %v", err)
+	}
+	session := &stdioSession{command: command, stdin: stdin, reader: bufio.NewReader(stdout), stderr: stderr}
+	t.Cleanup(session.terminate)
+
+	session.initialize(t)
+	if _, ok := session.callTool(t, 2, "bridgectl_cache_stats", nil); !ok {
+		t.Fatal("cache stats returned a protocol error")
+	}
+	headers := fixture.authorizationHeaders()
+	if len(headers) == 0 {
+		t.Fatal("the deployment saw no request")
+	}
+	if headers[0] != "Bearer pinned-acceptance-token" {
+		t.Fatalf("Authorization = %q, want the pinned credential", headers[0])
+	}
+
+	_ = session.closeInput(t)
+}

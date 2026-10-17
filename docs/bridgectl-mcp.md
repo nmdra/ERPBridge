@@ -99,7 +99,11 @@ listed below.
 | `bridgectl_cache_flush` | `destructive` | `tool:<name>`, `module:<name>`, or `all` |
 | `bridgectl_context_set` | `context` | the requested context name |
 
-A mismatch performs no child execution. `bridgectl_cache_flush` accepts exactly
+Registration accepts an explicit empty `authType`, which registers an API with
+no authentication.
+
+A mismatch performs no child execution, and nothing is staged before the
+confirmation passes. `bridgectl_cache_flush` accepts exactly
 one selector: `tool`, `module`, or `all`. `bridgectl_tool_delete`,
 `bridgectl_plugin_delete`, and `bridgectl_binding_delete` deactivate by default
 and only delete permanently when `hard` is true.
@@ -182,7 +186,9 @@ cannot inject an option.
 - Manifests are one inline JSON object. Paths, directories, URLs, YAML streams,
 and arrays are rejected.
 - Manifest tools do not accept embedded credential values. They reject a
-`kind` that does not match the tool.
+`kind` that does not match the tool, an endpoint with credentials in its
+userinfo or query, and a concrete default or example for a credential-like
+schema property. A schema declaration is still allowed.
 - Remote OpenAPI fetch, `$ref` resolution, output directories, and file writes
 stay in the manual CLI.
 

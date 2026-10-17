@@ -329,7 +329,9 @@ func validToolManifest() map[string]any {
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"password": map[string]any{"type": "string", "default": "must-not-be-returned"},
+					// A declaration is legal; a concrete default for a
+					// credential-like property would not be.
+					"password": map[string]any{"type": "string", "description": "ERP password"},
 				},
 			},
 		},
@@ -357,6 +359,34 @@ func TestManifestToolsRejectUnsafeInput(t *testing.T) {
 			"kind":     kindPlugin,
 			"metadata": map[string]any{"name": "redact", "version": "1.0.0"},
 			"spec":     map[string]any{"auth": map[string]any{"token": "canary-secret-value"}},
+		}},
+		{"literal default for a credential property", "bridgectl_tool_validate", map[string]any{
+			"kind":     kindTool,
+			"metadata": map[string]any{"name": "list_items", "version": "1.0.0"},
+			"spec": map[string]any{
+				"execution": map[string]any{"method": "GET", "endpoint": "https://erp.internal/api/items"},
+				"inputSchema": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"password": map[string]any{"type": "string", "default": "canary-secret-value"},
+					},
+				},
+			},
+		}},
+		{"credential-bearing endpoint", "bridgectl_tool_validate", map[string]any{
+			"kind":     kindTool,
+			"metadata": map[string]any{"name": "list_items", "version": "1.0.0"},
+			"spec": map[string]any{
+				"execution": map[string]any{"method": "GET", "endpoint": "https://user:canary-secret-value@erp.internal/api"}, // #nosec G101 -- canary userinfo
+			},
+		}},
+		{"query-bearing endpoint", "bridgectl_plugin_validate", map[string]any{
+			"kind":     kindPlugin,
+			"metadata": map[string]any{"name": "redact", "version": "2.0.0"},
+			"spec":     map[string]any{"endpoint": "https://plugins.internal/process?token=canary-secret-value"},
+		}},
+		{"wrong kind without a kind field", "bridgectl_binding_validate", map[string]any{
+			"metadata": map[string]any{"name": "orders-redaction"},
 		}},
 		{"oversized manifest", "bridgectl_tool_validate", map[string]any{
 			"kind":        kindTool,

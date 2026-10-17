@@ -59,6 +59,9 @@ type Outcome struct {
 	OutputLimited bool
 }
 
+// Busy reports whether a child currently holds the execution slot.
+func (r *Runner) Busy() bool { return r.active.Load() }
+
 // Runner executes one child at a time and captures bounded output.
 type Runner struct {
 	// Executable is the absolute path of the binary to run.
@@ -199,10 +202,13 @@ func (b *limitedBuffer) Bytes() []byte {
 	return append([]byte(nil), b.buf.Bytes()...)
 }
 
-// Stager owns the private directory used for staged manifests.
+// Stager owns the private directory used for staged manifests. Each stage call
+// gets a unique name, so a concurrent call can never overwrite or remove the
+// file another call is using.
 type Stager struct {
-	mu  sync.Mutex
-	dir string
+	mu     sync.Mutex
+	dir    string
+	serial uint64
 }
 
 // NewStager creates a private staging directory.
@@ -239,7 +245,8 @@ func (s *Stager) Stage(name string, data []byte) (string, error) {
 	if name == "" || filepath.Base(name) != name || name == "." || name == ".." {
 		return "", fmt.Errorf("climcp: invalid staging name %q", name)
 	}
-	path := filepath.Join(s.dir, name)
+	s.serial++
+	path := filepath.Join(s.dir, fmt.Sprintf("%04d-%s", s.serial, name))
 	if err := os.WriteFile(path, data, stagingFilePerm); err != nil {
 		return "", fmt.Errorf("stage %s: %w", name, err)
 	}

@@ -104,9 +104,6 @@ type descriptor struct {
 	// localValidation marks a tool whose non-zero exit means the submitted
 	// resource failed local validation rather than an operational failure.
 	localValidation bool
-	// namedLookup marks a tool that reads one named resource, so the CLI's
-	// recognized "not found" outcome maps to a precise result.
-	namedLookup bool
 	// additionalGroup returns an extra startup group this call requires.
 	additionalGroup func(args map[string]any) WriteGroup
 	// tool is the advertised schema.
@@ -149,6 +146,15 @@ func (s *Server) dispatch(ctx context.Context, d descriptor, args map[string]any
 				"Restart the management MCP process with every required --allow-write group.")
 			return failure.callToolResult()
 		}
+	}
+
+	// Refuse a concurrent call before it validates or stages anything. The
+	// runner repeats this check authoritatively when it takes the slot.
+	if s.runner.Busy() {
+		busy := NewFailure(d.name, s.snapshot.ContextName, CodeBusy,
+			"another management operation is already running",
+			"Retry after the current operation finishes.")
+		return busy.callToolResult()
 	}
 
 	var stagedPath string
@@ -245,14 +251,19 @@ func (s *Server) classifyWriteFailure(d descriptor, outcome Outcome, err error) 
 			"Run bridgectl directly to diagnose the local environment.")
 	}
 
-	if code, ok := childErrorCode(outcome.Stdout, outcome.Stderr); ok && code == childCodeContextChanged {
-		// The child refused before its handler ran.
-		return NewFailure(d.name, s.snapshot.ContextName, CodeContextChanged,
-			"the session selection no longer matches the saved configuration",
-			"Restart the management MCP process to adopt the changed context, endpoint, or credential.")
+	if code, recognized := childErrorCode(outcome.Stdout, outcome.Stderr); recognized {
+		if code == childCodeContextChanged {
+			// The child refused before its handler ran.
+			return NewFailure(d.name, s.snapshot.ContextName, CodeContextChanged,
+				"the session selection no longer matches the saved configuration",
+				"Restart the management MCP process to adopt the changed context, endpoint, or credential.")
+		}
+		// The deployment answered, so a change may already be applied. An
+		// envelope never proves that a write had no effect.
+		return s.outcomeUnknown(d, "child_failed")
 	}
 	if outcome.ExitCode == exitCodeBadArguments {
-		// The child rejected its own argument vector before running a handler.
+		// A flag parse failure with no envelope means no handler ran.
 		return NewFailure(d.name, s.snapshot.ContextName, CodeInvalidArguments,
 			"the child rejected its arguments",
 			"Correct the input and retry.")
@@ -299,11 +310,6 @@ func (s *Server) classifyExitFailure(d descriptor, outcome Outcome) *Result {
 		return NewFailure(d.name, s.snapshot.ContextName, CodeInvalidArguments,
 			"the submitted resource failed local validation",
 			"Run bridgectl validate with the same file to see the exact reason.")
-	}
-	if d.namedLookup && outcome.ExitCode != 0 && strings.Contains(string(outcome.Stderr), notFoundPhrase) {
-		return NewFailure(d.name, s.snapshot.ContextName, CodeNotFound,
-			"the requested resource was not found",
-			"Inspect the resource identity and retry.")
 	}
 	if mapped, known := exitCodeFailures[outcome.ExitCode]; known {
 		return NewFailure(d.name, s.snapshot.ContextName, mapped.code, mapped.message, mapped.suggestion)
@@ -436,73 +442,109 @@ func (ic invocationContext) versionedIdentifier(args map[string]any) (string, *R
 // Manifest validation
 // ---------------------------------------------------------------------------
 
-// stagedManifest is a validated manifest that has been written to the private
-// staging directory.
-type stagedManifest struct {
-	path    string
+// validatedManifest is a manifest that passed local validation and has not been
+// written anywhere.
+type validatedManifest struct {
+	encoded []byte
 	kind    string
 	name    string
 	version string
 }
 
-// prepareManifest validates one inline resource manifest and stages it for the
-// child. Validation happens before staging, so an invalid or credential-bearing
-// document never reaches the filesystem.
-func (ic invocationContext) prepareManifest(args map[string]any, expectedKind string) (stagedManifest, *Result) {
+// stageManifest writes a validated manifest to the private staging directory.
+// Staging happens only after policy checks pass.
+func (ic invocationContext) stageManifest(manifest validatedManifest) (string, *Result) {
+	path, err := ic.stage("manifest.json", manifest.encoded)
+	if err != nil {
+		return "", ic.fail(CodeInternal,
+			"the manifest could not be staged for validation",
+			"Check that the local temporary directory is writable.")
+	}
+	return path, nil
+}
+
+// validateManifest validates one inline resource manifest. Nothing is written to
+// disk here, so an invalid or credential-bearing document never reaches the
+// filesystem.
+func (ic invocationContext) validateManifest(args map[string]any, expectedKind string) (validatedManifest, *Result) {
 	raw, present := args["manifest"]
 	if !present || raw == nil {
-		return stagedManifest{}, ic.fail(CodeInvalidArguments,
+		return validatedManifest{}, ic.fail(CodeInvalidArguments,
 			"manifest is required",
 			"Provide one inline resource object.")
 	}
 	document, ok := raw.(map[string]any)
 	if !ok {
-		return stagedManifest{}, ic.fail(CodeInvalidArguments,
+		return validatedManifest{}, ic.fail(CodeInvalidArguments,
 			"manifest must be a single JSON object",
 			"Provide one inline object, not a path, URL, array, or list.")
 	}
 
 	kind, _ := document["kind"].(string)
-	if kind != "" && kind != expectedKind {
-		return stagedManifest{}, ic.fail(CodeInvalidArguments,
+	if kind != expectedKind {
+		return validatedManifest{}, ic.fail(CodeInvalidArguments,
 			fmt.Sprintf("manifest kind must be %s", expectedKind),
 			"Send the resource kind this tool accepts.")
 	}
 	name, version := manifestIdentity(document)
 	if name == "" {
-		return stagedManifest{}, ic.fail(CodeInvalidArguments,
+		return validatedManifest{}, ic.fail(CodeInvalidArguments,
 			"manifest.metadata.name is required",
 			"Provide the resource name inside the manifest.")
 	}
 	if problem := identifierProblem(name, maxIdentifierBytes); problem != "" {
-		return stagedManifest{}, ic.fail(CodeInvalidArguments,
+		return validatedManifest{}, ic.fail(CodeInvalidArguments,
 			"manifest.metadata.name "+problem,
 			"Correct the manifest and retry.")
 	}
-	if scanCredentialValues(document, false) {
-		return stagedManifest{}, ic.fail(CodeInvalidArguments,
+	if scanCredentialValues(document, false, "") {
+		return validatedManifest{}, ic.fail(CodeInvalidArguments,
 			"the manifest contains a literal credential value",
 			"Reference credentials by logical name only; never send credential values.")
+	}
+	if problem := manifestEndpointProblem(document, expectedKind); problem != "" {
+		return validatedManifest{}, ic.fail(CodeInvalidArguments,
+			problem,
+			"Provide an endpoint without embedded credentials or credentials in a query.")
 	}
 
 	encoded, err := json.Marshal(document)
 	if err != nil {
-		return stagedManifest{}, ic.fail(CodeInvalidArguments,
+		return validatedManifest{}, ic.fail(CodeInvalidArguments,
 			"the manifest could not be encoded",
 			"Correct the manifest and retry.")
 	}
 	if len(encoded) > MaxManifestBytes {
-		return stagedManifest{}, ic.fail(CodeInvalidArguments,
+		return validatedManifest{}, ic.fail(CodeInvalidArguments,
 			fmt.Sprintf("the manifest exceeds %d bytes", MaxManifestBytes),
 			"Send a smaller resource definition.")
 	}
-	path, err := ic.stage("manifest.json", encoded)
-	if err != nil {
-		return stagedManifest{}, ic.fail(CodeInternal,
-			"the manifest could not be staged for validation",
-			"Check that the local temporary directory is writable.")
+	return validatedManifest{encoded: encoded, kind: expectedKind, name: name, version: version}, nil
+}
+
+// manifestEndpointProblem rejects a submitted endpoint that could carry
+// credentials in its userinfo or query.
+func manifestEndpointProblem(document map[string]any, kind string) string {
+	spec, ok := document["spec"].(map[string]any)
+	if !ok {
+		return ""
 	}
-	return stagedManifest{path: path, kind: expectedKind, name: name, version: version}, nil
+	endpoint := ""
+	switch kind {
+	case kindTool:
+		if execution, ok := spec["execution"].(map[string]any); ok {
+			endpoint, _ = execution["endpoint"].(string)
+		}
+	case kindPlugin:
+		endpoint, _ = spec["endpoint"].(string)
+	}
+	if endpoint == "" {
+		return ""
+	}
+	if problem := endpointProblem(endpoint); problem != "" {
+		return "manifest endpoint " + problem
+	}
+	return ""
 }
 
 // manifestIdentity reads the resource identity without decoding the whole
@@ -516,10 +558,6 @@ func manifestIdentity(document map[string]any) (name, version string) {
 	version, _ = metadata["version"].(string)
 	return name, version
 }
-
-// notFoundPhrase is the CLI's recognized missing-resource wording. A reworded
-// message degrades to a generic failure rather than a wrong not-found result.
-const notFoundPhrase = " not found"
 
 // childCodeContextChanged is the recognized child precondition code.
 const childCodeContextChanged = "MCP_CONTEXT_CHANGED"
@@ -541,33 +579,52 @@ var credentialValueKeys = map[string]bool{
 }
 
 // schemeKeys are subtrees whose property names are declarations, not values.
-var schemeKeys = map[string]bool{"inputschema": true, "outputschema": true, "properties": true}
+var schemeKeys = map[string]bool{"inputschema": true, "outputschema": true}
 
-// scanCredentialValues reports the path of the first non-empty credential-like
-// value found outside a schema declaration.
-func scanCredentialValues(node any, insideSchema bool) bool {
+// schemaValueKeys are the keys inside a schema subtree that carry a concrete
+// value rather than a declaration.
+var schemaValueKeys = map[string]bool{"default": true, "example": true, "examples": true, "const": true}
+
+// scanCredentialValues reports whether the document carries a literal credential
+// value. Property names and types inside a schema are declarations and stay
+// legal; a concrete default, example, or constant for a credential-like property
+// is a value and is rejected.
+func scanCredentialValues(node any, insideSchema bool, propertyName string) bool {
 	switch typed := node.(type) {
 	case map[string]any:
 		for key, value := range typed {
 			lower := strings.ToLower(key)
+			if lower == "properties" {
+				properties, _ := value.(map[string]any)
+				for name, schema := range properties {
+					if scanCredentialValues(schema, true, name) {
+						return true
+					}
+				}
+				continue
+			}
 			if schemeKeys[lower] {
-				if scanCredentialValues(value, true) {
+				if scanCredentialValues(value, true, propertyName) {
 					return true
 				}
 				continue
 			}
-			if !insideSchema && credentialValueKeys[lower] {
-				if text, isString := value.(string); isString && text != "" {
+			if text, isString := value.(string); isString && text != "" {
+				if insideSchema {
+					if schemaValueKeys[lower] && credentialValueKeys[strings.ToLower(propertyName)] {
+						return true
+					}
+				} else if credentialValueKeys[lower] {
 					return true
 				}
 			}
-			if scanCredentialValues(value, insideSchema) {
+			if scanCredentialValues(value, insideSchema, propertyName) {
 				return true
 			}
 		}
 	case []any:
 		for _, entry := range typed {
-			if scanCredentialValues(entry, insideSchema) {
+			if scanCredentialValues(entry, insideSchema, propertyName) {
 				return true
 			}
 		}
@@ -610,8 +667,9 @@ var catalogue = []descriptor{
 
 // registerMethods and registerAuthTypes are the accepted registration values.
 var (
-	registerMethods   = []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
-	registerAuthTypes = []string{"api-key", "bearer", "basic"}
+	registerMethods = []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	// An empty value means the registration carries no authentication.
+	registerAuthTypes = []string{"", "api-key", "bearer", "basic"}
 )
 
 const (
@@ -656,9 +714,8 @@ var apiListDescriptor = descriptor{
 }
 
 var toolGetDescriptor = descriptor{
-	name:        "bridgectl_tool_get",
-	effect:      effectRead,
-	namedLookup: true,
+	name:   "bridgectl_tool_get",
+	effect: effectRead,
 	tool: mcp.NewTool("bridgectl_tool_get",
 		mcp.WithDescription("Read tool resources from the pinned deployment. Omit name to list; provide name (and optionally version) to read one. The result is a redacted inspection view."),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -725,9 +782,8 @@ var toolValidateDescriptor = descriptor{
 }
 
 var pluginGetDescriptor = descriptor{
-	name:        "bridgectl_plugin_get",
-	effect:      effectRead,
-	namedLookup: true,
+	name:   "bridgectl_plugin_get",
+	effect: effectRead,
 	tool: mcp.NewTool("bridgectl_plugin_get",
 		mcp.WithDescription("Read external plugin resources from the pinned deployment. Omit name to list; provide name and version to read one. The result is a redacted inspection view."),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -774,9 +830,8 @@ var pluginValidateDescriptor = descriptor{
 }
 
 var bindingGetDescriptor = descriptor{
-	name:        "bridgectl_binding_get",
-	effect:      effectRead,
-	namedLookup: true,
+	name:   "bridgectl_binding_get",
+	effect: effectRead,
 	tool: mcp.NewTool("bridgectl_binding_get",
 		mcp.WithDescription("Read external plugin bindings from the pinned deployment. Omit name to list; provide name to read one. The result is a redacted inspection view."),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -940,7 +995,7 @@ func applyInvocation(prefix []string, kind string) func(invocationContext, map[s
 		if failure := ic.rejectUnknown(args, "manifest", "confirmContext", "confirmTarget"); failure != nil {
 			return invocation{}, failure
 		}
-		manifest, failure := ic.prepareManifest(args, kind)
+		manifest, failure := ic.validateManifest(args, kind)
 		if failure != nil {
 			return invocation{}, failure
 		}
@@ -948,7 +1003,11 @@ func applyInvocation(prefix []string, kind string) func(invocationContext, map[s
 		if failure := ic.requireTarget(args, target); failure != nil {
 			return invocation{}, failure
 		}
-		argv := append(append([]string{}, prefix...), flagFile, manifest.path)
+		path, failure := ic.stageManifest(manifest)
+		if failure != nil {
+			return invocation{}, failure
+		}
+		argv := append(append([]string{}, prefix...), flagFile, path)
 		return invocation{
 			argv:    argv,
 			project: func([]byte) (any, error) { return commandCompleted(target), nil },
@@ -1021,12 +1080,13 @@ var apiRegisterDescriptor = descriptor{
 				"method is not one of the accepted HTTP methods",
 				"Use one of "+strings.Join(registerMethods, ", ")+".")
 		}
-		authType, failure := ic.optionalString(args, "authType", maxIdentifierBytes)
-		if failure != nil {
-			return invocation{}, failure
-		}
-		if authType == "" {
-			authType = "api-key"
+		authType := "api-key"
+		if raw, present := args["authType"]; present && raw != nil {
+			value, isString := raw.(string)
+			if !isString {
+				return invocation{}, ic.fail(CodeInvalidArguments, "authType must be a string", "Correct the argument and retry.")
+			}
+			authType = value
 		}
 		if !slices.Contains(registerAuthTypes, authType) {
 			return invocation{}, ic.fail(CodeInvalidArguments,
@@ -1407,7 +1467,10 @@ var cacheFlushDescriptor = descriptor{
 				if err := decodeChildJSON(stdout, &wire); err != nil {
 					return nil, err
 				}
-				return CacheFlushData{Target: target, Deleted: wire.Deleted, Status: wire.Status, Verified: false}, nil
+				if wire.Deleted == nil {
+					return nil, errors.New("flush result has no deleted counter")
+				}
+				return CacheFlushData{Target: target, Deleted: *wire.Deleted, Status: wire.Status, Verified: false}, nil
 			},
 		}, nil
 	},
@@ -1451,11 +1514,15 @@ func manifestValidator(prefix []string, kind string) func(invocationContext, map
 		if failure := ic.rejectUnknown(args, "manifest"); failure != nil {
 			return invocation{}, failure
 		}
-		manifest, failure := ic.prepareManifest(args, kind)
+		manifest, failure := ic.validateManifest(args, kind)
 		if failure != nil {
 			return invocation{}, failure
 		}
-		argv := append(append([]string{}, prefix...), "-f", manifest.path)
+		path, failure := ic.stageManifest(manifest)
+		if failure != nil {
+			return invocation{}, failure
+		}
+		argv := append(append([]string{}, prefix...), "-f", path)
 		return invocation{
 			argv: argv,
 			project: func([]byte) (any, error) {
@@ -1482,13 +1549,23 @@ func projectGeneratedTool(stdout []byte) (any, error) {
 	if err := json.Unmarshal([]byte(trimmed), &document); err != nil {
 		return nil, fmt.Errorf("decode generated manifest: %w", err)
 	}
-	if scanCredentialValues(document, false) {
-		return nil, errors.New("generated manifest contains a literal credential value")
+	kind, _ := document["kind"].(string)
+	if kind != kindTool {
+		return nil, fmt.Errorf("generated manifest kind is %q, want %q", kind, kindTool)
 	}
-	if endpoint, ok := generatedEndpoint(document); ok {
-		if problem := endpointProblem(endpoint); problem != "" {
-			return nil, errors.New(problem)
-		}
+	name, _ := manifestIdentity(document)
+	if name == "" {
+		return nil, errors.New("generated manifest has no metadata.name")
+	}
+	endpoint, ok := generatedEndpoint(document)
+	if !ok {
+		return nil, errors.New("generated manifest has no execution endpoint")
+	}
+	if problem := endpointProblem(endpoint); problem != "" {
+		return nil, errors.New(problem)
+	}
+	if scanCredentialValues(document, false, "") {
+		return nil, errors.New("generated manifest contains a literal credential value")
 	}
 	return GenerateData{Manifests: []json.RawMessage{json.RawMessage(trimmed)}}, nil
 }

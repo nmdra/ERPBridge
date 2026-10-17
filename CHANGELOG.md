@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caller reads the target back instead of assuming the change did not happen.
   Only an argument vector the child rejects before running, or the session
   `context_changed` precondition, reports a specific failure.
+- Accept an explicit empty `authType` in `bridgectl_api_register`, which
+  registers an API that carries no authentication.
 - Keep `bridgectl context set` from rewriting the whole configuration. It now
   edits the raw file, so environment placeholders, stored values, and unknown
   fields survive, the replacement is written with mode 0600, and a concurrent
@@ -58,6 +60,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stage a management manifest under a unique private name and only after policy
+  checks pass, so a concurrent call cannot overwrite or remove the input of an
+  active one.
+- Reject a submitted manifest whose endpoint carries credentials in its userinfo
+  or query, and a concrete default or example for a credential-like schema
+  property, before anything reaches disk. A schema declaration such as a
+  property named `password` stays legal.
+- Report a launched write as `outcome_unknown` whenever the deployment answered,
+  because a remote rejection arrives with the same exit code as a local argument
+  rejection, and only an envelope-free rejection proves that nothing ran.
+- Report a management child that can no longer resolve its pinned context as
+  `context_changed`, for reads and writes alike, instead of a generic
+  context-not-found failure.
+- Reject an inventory, statistics, probe, or flush payload that omits its typed
+  fields, instead of reporting an empty or zeroed success.
+- Write the replacement `bridgectl` configuration with mode 0600 in every case,
+  instead of preserving a wider existing mode.
+- Make `bridgectl tool get`, `plugin get`, and `plugin binding get` report a
+  missing named resource with the CLI's recognized not-found error code instead
+  of a generic failure, so an agent can classify it without reading prose.
 - Make `bridgectl tool get` honour its own `--output` flag when listing tools.
   The command defines its own flag, which shadows the global one, so the list
   path previously rendered a table even when JSON or YAML was requested. The

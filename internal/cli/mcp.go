@@ -138,6 +138,22 @@ func currentCommandIsMCPServe(cmd *cobra.Command) bool {
 	return false
 }
 
+// childSnapshotRequested reports whether this process was started by the
+// management MCP adapter.
+func childSnapshotRequested() bool {
+	marker, present := os.LookupEnv(climcp.ChildSnapshotEnv)
+	return present && marker != ""
+}
+
+// contextChangedError reports that the pinned selection can no longer be
+// resolved. It is the same failure the primary snapshot guard reports, so a
+// call never falls back to another context.
+func contextChangedError() error {
+	return NewError(CodePrecondFail, "MCP_CONTEXT_CHANGED",
+		"the management MCP session selection no longer matches the saved configuration",
+		"Restart the management MCP process to adopt the changed context, endpoint, or credential.")
+}
+
 // verifyChildSnapshot enforces the launch-time selection for a child process
 // spawned by the management MCP adapter. A mismatch fails the call instead of
 // silently using a different context, endpoint, or credential.
@@ -153,9 +169,7 @@ func verifyChildSnapshot(contextName string, contextSettings config.Context) err
 		APIToken:    bridgeAPIToken(),
 	}.Fingerprint()
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(actual)) != 1 {
-		return NewError(CodePrecondFail, "MCP_CONTEXT_CHANGED",
-			"the management MCP session selection no longer matches the saved configuration",
-			"Restart the management MCP process to adopt the changed context, endpoint, or credential.")
+		return contextChangedError()
 	}
 	return nil
 }

@@ -75,15 +75,3 @@ func (s Snapshot) ChildEnvironment(base []string) []string {
 	}
 	return result
 }
-
-// ChildEnvironmentIsPinned reports whether a child environment already carries
-// the fingerprint for this snapshot.
-func (s Snapshot) ChildEnvironmentIsPinned(env []string) bool {
-	want := s.Fingerprint()
-	for _, entry := range env {
-		if key, value, ok := strings.Cut(entry, "="); ok && key == ChildSnapshotEnv && value == want {
-			return true
-		}
-	}
-	return false
-}

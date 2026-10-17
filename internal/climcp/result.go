@@ -296,14 +296,14 @@ type GenerateData struct {
 // ---------------------------------------------------------------------------
 
 type wireContextList struct {
-	Items []struct {
+	Items *[]struct {
 		Name    string `json:"name"`
 		Current bool   `json:"current"`
 	} `json:"items"`
 }
 
 type wireAPIList struct {
-	Items []struct {
+	Items *[]struct {
 		ID               string `json:"id"`
 		Name             string `json:"name"`
 		URL              string `json:"url"`
@@ -366,7 +366,7 @@ type wireTool struct {
 }
 
 type wireToolList struct {
-	Tools []wireTool `json:"tools"`
+	Tools *[]wireTool `json:"tools"`
 }
 
 type wirePlugin struct {
@@ -380,7 +380,7 @@ type wirePlugin struct {
 }
 
 type wirePluginList struct {
-	Plugins []wirePlugin `json:"plugins"`
+	Plugins *[]wirePlugin `json:"plugins"`
 }
 
 type wireBinding struct {
@@ -400,11 +400,11 @@ type wireBinding struct {
 }
 
 type wireBindingList struct {
-	Bindings []wireBinding `json:"bindings"`
+	Bindings *[]wireBinding `json:"bindings"`
 }
 
 type wireTokenList struct {
-	Items []TokenItem `json:"items"`
+	Items *[]TokenItem `json:"items"`
 }
 
 // wireAPITest is the CLI's server-side probe result. Latency is a Go duration,
@@ -420,7 +420,7 @@ type wireAPITest struct {
 
 // wireFlush is the cache-flush result.
 type wireFlush struct {
-	Deleted int    `json:"deleted"`
+	Deleted *int   `json:"deleted"`
 	Status  string `json:"status"`
 }
 
@@ -431,7 +431,7 @@ type wireRegistration struct {
 }
 
 type wireCacheStats struct {
-	Stats struct {
+	Stats *struct {
 		ExactKeys   int64  `json:"exactKeys"`
 		RedisMemory string `json:"redisMemory"`
 	} `json:"stats"`
@@ -496,8 +496,11 @@ func projectContextList(stdout []byte) (any, error) {
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
 	}
-	data := ContextListData{Items: make([]ContextItem, 0, len(wire.Items))}
-	for _, item := range wire.Items {
+	if wire.Items == nil {
+		return nil, errors.New("context list has no items field")
+	}
+	data := ContextListData{Items: make([]ContextItem, 0, len(*wire.Items))}
+	for _, item := range *wire.Items {
 		if item.Name == "" {
 			return nil, errors.New("context entry has no name")
 		}
@@ -511,8 +514,11 @@ func projectAPIList(stdout []byte) (any, error) {
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
 	}
-	data := APIListData{Items: make([]APIItem, 0, len(wire.Items))}
-	for _, item := range wire.Items {
+	if wire.Items == nil {
+		return nil, errors.New("API list has no items field")
+	}
+	data := APIListData{Items: make([]APIItem, 0, len(*wire.Items))}
+	for _, item := range *wire.Items {
 		if item.Name == "" {
 			return nil, errors.New("API entry has no name")
 		}
@@ -585,8 +591,11 @@ func projectToolList(stdout []byte) (any, error) {
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
 	}
-	data := ResourceData{Items: make([]ResourceItem, 0, len(wire.Tools)), Redacted: true}
-	for _, entry := range wire.Tools {
+	if wire.Tools == nil {
+		return nil, errors.New("tool list has no tools field")
+	}
+	data := ResourceData{Items: make([]ResourceItem, 0, len(*wire.Tools)), Redacted: true}
+	for _, entry := range *wire.Tools {
 		item, err := projectToolResource(entry)
 		if err != nil {
 			return nil, err
@@ -600,6 +609,9 @@ func projectToolItem(stdout []byte) (any, error) {
 	var wire wireTool
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
+	}
+	if wire.Kind == "" || wire.Metadata.Name == "" {
+		return nil, errors.New("tool response has no identity")
 	}
 	item, err := projectToolResource(wire)
 	if err != nil {
@@ -628,8 +640,11 @@ func projectPluginList(stdout []byte) (any, error) {
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
 	}
-	data := ResourceData{Items: make([]ResourceItem, 0, len(wire.Plugins)), Redacted: true}
-	for _, entry := range wire.Plugins {
+	if wire.Plugins == nil {
+		return nil, errors.New("plugin list has no plugins field")
+	}
+	data := ResourceData{Items: make([]ResourceItem, 0, len(*wire.Plugins)), Redacted: true}
+	for _, entry := range *wire.Plugins {
 		item, err := projectPluginResource(entry)
 		if err != nil {
 			return nil, err
@@ -643,6 +658,9 @@ func projectPluginItem(stdout []byte) (any, error) {
 	var wire wirePlugin
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
+	}
+	if wire.Kind == "" || wire.Metadata.Name == "" || wire.Metadata.Version == "" {
+		return nil, errors.New("plugin response has no identity")
 	}
 	item, err := projectPluginResource(wire)
 	if err != nil {
@@ -674,8 +692,11 @@ func projectBindingList(stdout []byte) (any, error) {
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
 	}
-	data := ResourceData{Items: make([]ResourceItem, 0, len(wire.Bindings)), Redacted: true}
-	for _, entry := range wire.Bindings {
+	if wire.Bindings == nil {
+		return nil, errors.New("binding list has no bindings field")
+	}
+	data := ResourceData{Items: make([]ResourceItem, 0, len(*wire.Bindings)), Redacted: true}
+	for _, entry := range *wire.Bindings {
 		item, err := projectBindingResource(entry)
 		if err != nil {
 			return nil, err
@@ -690,6 +711,9 @@ func projectBindingItem(stdout []byte) (any, error) {
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
 	}
+	if wire.Kind == "" || wire.Metadata.Name == "" {
+		return nil, errors.New("binding response has no identity")
+	}
 	item, err := projectBindingResource(wire)
 	if err != nil {
 		return nil, err
@@ -702,8 +726,11 @@ func projectTokenList(stdout []byte) (any, error) {
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
 	}
-	data := TokenListData{Items: make([]TokenItem, 0, len(wire.Items))}
-	for _, item := range wire.Items {
+	if wire.Items == nil {
+		return nil, errors.New("token list has no items field")
+	}
+	data := TokenListData{Items: make([]TokenItem, 0, len(*wire.Items))}
+	for _, item := range *wire.Items {
 		if item.ID == "" {
 			return nil, errors.New("token entry has no id")
 		}
@@ -717,6 +744,9 @@ func projectCacheStats(stdout []byte) (any, error) {
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
 	}
+	if wire.Stats == nil {
+		return nil, errors.New("cache statistics have no stats field")
+	}
 	return CacheStatsData{ExactKeys: wire.Stats.ExactKeys, RedisMemory: wire.Stats.RedisMemory}, nil
 }
 
@@ -726,6 +756,9 @@ func projectAPITest(stdout []byte) (any, error) {
 	var wire wireAPITest
 	if err := decodeChildJSON(stdout, &wire); err != nil {
 		return nil, err
+	}
+	if wire.Status == "" || wire.Code == 0 {
+		return nil, errors.New("probe result has no HTTP outcome")
 	}
 	details := &ProbeDetails{
 		APIName:        wire.APIName,

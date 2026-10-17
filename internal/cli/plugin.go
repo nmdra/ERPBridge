@@ -218,7 +218,9 @@ var pluginGetCmd = &cobra.Command{
 				}
 			}
 			if target == nil {
-				return fmt.Errorf("plugin %s not found", args[0])
+				return NewError(CodeNotFound, "RESOURCE_NOT_FOUND",
+					fmt.Sprintf("plugin %q was not found in the selected deployment", args[0]),
+					"List the available plugins, or correct the name and version.")
 			}
 			return renderPlugin(cmd.OutOrStdout(), cmd, target, nil)
 		}

@@ -86,12 +86,7 @@ func savedContextExists(document map[string]any, name string) bool {
 // file must still match fingerprint.
 func replaceConfigFile(path string, encoded []byte, fingerprint string, mustNotExist bool) error {
 	directory := filepath.Dir(path)
-	existing, err := os.Stat(path)
-	mode := os.FileMode(0o600)
-	if err == nil {
-		mode = existing.Mode().Perm()
-	}
-
+	// The replacement is always private, whatever the previous mode was.
 	temporary, err := os.CreateTemp(directory, ".config-*.yaml")
 	if err != nil {
 		return fmt.Errorf("create replacement configuration: %w", err)
@@ -101,7 +96,7 @@ func replaceConfigFile(path string, encoded []byte, fingerprint string, mustNotE
 		_ = temporary.Close()
 		_ = os.Remove(temporaryPath)
 	}
-	if err := temporary.Chmod(mode); err != nil {
+	if err := temporary.Chmod(0o600); err != nil {
 		cleanup()
 		return fmt.Errorf("secure replacement configuration: %w", err)
 	}
