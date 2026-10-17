@@ -33,7 +33,7 @@ Publish merged PR #20 as the user-approved minor alpha release `v0.6.0-alpha.1`.
 
 ## Published outcome
 
-- Release: https://github.com/nmdra/ERPBridge/releases/tag/v0.6.0-alpha.1, published 2026-10-17 as a non-draft prerelease.
+- Release: https://github.com/nmdra/ERPBridge/releases/tag/v0.6.0-alpha.1, published 2026-10-17, non-draft. GitHub initially reported prerelease status, then changed to a regular Latest release during final verification. The user explicitly chose **Keep Latest release**; preserve that setting. The alpha tag and verified artifacts remain unchanged.
 - Annotated tag and release workflow both resolve to `7a2d7a4233cee679f745d2788c44b679f68916e8`. Origin/main matched that commit at tagging.
 - Workflow https://github.com/nmdra/ERPBridge/actions/runs/39031853926 succeeded, including lint and GoReleaser. An independent verifier confirmed 18 nonempty uploaded assets: 8 binary archives, 8 matching SBOMs, checksums, and signature.
 - Image `ghcr.io/nmdra/erpbridge-server:0.6.0-alpha.1` has index digest `sha256:274940d90c368eec23b38529ac19b6b67e1a59b88399e236e6a984857d1ba7b6`, with runnable linux/amd64 and linux/arm64 manifests. The existing latest tag resolves to the same index.
