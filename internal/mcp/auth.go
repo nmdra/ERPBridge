@@ -228,7 +228,10 @@ func writeHTTPAuthError(w http.ResponseWriter, status int) {
 		writeControlPlaneError(w, status, ErrorAuthorizationDenied, "the caller is not authorized for this operation", "use a token with the required scope or administrator permission")
 		return
 	}
-	writeControlPlaneError(w, http.StatusUnauthorized, ErrorAuthenticationFailed, "the server rejected the authentication credentials", "set a valid Authorization bearer token")
+	// The suggestion avoids a "bearer <value>" shape on purpose. A client
+	// redacts anything after the bearer keyword to keep a credential out of its
+	// output, so guidance written that way would reach the operator mangled.
+	writeControlPlaneError(w, http.StatusUnauthorized, ErrorAuthenticationFailed, "the server rejected the authentication credentials", "set a valid token in the Authorization header")
 }
 
 func withAuthContext(ctx context.Context, r *http.Request) *http.Request {

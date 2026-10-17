@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -48,16 +50,43 @@ func TestContextListCmd(t *testing.T) {
 }
 
 func TestContextSetCmd(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	setupTest()
 
-	err := contextSetCmd.RunE(contextSetCmd, []string{testContextName})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	directory := filepath.Join(home, ".bridgectl")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatalf("create config directory: %v", err)
+	}
+	configPath := filepath.Join(directory, "config.yaml")
+	saved := "current-context: local\ncontexts:\n  local:\n    server: http://localhost:8082\n" +
+		"    api-token: ${BRIDGE_API_TOKEN}\n  " + testContextName + ":\n    server: http://test\n"
+	if err := os.WriteFile(configPath, []byte(saved), 0o600); err != nil { // #nosec G304 -- test-owned temporary home
+		t.Fatalf("write config: %v", err)
 	}
 
-	err = contextSetCmd.RunE(contextSetCmd, []string{"invalid"})
-	if err == nil {
+	if err := contextSetCmd.RunE(contextSetCmd, []string{testContextName}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	written, err := os.ReadFile(configPath) // #nosec G304 -- test-owned temporary home
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !bytes.Contains(written, []byte("current-context: "+testContextName)) {
+		t.Fatalf("saved default was not updated:\n%s", written)
+	}
+	if !bytes.Contains(written, []byte("${BRIDGE_API_TOKEN}")) {
+		t.Fatalf("environment placeholder was expanded:\n%s", written)
+	}
+
+	if err := contextSetCmd.RunE(contextSetCmd, []string{"invalid"}); err == nil {
 		t.Fatalf("expected error for invalid context")
+	}
+	after, err := os.ReadFile(configPath) // #nosec G304 -- test-owned temporary home
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !bytes.Equal(written, after) {
+		t.Fatalf("configuration changed after a rejected update:\n%s", after)
 	}
 }

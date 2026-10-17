@@ -233,6 +233,12 @@ var toolGetCmd = &cobra.Command{
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		// Completion stays silent, so a server error is reported as a directive
+		// rather than decoded as if it were a catalogue.
+		if resp.StatusCode >= http.StatusBadRequest {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
 		var tools []*mcp.Tool
 		if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
 			return nil, cobra.ShellCompDirectiveError
@@ -269,6 +275,13 @@ var toolGetCmd = &cobra.Command{
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		// The status must be checked before decoding: an error answer is a JSON
+		// object envelope, so decoding it into a tool slice would report a Go
+		// type error instead of the server's own failure.
+		if resp.StatusCode >= http.StatusBadRequest {
+			return bridgeResponseError(resp)
+		}
+
 		var tools []*mcp.Tool
 		if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
 			return err
@@ -286,25 +299,32 @@ var toolGetCmd = &cobra.Command{
 			}
 
 			if target == nil {
-				return fmt.Errorf("tool %s not found", args[0])
+				return NewError(CodeNotFound, "RESOURCE_NOT_FOUND",
+					fmt.Sprintf("tool %q was not found in the selected deployment", args[0]),
+					"List the available tools, or correct the name and version.")
 			}
 
-			switch outputFormat {
-			case string(output.FormatYAML):
-				y, _ := yaml.Marshal(target)
-				fmt.Println(string(y))
-				return nil
-			case string(output.FormatJSON):
-				j, _ := json.MarshalIndent(target, "", "  ")
-				fmt.Println(string(j))
-				return nil
+			// Render through the command's writer, so the named branch reaches the
+			// same destination as the list branch.
+			if outputFormat == string(output.FormatJSON) || outputFormat == string(output.FormatYAML) {
+				local := &output.Formatter{Format: output.Format(outputFormat), Out: cmd.OutOrStdout()}
+				return local.Print(target)
 			}
 			tools = []*mcp.Tool{target}
 		}
 
-		res := &ToolListResponse{Tools: tools}
-		return formatter.Print(res)
+		res := &ToolListResponse{Tools: output.NonNil(tools)}
+		return printToolList(cmd, res)
 	},
+}
+
+// printToolList renders a tool list in the requested format. This command
+// defines its own --output flag, which shadows the global one, so the list path
+// must read the local flag instead of the shared formatter.
+func printToolList(cmd *cobra.Command, res *ToolListResponse) error {
+	format, _ := cmd.Flags().GetString("output")
+	local := &output.Formatter{Format: output.Format(format), Out: cmd.OutOrStdout()}
+	return local.Print(res)
 }
 
 // ToolListResponse wraps a slice of MCP tools for table formatting.
@@ -358,6 +378,12 @@ var toolDescribeCmd = &cobra.Command{
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		// Check the status before decoding, so an error envelope is reported as
+		// the server's own failure rather than a Go type error.
+		if resp.StatusCode >= http.StatusBadRequest {
+			return bridgeResponseError(resp)
+		}
+
 		var tools []*mcp.Tool
 		if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
 			return err
@@ -372,7 +398,9 @@ var toolDescribeCmd = &cobra.Command{
 		}
 
 		if target == nil {
-			return fmt.Errorf("tool %s not found", args[0])
+			return NewError(CodeNotFound, "RESOURCE_NOT_FOUND",
+				fmt.Sprintf("tool %q was not found in the selected deployment", args[0]),
+				"List the available tools, or correct the name and version.")
 		}
 
 		out := cmd.OutOrStdout()
@@ -511,6 +539,8 @@ var toolGenerateCmd = &cobra.Command{
 	},
 }
 
+const toolVersionQueryParam = "version"
+
 var toolDeleteCmd = &cobra.Command{
 	Use:   "delete [name] [version]",
 	Short: "Remove a tool from the registry",
@@ -540,12 +570,13 @@ var toolDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		url := fmt.Sprintf("%s/apis/erpbridge.io/v1/tools?name=%s&version=%s", baseURL, name, version)
+		query := url.Values{cliNameField: {name}, toolVersionQueryParam: {version}}
 		if hard {
-			url += "&hard=true"
+			query.Set("hard", "true")
 		}
+		requestURL := baseURL + "/apis/erpbridge.io/v1/tools?" + query.Encode()
 
-		resp, err := doBridgeRequest(cmd, http.MethodDelete, url)
+		resp, err := doBridgeRequest(cmd, http.MethodDelete, requestURL)
 		if err != nil {
 			return err
 		}

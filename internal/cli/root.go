@@ -27,6 +27,11 @@ var (
 	cfg       *config.Config
 	formatter *output.Formatter
 
+	// serveStdioMode marks an invocation whose stdout carries the MCP protocol
+	// stream. In that mode every diagnostic goes to stderr so stdout stays a
+	// valid JSON-RPC stream.
+	serveStdioMode bool
+
 	// RootLog is the global logger instance used by the CLI.
 	RootLog *slog.Logger
 )
@@ -59,6 +64,10 @@ and supports multiple output formats including Table, JSON, and YAML.
 Control-plane failures use stable error codes, safe messages, and remediation
 suggestions. They do not expose upstream response bodies or credentials.`,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		// Select the protocol-safe log destination before the logger is built.
+		if currentCommandIsMCPServe(cmd) {
+			enableServeStdioMode()
+		}
 		// Initialize Logger for CLI
 		if verbose {
 			_ = os.Setenv("LOG_LEVEL", "debug")
@@ -71,6 +80,9 @@ suggestions. They do not expose upstream response bodies or credentials.`,
 		cfg, err = config.Load()
 		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
+				if childSnapshotRequested() {
+					return contextChangedError()
+				}
 				return NewError(CodeNotFound, "CONTEXT_NOT_FOUND", err.Error(), "Run 'bridgectl context list' or select a configured context with --context.")
 			}
 			return fmt.Errorf("load config: %w", err)
@@ -79,10 +91,17 @@ suggestions. They do not expose upstream response bodies or credentials.`,
 		if ctxOverride != "" {
 			cfg.CurrentContext = ctxOverride
 		}
-		if _, err := cfg.EffectiveContext(); err != nil {
+		contextSettings, err := cfg.EffectiveContext()
+		if err != nil {
 			if errors.Is(err, config.ErrContextNotFound) {
+				if childSnapshotRequested() {
+					return contextChangedError()
+				}
 				return NewError(CodeNotFound, "CONTEXT_NOT_FOUND", err.Error(), "Run 'bridgectl context list' or select a configured context with --context.")
 			}
+			return err
+		}
+		if err := verifyChildSnapshot(cfg.CurrentContext, contextSettings); err != nil {
 			return err
 		}
 
@@ -96,6 +115,11 @@ suggestions. They do not expose upstream response bodies or credentials.`,
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 func Execute() {
+	// Resolve the target command before parsing so an mcp launch failure cannot
+	// print a JSON error document onto the protocol stream.
+	if commandIsMCPServe() {
+		enableServeStdioMode()
+	}
 	if err := RootCmd.Execute(); err != nil {
 		handleError(err)
 	}
@@ -104,7 +128,7 @@ func Execute() {
 func handleError(err error) {
 	err = mapKnownCLIError(err)
 	if aErr, ok := errors.AsType[*AgentActionableError](err); ok {
-		if outputFormat == "json" {
+		if errorOutputIsStdout() {
 			_ = renderActionableError(os.Stdout, aErr, outputFormat)
 		} else {
 			_ = renderActionableError(os.Stderr, aErr, outputFormat)
@@ -117,6 +141,13 @@ func handleError(err error) {
 	// printed here.
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(CodeGeneralErr)
+}
+
+// errorOutputIsStdout reports whether a rendered CLI error belongs on stdout.
+// Only an ordinary JSON invocation uses stdout: the stdio MCP protocol stream
+// must never carry a CLI error document.
+func errorOutputIsStdout() bool {
+	return outputFormat == "json" && !serveStdioMode
 }
 
 func mapKnownCLIError(err error) error {

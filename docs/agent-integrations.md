@@ -215,6 +215,26 @@ After changing a client configuration:
 For protocol details and Postman, see [Connectivity & Transport](./connectivity.md).
 For token lifecycle and scopes, see [API Tokens](./tokens.md).
 
+## Management MCP server
+
+`erpbridge-server --stdio` serves published ERP tools. To let an agent manage
+ERPBridge itself, register a second, separate server that starts the
+`bridgectl mcp --stdio` command:
+
+```toml
+[mcp_servers.erpbridge_manage]
+command = "/usr/local/bin/bridgectl"
+args = ["mcp", "--stdio", "--context", "staging"]
+env_vars = ["BRIDGE_API_TOKEN"]
+```
+
+The management server exposes inspection, local validation, and generation by
+default. Write operations need an explicit startup group, and the session is
+pinned to the context selected at launch. See the
+[management MCP server guide](./bridgectl-mcp.md) for the tool catalogue, the
+write groups, agent configuration examples, and recovery after an unknown write
+outcome.
+
 ## Official client references
 
 - [Codex MCP configuration](https://developers.openai.com/codex/mcp/)

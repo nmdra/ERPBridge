@@ -210,3 +210,19 @@ func TestNewTabWriter(t *testing.T) {
 		t.Errorf("expected output to contain A, got %q", buf.String())
 	}
 }
+
+func TestNonNilConvertsANilSliceToACollection(t *testing.T) {
+	var nothing []string
+	got := NonNil(nothing)
+	if got == nil {
+		t.Fatal("NonNil returned nil, so the rendered collection would be null")
+	}
+	if len(got) != 0 {
+		t.Fatalf("NonNil returned %d entries, want none", len(got))
+	}
+
+	present := []string{"one"}
+	if got := NonNil(present); len(got) != 1 || got[0] != "one" {
+		t.Fatalf("NonNil changed a non-empty slice: %v", got)
+	}
+}

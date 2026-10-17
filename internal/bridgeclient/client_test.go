@@ -239,3 +239,103 @@ func TestDecodeRemoteErrorResponseRedactsSecretBearingEnvelope(t *testing.T) {
 		t.Fatalf("unsafe remote error: %v", err)
 	}
 }
+
+// remoteErrorFrom decodes one 401 envelope through the real response path.
+func remoteErrorFrom(t *testing.T, body string) *RemoteError {
+	t.Helper()
+	response := &http.Response{
+		StatusCode: http.StatusUnauthorized,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	var remote *RemoteError
+	if err := DecodeRemoteErrorResponse(response); !errors.As(err, &remote) {
+		t.Fatalf("DecodeRemoteErrorResponse(%s) = %v, want a RemoteError", body, err)
+	}
+	return remote
+}
+
+// TestDecodeRemoteErrorResponseKeepsServerGuidanceIntact covers the defect that
+// blocked the issue #19 fix: the server's own 401 guidance reached the operator
+// mangled, so a reader could not tell whether the CLI had hidden a value.
+//
+// The redaction stays strict, so the fix is the server's wording: guidance that
+// avoids the "bearer <value>" shape survives unchanged.
+func TestDecodeRemoteErrorResponseKeepsServerGuidanceIntact(t *testing.T) {
+	const envelope = `{"error":"AUTHENTICATION_FAILED",` +
+		`"message":"the server rejected the authentication credentials",` +
+		`"suggestion":"set a valid token in the Authorization header","code":401}`
+
+	remote := remoteErrorFrom(t, envelope)
+
+	want := "set a valid token in the Authorization header"
+	if remote.Suggestion != want {
+		t.Fatalf("suggestion = %q, want %q", remote.Suggestion, want)
+	}
+	if remote.Message != "the server rejected the authentication credentials" {
+		t.Fatalf("message = %q", remote.Message)
+	}
+}
+
+// TestDecodeRemoteErrorResponseRedactsGuidanceLikeWords proves the redaction is
+// not weakened for a credential whose value happens to be an ordinary word. A
+// value may be any opaque string, so spelling cannot exempt it.
+func TestDecodeRemoteErrorResponseRedactsGuidanceLikeWords(t *testing.T) {
+	for _, value := range []string{
+		"token", "tokens", "value", "credential", "credentials",
+		"authentication", "authorization", "header",
+		"TOKEN", "Token", "token.", "token!!", "credential.",
+	} {
+		t.Run(value, func(t *testing.T) {
+			body := `{"error":"AUTHENTICATION_FAILED","message":"rejected",` +
+				`"suggestion":"retry with Authorization: Bearer ` + value + `","code":401}`
+			remote := remoteErrorFrom(t, body)
+			if strings.Contains(remote.Suggestion, value) {
+				t.Fatalf("suggestion = %q, want the value %q redacted", remote.Suggestion, value)
+			}
+			if !strings.Contains(remote.Suggestion, "[REDACTED]") {
+				t.Fatalf("suggestion = %q, want a redaction marker", remote.Suggestion)
+			}
+		})
+	}
+}
+
+// TestDecodeRemoteErrorResponseRedactsEveryBearerMatch proves one exempt-looking
+// match cannot shield a second real credential in the same string.
+func TestDecodeRemoteErrorResponseRedactsEveryBearerMatch(t *testing.T) {
+	body := `{"error":"AUTHENTICATION_FAILED","message":"rejected",` +
+		`"suggestion":"Bearer token then Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature","code":401}`
+
+	remote := remoteErrorFrom(t, body)
+
+	for _, leaked := range []string{"token", "eyJhbGci"} {
+		if strings.Contains(remote.Suggestion, leaked) {
+			t.Fatalf("suggestion = %q, want %q redacted", remote.Suggestion, leaked)
+		}
+	}
+	if strings.Count(remote.Suggestion, "[REDACTED]") != 2 {
+		t.Fatalf("suggestion = %q, want two redaction markers", remote.Suggestion)
+	}
+}
+
+// TestDecodeRemoteErrorResponseStillRedactsBearerCredentials proves the guidance
+// exception does not spare a credential value.
+func TestDecodeRemoteErrorResponseStillRedactsBearerCredentials(t *testing.T) {
+	for _, value := range []string{
+		"secret-value",
+		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature",
+		"abc123def456",
+		"A1B2C3D4E5F6G7H8",
+		"averylongcredentialvalue",
+		"sk_live_9f8e7d6c5b4a",
+	} {
+		t.Run(value, func(t *testing.T) {
+			body := `{"error":"AUTHENTICATION_FAILED","message":"rejected",` +
+				`"suggestion":"retry with Authorization: Bearer ` + value + `","code":401}`
+			remote := remoteErrorFrom(t, body)
+			if strings.Contains(remote.Suggestion, value) {
+				t.Fatalf("suggestion = %q, want the credential value redacted", remote.Suggestion)
+			}
+		})
+	}
+}

@@ -99,7 +99,9 @@ var pluginBindingGetCmd = &cobra.Command{
 				}
 			}
 			if target == nil {
-				return fmt.Errorf("plugin binding %s not found", args[0])
+				return NewError(CodeNotFound, "RESOURCE_NOT_FOUND",
+					fmt.Sprintf("plugin binding %q was not found in the selected deployment", args[0]),
+					"List the available bindings, or correct the name.")
 			}
 			return renderPluginBinding(cmd.OutOrStdout(), cmd, target, nil)
 		}
@@ -186,7 +188,7 @@ func renderPluginBinding(out io.Writer, cmd *cobra.Command, target *mcp.PluginBi
 			return (&PluginBindingListResponse{Bindings: []*mcp.PluginBinding{target}}).RenderTable(out)
 		}
 	}
-	response := &PluginBindingListResponse{Bindings: bindings}
+	response := &PluginBindingListResponse{Bindings: output.NonNil(bindings)}
 	if format == string(output.FormatJSON) {
 		encoder := json.NewEncoder(out)
 		encoder.SetIndent("", "  ")

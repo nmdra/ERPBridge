@@ -7,6 +7,7 @@
 | `erpbridge-server` | Runtime that exposes MCP and authenticated HTTP endpoints, executes registered tools, enforces roles, and owns cache/log behavior. | Diagnosing server behavior or MCP availability. |
 | `bridgectl` | Control CLI for contexts, API registration/testing, tool resources, tokens, logs, cache, and bundled skill installation. | Performing supported operations against an ERPBridge environment or refreshing the local operations skill. |
 | MCP client | Discovers and calls tools through stdio or `/mcp/`. | Verifying user-visible tool discovery and calls. |
+| `bridgectl mcp --stdio` | Local management MCP server for AI coding agents. It serves the `bridgectl` management catalogue, not published ERP tools, and pins the session to its launch-time context. | Verifying management tool discovery, grants, and agent-facing results. |
 | `@erpbridge/sdk` | TypeScript facade for MCP tools, registry/direct invoke, logs, metrics, health, and cache. | Diagnosing application integration or envelope-handling behavior. |
 | External plugin process | Separately operated HTTP process or container that receives the bounded `/v1/process` contract and returns a result envelope. | Verifying post-response processing or diagnosing plugin endpoint behavior. ERPBridge stores and invokes it but does not deploy it. |
 | ERPBridge source repository | Source of truth for the checked-out revision, tests, and server implementation. | Reproducing, tracing, or fixing a defect. |
@@ -55,6 +56,20 @@ validated source change enters the normal build, embedding, and installation
 process. Never hand-edit an installed skill to apply a memory lesson, and do
 not persist credentials, authorization headers, ERP/plugin bodies, personal
 data, unrestricted logs, or private reasoning in the memory tree.
+
+## Management MCP server
+
+`bridgectl mcp --stdio` is a separate local process from `erpbridge-server
+--stdio`. It exposes the same management operations this skill performs
+manually, so an agent can inspect and change ERPBridge through MCP instead of a
+terminal.
+
+The change gates in this skill still apply to the work you perform yourself.
+Approving a write group when starting the management server is an operator
+decision outside this skill, and it never replaces the per-action confirmation
+this skill requires for a register, apply, delete, token, or cache change.
+Treat any write result as unverified until a separate read confirms it, and
+treat `outcome_unknown` as a change that may already have been applied.
 
 ## Protocol boundary
 

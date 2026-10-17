@@ -7,6 +7,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `bridgectl mcp --stdio`, a local management MCP server for AI coding
+  agents. It serves existing `bridgectl` management operations over stdio with
+  read-only defaults and operator-approved write groups, pins each session to
+  its launch-time context, endpoints, and credential, keeps stdout strictly for
+  protocol traffic, and reports an interrupted write as `outcome_unknown`
+  instead of claiming rollback.
+- Add the read-only management catalogue to `bridgectl mcp --stdio`:
+  `bridgectl_context_list`, `bridgectl_api_list`, `bridgectl_tool_get`,
+  `bridgectl_tool_generate`, `bridgectl_tool_validate`, `bridgectl_plugin_get`,
+  `bridgectl_plugin_validate`, `bridgectl_binding_get`,
+  `bridgectl_binding_validate`, `bridgectl_token_list`,
+  `bridgectl_cache_stats`, and `bridgectl_log_stats`. Results are an explicit
+  allow-list: credential values, literal header values, schema defaults and
+  examples, raw endpoint URLs, plugin configuration values, token values, and
+  raw log messages are never returned. Manifests are one inline object, and an
+  embedded credential value is rejected before it reaches disk.
+- Add a structured output branch to `bridgectl log stats`, so `-o json` and
+  `-o yaml` return `{"levelCounts":{...},"toolCounts":{...}}` counts without
+  log messages. Table output is unchanged.
+- Add the approved write and probe catalogue to `bridgectl mcp --stdio`, gated by
+  the `registry`, `resources`, `destructive`, `probe`, and `context` startup
+  groups: `bridgectl_api_register`, `bridgectl_api_set_credential_ref`,
+  `bridgectl_api_test`, `bridgectl_tool_apply`, `bridgectl_tool_delete`,
+  `bridgectl_plugin_apply`, `bridgectl_plugin_delete`,
+  `bridgectl_binding_apply`, `bridgectl_binding_delete`,
+  `bridgectl_token_revoke`, `bridgectl_cache_flush`, and
+  `bridgectl_context_set`. Every write requires an exact context and target
+  confirmation, and forced registration also requires the destructive group.
+
+### Changed
+
+- Report a launched write or probe as `outcome_unknown` when it fails, times
+  out, is cancelled, exceeds its output limit, or returns unusable output, so a
+  caller reads the target back instead of assuming the change did not happen.
+  Only an argument vector the child rejects before running, or the session
+  `context_changed` precondition, reports a specific failure.
+- Accept an explicit empty `authType` in `bridgectl_api_register`, which
+  registers an API that carries no authentication.
+- Keep `bridgectl context set` from rewriting the whole configuration. It now
+  edits the raw file, so environment placeholders, stored values, and unknown
+  fields survive, the replacement is written with mode 0600, and a concurrent
+  external change is refused instead of overwritten.
+- Document the management MCP server end to end: the tool catalogue, result
+  redaction, startup write groups, canonical confirmation targets, the unknown
+  outcome contract, Codex CLI and Claude Code registration examples, session
+  pinning, and restart-based recovery. The runtime `erpbridge-server --stdio`
+  server and the management `bridgectl mcp --stdio` server are documented as
+  separate registrations.
+
+### Fixed
+
+- Preserve literal tool deletion names and versions in control-plane queries, so
+  identifier characters cannot change the confirmed target or request permanent
+  deletion when `hard` is false
+- Reject noncanonical endpoint field aliases before staging management manifests,
+  and share sensitive-key screening with log redaction so fields such as
+  `client_secret`, `access_token`, and `private_key` cannot carry literal secrets
+- Keep `items: []` in empty management MCP tool, plugin, and binding inventories
+  while named gets retain only `item`
+- Check the control-plane status before decoding a typed body in `bridgectl tool
+  get`, `tool describe`, and `log stats`. A rejected or missing credential
+  previously surfaced as
+  `json: cannot unmarshal object into Go value of type []*mcp.Tool` and exited
+  `1`, hiding the server's own `AUTHENTICATION_FAILED` envelope and its
+  suggestion. These commands now report the server's message and exit `4`.
+- Report a tool that is not in the selected deployment from `tool describe` with
+  the recognized `RESOURCE_NOT_FOUND` code, matching `tool get`.
+- Report the server's `AUTHENTICATION_FAILED` message and suggestion instead of a
+  decoding failure on every read path, including `log stats`. A rejected
+  credential exits `4`.
+- Reword the control-plane `401` suggestion to
+  `set a valid token in the Authorization header`. The previous wording,
+  `set a valid Authorization bearer token`, was mangled by the client's own
+  bearer redaction into `set a valid Authorization Bearer [REDACTED]`, so the
+  operator could not tell whether the CLI had hidden a value. The redaction stays
+  strict: a credential is redacted whatever it is spelled, and `tool get`
+  completion reports a server error as a directive rather than decoding it.
+- Serialize an empty collection as a list rather than `null` in `tool get`,
+  `plugin get`, `plugin binding get`, `token list`, and `context list`. A nil
+  slice produced `{"tools": null}`, which a consumer that reads the output as
+  data cannot treat as a list.
+- Render the named `tool get` payload through the command's output writer, so
+  both branches of the command reach the same destination.
+- Stage a management manifest under a unique private name and only after policy
+  checks pass, so a concurrent call cannot overwrite or remove the input of an
+  active one.
+- Reject a submitted manifest whose endpoint carries credentials in its userinfo
+  or query, and a concrete default or example for a credential-like schema
+  property, before anything reaches disk. A schema declaration such as a
+  property named `password` stays legal.
+- Report a launched write as `outcome_unknown` whenever the deployment answered,
+  because a remote rejection arrives with the same exit code as a local argument
+  rejection, and only an envelope-free rejection proves that nothing ran.
+- Report a management child that can no longer resolve its pinned context as
+  `context_changed`, for reads and writes alike, instead of a generic
+  context-not-found failure.
+- Reject an inventory, statistics, probe, or flush payload that omits its typed
+  fields, instead of reporting an empty or zeroed success.
+- Write the replacement `bridgectl` configuration with mode 0600 in every case,
+  instead of preserving a wider existing mode.
+- Make `bridgectl tool get`, `plugin get`, and `plugin binding get` report a
+  missing named resource with the CLI's recognized not-found error code instead
+  of a generic failure, so an agent can classify it without reading prose.
+- Make `bridgectl tool get` honour its own `--output` flag when listing tools.
+  The command defines its own flag, which shadows the global one, so the list
+  path previously rendered a table even when JSON or YAML was requested. The
+  named-resource path and the `plugin get` and `plugin binding get` commands are
+  unchanged.
+
 ## [v0.5.0-alpha.6] - 2026-10-15
 
 ### Changed

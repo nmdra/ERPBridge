@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -58,7 +60,10 @@ func TestToolGetCmd(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	formatter = &output.Formatter{Format: output.FormatJSON, Out: &buf}
+	toolGetCmd.SetOut(&buf)
+	t.Cleanup(func() { toolGetCmd.SetOut(nil) })
+	require.NoError(t, toolGetCmd.Flags().Set("output", "table"))
+	t.Cleanup(func() { _ = toolGetCmd.Flags().Set("output", "table") })
 
 	err := toolGetCmd.RunE(toolGetCmd, nil)
 	if err != nil {
@@ -67,6 +72,258 @@ func TestToolGetCmd(t *testing.T) {
 	if !bytes.Contains(buf.Bytes(), []byte(testToolName)) {
 		t.Errorf("expected output to contain tool1")
 	}
+}
+
+// TestToolGetListHonoursLocalOutputFlag covers the list path, which defines its
+// own --output flag. That flag shadows the global one, so the list path used to
+// render a table whatever the caller asked for.
+func TestToolGetListHonoursLocalOutputFlag(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[{"metadata":{"name":"tool1","version":"1.0","module":"hr","isActive":true}}]`))
+	}))
+	defer ts.Close()
+
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+	t.Cleanup(func() { _ = toolGetCmd.Flags().Set("output", "table") })
+
+	t.Run("json", func(t *testing.T) {
+		var buf bytes.Buffer
+		toolGetCmd.SetOut(&buf)
+		t.Cleanup(func() { toolGetCmd.SetOut(nil) })
+		require.NoError(t, toolGetCmd.Flags().Set("output", "json"))
+
+		require.NoError(t, toolGetCmd.RunE(toolGetCmd, nil))
+
+		var payload struct {
+			Tools []struct {
+				Metadata struct {
+					Name string `json:"name"`
+				} `json:"metadata"`
+			} `json:"tools"`
+		}
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+		require.Len(t, payload.Tools, 1)
+		require.Equal(t, testToolName, payload.Tools[0].Metadata.Name)
+	})
+
+	t.Run("table", func(t *testing.T) {
+		var buf bytes.Buffer
+		toolGetCmd.SetOut(&buf)
+		t.Cleanup(func() { toolGetCmd.SetOut(nil) })
+		require.NoError(t, toolGetCmd.Flags().Set("output", "table"))
+
+		require.NoError(t, toolGetCmd.RunE(toolGetCmd, nil))
+
+		require.Contains(t, buf.String(), "NAME")
+		require.Contains(t, buf.String(), testToolName)
+	})
+}
+
+// authFailureEnvelope is the control-plane answer for a missing or rejected
+// credential, matching internal/mcp/auth.go.
+const authFailureEnvelope = `{"error":"AUTHENTICATION_FAILED",` +
+	`"message":"the server rejected the authentication credentials",` +
+	`"suggestion":"set a valid token in the Authorization header","code":401}`
+
+// authFailureServer answers every request with the recorded 401 envelope.
+func authFailureServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(authFailureEnvelope))
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// TestToolGetReportsAuthenticationFailure covers issue #19: the body was
+// decoded into a tool slice before the status was considered, so a 401 envelope
+// surfaced as a Go type error instead of the server's authentication failure.
+func TestToolGetReportsAuthenticationFailure(t *testing.T) {
+	ts := authFailureServer(t)
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+	t.Cleanup(func() { _ = toolGetCmd.Flags().Set("output", "table") })
+
+	for _, testCase := range []struct {
+		name string
+		args []string
+	}{
+		{"list form", nil},
+		{"named form", []string{testToolName + "@" + testToolVersion}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := toolGetCmd.RunE(toolGetCmd, testCase.args)
+
+			actionable, ok := errors.AsType[*AgentActionableError](err)
+			if !ok {
+				t.Fatalf("error = %v, want an AgentActionableError rather than a decode failure", err)
+			}
+			require.Equal(t, "AUTHENTICATION_FAILED", actionable.ErrorCode)
+			require.Equal(t, CodeAuthFail, actionable.Code)
+			require.Equal(t, "set a valid token in the Authorization header", actionable.Suggestion)
+		})
+	}
+}
+
+// TestToolGetAuthenticationFailureExitCode proves the process-level contract for
+// issue #19: a rejected credential exits 4 with the server's own message, so a
+// caller can distinguish it from a contract mismatch.
+func TestToolGetAuthenticationFailureExitCode(t *testing.T) {
+	ts := authFailureServer(t)
+	home := t.TempDir()
+	writeCLIContextConfig(t, home, ts.URL)
+
+	result := runCLIProcessIn(t, home, "tool", "get")
+
+	require.Equal(t, CodeAuthFail, result.code, "stderr = %q", result.stderr)
+	require.Contains(t, result.stderr, "AUTHENTICATION_FAILED")
+	require.Contains(t, result.stderr, "the server rejected the authentication credentials")
+	require.Contains(t, result.stderr, "set a valid token in the Authorization header")
+	require.NotContains(t, result.stderr, "cannot unmarshal")
+}
+
+// TestToolGetNamedRendersThroughTheCommandWriter covers the last gap in issue
+// #18: the named branch printed with fmt.Println, so it bypassed the command's
+// output writer and behaved differently from the list branch on the same
+// command.
+func TestToolGetNamedRendersThroughTheCommandWriter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[{"metadata":{"name":"tool1","version":"1.0","module":"hr"},"spec":{"description":{"short":"one"}}}]`))
+	}))
+	t.Cleanup(server.Close)
+	setControlPlaneContext(t, server.URL)
+
+	for _, format := range []string{"json", "yaml"} {
+		t.Run(format, func(t *testing.T) {
+			var buffer bytes.Buffer
+			toolGetCmd.SetOut(&buffer)
+			t.Cleanup(func() { toolGetCmd.SetOut(nil) })
+			t.Cleanup(func() { _ = toolGetCmd.Flags().Set("output", "table") })
+			require.NoError(t, toolGetCmd.Flags().Set("output", format))
+
+			require.NoError(t, toolGetCmd.RunE(toolGetCmd, []string{testToolName + "@1.0"}))
+
+			// The payload is a bare resource object, in a decodable document.
+			var decoded struct {
+				Metadata struct {
+					Name string `json:"name"`
+				} `json:"metadata"`
+			}
+			if format == "json" {
+				require.NoError(t, json.Unmarshal(buffer.Bytes(), &decoded))
+			} else {
+				require.NoError(t, yaml.Unmarshal(buffer.Bytes(), &decoded))
+			}
+			require.Equal(t, testToolName, decoded.Metadata.Name)
+
+			var fields map[string]any
+			if format == "json" {
+				require.NoError(t, json.Unmarshal(buffer.Bytes(), &fields))
+			} else {
+				require.NoError(t, yaml.Unmarshal(buffer.Bytes(), &fields))
+			}
+			require.Contains(t, fields, "metadata")
+			require.NotContains(t, fields, "tools")
+		})
+	}
+}
+
+// TestToolDescribeReportsAuthenticationFailure covers the same defect as
+// issue #19 on the sibling describe path.
+func TestToolDescribeReportsAuthenticationFailure(t *testing.T) {
+	ts := authFailureServer(t)
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+
+	err := toolDescribeCmd.RunE(toolDescribeCmd, []string{testToolName + "@" + testToolVersion})
+
+	actionable, ok := errors.AsType[*AgentActionableError](err)
+	if !ok {
+		t.Fatalf("error = %v, want an AgentActionableError rather than a decode failure", err)
+	}
+	require.Equal(t, "AUTHENTICATION_FAILED", actionable.ErrorCode)
+	require.Equal(t, CodeAuthFail, actionable.Code)
+}
+
+// TestToolDescribeReportsMissingToolAsResourceNotFound lets an agent classify a
+// missing resource by code, as the sibling get path already does.
+func TestToolDescribeReportsMissingToolAsResourceNotFound(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(ts.Close)
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+	var buf bytes.Buffer
+	toolDescribeCmd.SetOut(&buf)
+	t.Cleanup(func() { toolDescribeCmd.SetOut(nil) })
+
+	err := toolDescribeCmd.RunE(toolDescribeCmd, []string{testToolName + "@" + testToolVersion})
+
+	actionable, ok := errors.AsType[*AgentActionableError](err)
+	if !ok {
+		t.Fatalf("error = %v, want an AgentActionableError", err)
+	}
+	require.Equal(t, "RESOURCE_NOT_FOUND", actionable.ErrorCode)
+	require.Equal(t, CodeNotFound, actionable.Code)
+}
+
+// TestToolCompletionReportsServerErrorWithoutDecoding covers the completion
+// path, which decoded the body before it considered the status. A non-2xx answer
+// that happens to be a JSON array must not be offered as a valid, empty
+// catalogue.
+func TestToolCompletionReportsServerErrorWithoutDecoding(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`[{"metadata":{"name":"` + testToolName + `","version":"1.0"}}]`))
+	}))
+	t.Cleanup(ts.Close)
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+
+	completions, directive := toolGetCmd.ValidArgsFunction(toolGetCmd, nil, "")
+
+	require.Empty(t, completions, "an error answer was offered as a catalogue")
+	require.Equal(t, cobra.ShellCompDirectiveError, directive)
+}
+
+// writeCLIContextConfig writes one saved context that points at endpoint, so a
+// helper process can reach a test server without an ambient credential.
+func writeCLIContextConfig(t *testing.T, home, endpoint string) {
+	t.Helper()
+	directory := filepath.Join(home, ".bridgectl")
+	require.NoError(t, os.MkdirAll(directory, 0o700)) // #nosec G304 G703 -- test-owned temporary home
+	content := fmt.Sprintf("current-context: test\ncontexts:\n  test:\n    server: %s\n    mcp-server: %s\n", endpoint, endpoint)
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "config.yaml"), []byte(content), 0o600)) // #nosec G304 G703 -- test-owned temporary home
 }
 
 func TestValidateToolManifestRejectsUntypedOutputSchema(t *testing.T) {

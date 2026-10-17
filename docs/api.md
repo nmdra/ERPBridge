@@ -269,6 +269,12 @@ are added when an error is observed.
 
 ## Error Responses
 
+A listing endpoint answers with a bare JSON array. An empty collection may be
+encoded as `null`, because a store that has never held a resource returns a nil
+slice. `bridgectl` normalizes that to `[]` in its own `-o json` and `-o yaml`
+output, so a consumer of the CLI always reads a list, but a consumer of the raw
+endpoint must accept `null` as well.
+
 The server uses standard HTTP status codes. Control-plane failures return a
 bounded JSON object with `error`, `message`, `suggestion`, and numeric `code`.
 The `error` value is stable for automation. Common values include
@@ -276,7 +282,9 @@ The `error` value is stable for automation. Common values include
 `RESOURCE_NOT_FOUND`, `UPSTREAM_UNREACHABLE`, `RATE_LIMITED`, and
 `HEALTH_CHECK_FAILED`.
 Messages and suggestions never include upstream bodies, credentials, auth
-headers, or internal stack details.
+headers, or internal stack details. A `bridgectl` command checks the status
+before it decodes a typed body, so an error answer is reported as this envelope
+rather than as a decoding failure.
 
 A configured Redis backend remains the selected backend when Redis is
 unreachable; the server does not silently fall back to memory in that case.
