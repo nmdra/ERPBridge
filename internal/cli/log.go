@@ -50,6 +50,12 @@ frequency analysis of log levels and tool invocations.`,
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		// Check the status before decoding, so an error envelope is reported as
+		// the server's own failure rather than a Go type error.
+		if resp.StatusCode >= http.StatusBadRequest {
+			return bridgeResponseError(resp)
+		}
+
 		var logs []map[string]any
 		if err := json.NewDecoder(resp.Body).Decode(&logs); err != nil {
 			return err

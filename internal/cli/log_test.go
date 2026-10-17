@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/output"
+	"github.com/stretchr/testify/require"
 )
 
 // logStatsFixture serves a bounded recent-log payload for the summary command.
@@ -47,6 +49,22 @@ func withLogStatsContext(t *testing.T, serverURL string, format output.Format) *
 		logStatsCmd.SetOut(nil)
 	})
 	return buffer
+}
+
+// TestLogStatsReportsAuthenticationFailure covers issue #19 on the log summary
+// path, which decoded the body before it considered the status.
+func TestLogStatsReportsAuthenticationFailure(t *testing.T) {
+	server := authFailureServer(t)
+	_ = withLogStatsContext(t, server.URL, output.FormatTable)
+
+	err := logStatsCmd.RunE(logStatsCmd, nil)
+
+	actionable, ok := errors.AsType[*AgentActionableError](err)
+	if !ok {
+		t.Fatalf("error = %v, want an AgentActionableError rather than a decode failure", err)
+	}
+	require.Equal(t, "AUTHENTICATION_FAILED", actionable.ErrorCode)
+	require.Equal(t, CodeAuthFail, actionable.Code)
 }
 
 func TestLogStatsKeepsTableOutput(t *testing.T) {

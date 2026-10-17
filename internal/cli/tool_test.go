@@ -131,8 +131,8 @@ const authFailureEnvelope = `{"error":"AUTHENTICATION_FAILED",` +
 	`"message":"the server rejected the authentication credentials",` +
 	`"suggestion":"set a valid Authorization bearer token","code":401}`
 
-// toolAuthFailureServer answers every request with the recorded 401 envelope.
-func toolAuthFailureServer(t *testing.T) *httptest.Server {
+// authFailureServer answers every request with the recorded 401 envelope.
+func authFailureServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -147,7 +147,7 @@ func toolAuthFailureServer(t *testing.T) *httptest.Server {
 // decoded into a tool slice before the status was considered, so a 401 envelope
 // surfaced as a Go type error instead of the server's authentication failure.
 func TestToolGetReportsAuthenticationFailure(t *testing.T) {
-	ts := toolAuthFailureServer(t)
+	ts := authFailureServer(t)
 	cfg = &config.Config{
 		CurrentContext: testContextName,
 		Contexts: map[string]config.Context{
@@ -181,7 +181,7 @@ func TestToolGetReportsAuthenticationFailure(t *testing.T) {
 // issue #19: a rejected credential exits 4 with the server's own message, so a
 // caller can distinguish it from a contract mismatch.
 func TestToolGetAuthenticationFailureExitCode(t *testing.T) {
-	ts := toolAuthFailureServer(t)
+	ts := authFailureServer(t)
 	home := t.TempDir()
 	writeCLIContextConfig(t, home, ts.URL)
 
@@ -197,7 +197,7 @@ func TestToolGetAuthenticationFailureExitCode(t *testing.T) {
 // TestToolDescribeReportsAuthenticationFailure covers the same defect as
 // issue #19 on the sibling describe path.
 func TestToolDescribeReportsAuthenticationFailure(t *testing.T) {
-	ts := toolAuthFailureServer(t)
+	ts := authFailureServer(t)
 	cfg = &config.Config{
 		CurrentContext: testContextName,
 		Contexts: map[string]config.Context{
