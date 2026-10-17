@@ -8,6 +8,7 @@ import (
 var version = "dev"
 
 func main() {
+	cli.Version = version
 	cli.RootCmd.Version = version
 	cli.Execute()
 }

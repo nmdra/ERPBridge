@@ -159,7 +159,8 @@ A session without `--allow-write` exposes these tools:
 
 Every tool returns one JSON object with `schemaVersion`, `operation`, `context`,
 `success`, and either `data` or a safe `error` object. Failures set the MCP tool
-error flag.
+error flag. MCP initialization reports the same release version as
+`bridgectl --version`, so clients can identify the installed management server.
 
 A read tool reports a resource that the selected deployment does not hold as
 `not_found`, and a rejected credential as `authentication_required`, because the

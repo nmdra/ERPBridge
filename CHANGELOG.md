@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.6.0-alpha.1] - 2026-10-17
+
 ### Added
 
 - Add `bridgectl mcp --stdio`, a local management MCP server for AI coding
@@ -60,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Report the injected CLI release version in management MCP initialization
+  instead of the default `dev` label
 - Preserve literal tool deletion names and versions in control-plane queries, so
   identifier characters cannot change the confirmed target or request permanent
   deletion when `hard` is false
@@ -630,7 +634,8 @@ MCP tool → ERP API component → exact method/path endpoint relationships.
 - chore: prepare for versioning and release
 - chore: rename middleware to erpbridge-server
 
-[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.6...HEAD
+[Unreleased]: https://github.com/nmdra/ERPBridge/compare/v0.6.0-alpha.1...HEAD
+[v0.6.0-alpha.1]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.6...v0.6.0-alpha.1
 [v0.5.0-alpha.6]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.5...v0.5.0-alpha.6
 [v0.5.0-alpha.5]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.4...v0.5.0-alpha.5
 [v0.5.0-alpha.4]: https://github.com/nmdra/ERPBridge/compare/v0.5.0-alpha.3...v0.5.0-alpha.4
