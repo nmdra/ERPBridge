@@ -194,6 +194,56 @@ func TestToolGetAuthenticationFailureExitCode(t *testing.T) {
 	require.NotContains(t, result.stderr, "cannot unmarshal")
 }
 
+// TestToolDescribeReportsAuthenticationFailure covers the same defect as
+// issue #19 on the sibling describe path.
+func TestToolDescribeReportsAuthenticationFailure(t *testing.T) {
+	ts := toolAuthFailureServer(t)
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+
+	err := toolDescribeCmd.RunE(toolDescribeCmd, []string{testToolName + "@" + testToolVersion})
+
+	actionable, ok := errors.AsType[*AgentActionableError](err)
+	if !ok {
+		t.Fatalf("error = %v, want an AgentActionableError rather than a decode failure", err)
+	}
+	require.Equal(t, "AUTHENTICATION_FAILED", actionable.ErrorCode)
+	require.Equal(t, CodeAuthFail, actionable.Code)
+}
+
+// TestToolDescribeReportsMissingToolAsResourceNotFound lets an agent classify a
+// missing resource by code, as the sibling get path already does.
+func TestToolDescribeReportsMissingToolAsResourceNotFound(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(ts.Close)
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+	var buf bytes.Buffer
+	toolDescribeCmd.SetOut(&buf)
+	t.Cleanup(func() { toolDescribeCmd.SetOut(nil) })
+
+	err := toolDescribeCmd.RunE(toolDescribeCmd, []string{testToolName + "@" + testToolVersion})
+
+	actionable, ok := errors.AsType[*AgentActionableError](err)
+	if !ok {
+		t.Fatalf("error = %v, want an AgentActionableError", err)
+	}
+	require.Equal(t, "RESOURCE_NOT_FOUND", actionable.ErrorCode)
+	require.Equal(t, CodeNotFound, actionable.Code)
+}
+
 // writeCLIContextConfig writes one saved context that points at endpoint, so a
 // helper process can reach a test server without an ambient credential.
 func writeCLIContextConfig(t *testing.T, home, endpoint string) {

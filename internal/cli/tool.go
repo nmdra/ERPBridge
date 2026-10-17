@@ -376,6 +376,12 @@ var toolDescribeCmd = &cobra.Command{
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		// Check the status before decoding, so an error envelope is reported as
+		// the server's own failure rather than a Go type error.
+		if resp.StatusCode >= http.StatusBadRequest {
+			return bridgeResponseError(resp)
+		}
+
 		var tools []*mcp.Tool
 		if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
 			return err
@@ -390,7 +396,9 @@ var toolDescribeCmd = &cobra.Command{
 		}
 
 		if target == nil {
-			return fmt.Errorf("tool %s not found", args[0])
+			return NewError(CodeNotFound, "RESOURCE_NOT_FOUND",
+				fmt.Sprintf("tool %q was not found in the selected deployment", args[0]),
+				"List the available tools, or correct the name and version.")
 		}
 
 		out := cmd.OutOrStdout()
