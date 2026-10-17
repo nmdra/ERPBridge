@@ -239,3 +239,68 @@ func TestDecodeRemoteErrorResponseRedactsSecretBearingEnvelope(t *testing.T) {
 		t.Fatalf("unsafe remote error: %v", err)
 	}
 }
+
+// remoteErrorFrom decodes one envelope through the real response path.
+func remoteErrorFrom(t *testing.T, status int, body string) *RemoteError {
+	t.Helper()
+	response := &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	var remote *RemoteError
+	if err := DecodeRemoteErrorResponse(response); !errors.As(err, &remote) {
+		t.Fatalf("DecodeRemoteErrorResponse(%s) = %v, want a RemoteError", body, err)
+	}
+	return remote
+}
+
+// TestDecodeRemoteErrorResponseKeepsBearerGuidanceWording covers the defect that
+// blocked the issue #19 fix: the bearer redaction treated the server's own
+// guidance word as a credential, so the operator read "Bearer [REDACTED]".
+func TestDecodeRemoteErrorResponseKeepsBearerGuidanceWording(t *testing.T) {
+	const envelope = `{"error":"AUTHENTICATION_FAILED",` +
+		`"message":"the server rejected the authentication credentials",` +
+		`"suggestion":"set a valid Authorization bearer token","code":401}`
+
+	for _, word := range []string{"token", "tokens", "value", "credential", "credentials", "authentication", "authorization", "header"} {
+		t.Run(word, func(t *testing.T) {
+			body := strings.Replace(envelope, "bearer token", "bearer "+word, 1)
+			remote := remoteErrorFrom(t, http.StatusUnauthorized, body)
+			want := "set a valid Authorization bearer " + word
+			if remote.Suggestion != want {
+				t.Fatalf("suggestion = %q, want %q", remote.Suggestion, want)
+			}
+		})
+	}
+
+	t.Run("trailing punctuation", func(t *testing.T) {
+		body := strings.Replace(envelope, "bearer token", "bearer token.", 1)
+		remote := remoteErrorFrom(t, http.StatusUnauthorized, body)
+		if remote.Suggestion != "set a valid Authorization bearer token." {
+			t.Fatalf("suggestion = %q, want the trailing period preserved", remote.Suggestion)
+		}
+	})
+}
+
+// TestDecodeRemoteErrorResponseStillRedactsBearerCredentials proves the guidance
+// exception does not spare a credential value.
+func TestDecodeRemoteErrorResponseStillRedactsBearerCredentials(t *testing.T) {
+	for _, value := range []string{
+		"secret-value",
+		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature",
+		"abc123def456",
+		"A1B2C3D4E5F6G7H8",
+		"averylongcredentialvalue",
+		"sk_live_9f8e7d6c5b4a",
+	} {
+		t.Run(value, func(t *testing.T) {
+			body := `{"error":"AUTHENTICATION_FAILED","message":"rejected",` +
+				`"suggestion":"retry with Authorization: Bearer ` + value + `","code":401}`
+			remote := remoteErrorFrom(t, http.StatusUnauthorized, body)
+			if strings.Contains(remote.Suggestion, value) {
+				t.Fatalf("suggestion = %q, want the credential value redacted", remote.Suggestion)
+			}
+		})
+	}
+}

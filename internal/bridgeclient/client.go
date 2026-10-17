@@ -126,9 +126,40 @@ func fallbackRemoteError(status int) *RemoteError {
 
 func sanitizeRemoteText(value string) string {
 	value = remoteURLPattern.ReplaceAllString(value, "[REDACTED_URL]")
-	value = remoteBearerPattern.ReplaceAllString(value, "Bearer [REDACTED]")
+	value = redactBearerValues(value)
 	value = remoteHeaderPattern.ReplaceAllString(value, "$1: [REDACTED]")
 	return remoteSecretPattern.ReplaceAllString(value, "$1=[REDACTED]")
+}
+
+// bearerGuidanceWords are the words a server uses when it describes how to
+// supply a credential. They are wording rather than a credential value, so
+// redacting them would erase the server's own guidance from the message an
+// operator reads.
+var bearerGuidanceWords = map[string]bool{
+	"token":          true,
+	"tokens":         true,
+	"value":          true,
+	"credential":     true,
+	"credentials":    true,
+	"authentication": true,
+	"authorization":  true,
+	"header":         true,
+}
+
+// redactBearerValues replaces the value after a bearer keyword unless that value
+// is guidance wording. Every other value, including a JWT, an opaque secret, or
+// any word that merely resembles one, is still replaced.
+func redactBearerValues(value string) string {
+	return remoteBearerPattern.ReplaceAllStringFunc(value, func(match string) string {
+		fields := strings.Fields(match)
+		if len(fields) == 2 {
+			candidate := strings.ToLower(strings.TrimRight(fields[1], ".,:;!?"))
+			if bearerGuidanceWords[candidate] {
+				return match
+			}
+		}
+		return "Bearer [REDACTED]"
+	})
 }
 
 // Target selects one of the two configured ERPBridge endpoints.
