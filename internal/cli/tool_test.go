@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -121,6 +123,85 @@ func TestToolGetListHonoursLocalOutputFlag(t *testing.T) {
 		require.Contains(t, buf.String(), "NAME")
 		require.Contains(t, buf.String(), testToolName)
 	})
+}
+
+// authFailureEnvelope is the control-plane answer the issue recorded for a
+// missing or rejected credential.
+const authFailureEnvelope = `{"error":"AUTHENTICATION_FAILED",` +
+	`"message":"the server rejected the authentication credentials",` +
+	`"suggestion":"set a valid Authorization bearer token","code":401}`
+
+// toolAuthFailureServer answers every request with the recorded 401 envelope.
+func toolAuthFailureServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(authFailureEnvelope))
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// TestToolGetReportsAuthenticationFailure covers issue #19: the body was
+// decoded into a tool slice before the status was considered, so a 401 envelope
+// surfaced as a Go type error instead of the server's authentication failure.
+func TestToolGetReportsAuthenticationFailure(t *testing.T) {
+	ts := toolAuthFailureServer(t)
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+	t.Cleanup(func() { _ = toolGetCmd.Flags().Set("output", "table") })
+
+	for _, testCase := range []struct {
+		name string
+		args []string
+	}{
+		{"list form", nil},
+		{"named form", []string{testToolName + "@" + testToolVersion}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := toolGetCmd.RunE(toolGetCmd, testCase.args)
+
+			actionable, ok := errors.AsType[*AgentActionableError](err)
+			if !ok {
+				t.Fatalf("error = %v, want an AgentActionableError rather than a decode failure", err)
+			}
+			require.Equal(t, "AUTHENTICATION_FAILED", actionable.ErrorCode)
+			require.Equal(t, CodeAuthFail, actionable.Code)
+			require.Equal(t, "set a valid Authorization bearer token", actionable.Suggestion)
+		})
+	}
+}
+
+// TestToolGetAuthenticationFailureExitCode proves the process-level contract for
+// issue #19: a rejected credential exits 4 with the server's own message, so a
+// caller can distinguish it from a contract mismatch.
+func TestToolGetAuthenticationFailureExitCode(t *testing.T) {
+	ts := toolAuthFailureServer(t)
+	home := t.TempDir()
+	writeCLIContextConfig(t, home, ts.URL)
+
+	result := runCLIProcessIn(t, home, "tool", "get")
+
+	require.Equal(t, CodeAuthFail, result.code, "stderr = %q", result.stderr)
+	require.Contains(t, result.stderr, "AUTHENTICATION_FAILED")
+	require.Contains(t, result.stderr, "the server rejected the authentication credentials")
+	require.Contains(t, result.stderr, "set a valid Authorization bearer token")
+	require.NotContains(t, result.stderr, "cannot unmarshal")
+}
+
+// writeCLIContextConfig writes one saved context that points at endpoint, so a
+// helper process can reach a test server without an ambient credential.
+func writeCLIContextConfig(t *testing.T, home, endpoint string) {
+	t.Helper()
+	directory := filepath.Join(home, ".bridgectl")
+	require.NoError(t, os.MkdirAll(directory, 0o700)) // #nosec G304 G703 -- test-owned temporary home
+	content := fmt.Sprintf("current-context: test\ncontexts:\n  test:\n    server: %s\n    mcp-server: %s\n", endpoint, endpoint)
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "config.yaml"), []byte(content), 0o600)) // #nosec G304 G703 -- test-owned temporary home
 }
 
 func TestValidateToolManifestRejectsUntypedOutputSchema(t *testing.T) {

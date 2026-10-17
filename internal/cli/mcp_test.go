@@ -42,6 +42,13 @@ type cliProcessResult struct {
 // no inherited bridge credentials.
 func runCLIProcess(t *testing.T, args ...string) cliProcessResult {
 	t.Helper()
+	return runCLIProcessIn(t, t.TempDir(), args...)
+}
+
+// runCLIProcessIn executes the CLI in a child process that uses the supplied
+// home directory, so a test can seed a saved context before the run.
+func runCLIProcessIn(t *testing.T, home string, args ...string) cliProcessResult {
+	t.Helper()
 	blocked := map[string]bool{
 		"HOME": true, helperArgsEnv: true, climcp.ChildSnapshotEnv: true,
 		"BRIDGE_CONTEXT": true, "BRIDGE_SERVER": true, "BRIDGE_MCP_SERVER": true,
@@ -56,7 +63,7 @@ func runCLIProcess(t *testing.T, args ...string) cliProcessResult {
 			env = append(env, entry)
 		}
 	}
-	env = append(env, "HOME="+t.TempDir(), helperArgsEnv+"="+strings.Join(args, "\x1f"))
+	env = append(env, "HOME="+home, helperArgsEnv+"="+strings.Join(args, "\x1f"))
 
 	// #nosec G204 G702 -- the test binary re-executes itself with a fixed
 	// argument vector; the CLI arguments travel through the environment.

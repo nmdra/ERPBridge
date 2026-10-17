@@ -269,6 +269,13 @@ var toolGetCmd = &cobra.Command{
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		// The status must be checked before decoding: an error answer is a JSON
+		// object envelope, so decoding it into a tool slice would report a Go
+		// type error instead of the server's own failure.
+		if resp.StatusCode >= http.StatusBadRequest {
+			return bridgeResponseError(resp)
+		}
+
 		var tools []*mcp.Tool
 		if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
 			return err
