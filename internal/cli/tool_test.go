@@ -125,11 +125,11 @@ func TestToolGetListHonoursLocalOutputFlag(t *testing.T) {
 	})
 }
 
-// authFailureEnvelope is the control-plane answer the issue recorded for a
-// missing or rejected credential.
+// authFailureEnvelope is the control-plane answer for a missing or rejected
+// credential, matching internal/mcp/auth.go.
 const authFailureEnvelope = `{"error":"AUTHENTICATION_FAILED",` +
 	`"message":"the server rejected the authentication credentials",` +
-	`"suggestion":"set a valid Authorization bearer token","code":401}`
+	`"suggestion":"set a valid token in the Authorization header","code":401}`
 
 // authFailureServer answers every request with the recorded 401 envelope.
 func authFailureServer(t *testing.T) *httptest.Server {
@@ -172,7 +172,7 @@ func TestToolGetReportsAuthenticationFailure(t *testing.T) {
 			}
 			require.Equal(t, "AUTHENTICATION_FAILED", actionable.ErrorCode)
 			require.Equal(t, CodeAuthFail, actionable.Code)
-			require.Equal(t, "set a valid Authorization bearer token", actionable.Suggestion)
+			require.Equal(t, "set a valid token in the Authorization header", actionable.Suggestion)
 		})
 	}
 }
@@ -190,7 +190,7 @@ func TestToolGetAuthenticationFailureExitCode(t *testing.T) {
 	require.Equal(t, CodeAuthFail, result.code, "stderr = %q", result.stderr)
 	require.Contains(t, result.stderr, "AUTHENTICATION_FAILED")
 	require.Contains(t, result.stderr, "the server rejected the authentication credentials")
-	require.Contains(t, result.stderr, "set a valid Authorization bearer token")
+	require.Contains(t, result.stderr, "set a valid token in the Authorization header")
 	require.NotContains(t, result.stderr, "cannot unmarshal")
 }
 
@@ -217,9 +217,27 @@ func TestToolGetNamedRendersThroughTheCommandWriter(t *testing.T) {
 
 			require.NoError(t, toolGetCmd.RunE(toolGetCmd, []string{testToolName + "@1.0"}))
 
-			require.Contains(t, buffer.String(), testToolName)
-			require.NotContains(t, buffer.String(), "tools:")
-			require.NotContains(t, buffer.String(), `"tools"`)
+			// The payload is a bare resource object, in a decodable document.
+			var decoded struct {
+				Metadata struct {
+					Name string `json:"name"`
+				} `json:"metadata"`
+			}
+			if format == "json" {
+				require.NoError(t, json.Unmarshal(buffer.Bytes(), &decoded))
+			} else {
+				require.NoError(t, yaml.Unmarshal(buffer.Bytes(), &decoded))
+			}
+			require.Equal(t, testToolName, decoded.Metadata.Name)
+
+			var fields map[string]any
+			if format == "json" {
+				require.NoError(t, json.Unmarshal(buffer.Bytes(), &fields))
+			} else {
+				require.NoError(t, yaml.Unmarshal(buffer.Bytes(), &fields))
+			}
+			require.Contains(t, fields, "metadata")
+			require.NotContains(t, fields, "tools")
 		})
 	}
 }

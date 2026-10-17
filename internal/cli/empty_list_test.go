@@ -50,17 +50,19 @@ func setControlPlaneContext(t *testing.T, endpoint string) {
 }
 
 // controlPlaneJSON runs one list command with the JSON format and returns what
-// it printed.
+// it printed. The previous shared state is restored afterwards, because this
+// package's tests mutate package-level configuration.
 func controlPlaneJSON(t *testing.T, run func() error) string {
 	t.Helper()
 	var buffer bytes.Buffer
+	previousFormatter, previousFormat, previousConfig := formatter, outputFormat, cfg
 	formatter = &output.Formatter{Format: output.FormatJSON, Out: &buffer}
 	outputFormat = string(output.FormatJSON)
 	toolGetCmd.SetOut(&buffer)
 	pluginGetCmd.SetOut(&buffer)
 	pluginBindingGetCmd.SetOut(&buffer)
 	t.Cleanup(func() {
-		outputFormat = "table"
+		formatter, outputFormat, cfg = previousFormatter, previousFormat, previousConfig
 		toolGetCmd.SetOut(nil)
 		pluginGetCmd.SetOut(nil)
 		pluginBindingGetCmd.SetOut(nil)
@@ -130,6 +132,9 @@ func TestEmptyCollectionSerializesAsEmptyArray(t *testing.T) {
 			field: "items",
 			run: func(t *testing.T, _ string) string {
 				useTestLogger(t)
+				// api list reads the local registry, not the HTTP fixture, so it
+				// needs its own empty home.
+				t.Setenv("HOME", t.TempDir())
 				cfg = &config.Config{
 					CurrentContext: testContextName,
 					Contexts:       map[string]config.Context{testContextName: {}},

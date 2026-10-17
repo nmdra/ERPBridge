@@ -162,8 +162,8 @@ Every tool returns one JSON object with `schemaVersion`, `operation`, `context`,
 error flag.
 
 A read tool reports a resource that the selected deployment does not hold as
-`not_found`, and a rejected credential as `auth_failed`, because the managed
-child now checks the control-plane status before it decodes a typed body. The
+`not_found`, and a rejected credential as `authentication_required`, because the
+managed child now checks the control-plane status before it decodes a typed body. The
 adapter maps these by code and never reads child prose.
 
 ### Result redaction

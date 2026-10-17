@@ -240,11 +240,11 @@ func TestDecodeRemoteErrorResponseRedactsSecretBearingEnvelope(t *testing.T) {
 	}
 }
 
-// remoteErrorFrom decodes one envelope through the real response path.
-func remoteErrorFrom(t *testing.T, status int, body string) *RemoteError {
+// remoteErrorFrom decodes one 401 envelope through the real response path.
+func remoteErrorFrom(t *testing.T, body string) *RemoteError {
 	t.Helper()
 	response := &http.Response{
-		StatusCode: status,
+		StatusCode: http.StatusUnauthorized,
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}
@@ -255,32 +255,67 @@ func remoteErrorFrom(t *testing.T, status int, body string) *RemoteError {
 	return remote
 }
 
-// TestDecodeRemoteErrorResponseKeepsBearerGuidanceWording covers the defect that
-// blocked the issue #19 fix: the bearer redaction treated the server's own
-// guidance word as a credential, so the operator read "Bearer [REDACTED]".
-func TestDecodeRemoteErrorResponseKeepsBearerGuidanceWording(t *testing.T) {
+// TestDecodeRemoteErrorResponseKeepsServerGuidanceIntact covers the defect that
+// blocked the issue #19 fix: the server's own 401 guidance reached the operator
+// mangled, so a reader could not tell whether the CLI had hidden a value.
+//
+// The redaction stays strict, so the fix is the server's wording: guidance that
+// avoids the "bearer <value>" shape survives unchanged.
+func TestDecodeRemoteErrorResponseKeepsServerGuidanceIntact(t *testing.T) {
 	const envelope = `{"error":"AUTHENTICATION_FAILED",` +
 		`"message":"the server rejected the authentication credentials",` +
-		`"suggestion":"set a valid Authorization bearer token","code":401}`
+		`"suggestion":"set a valid token in the Authorization header","code":401}`
 
-	for _, word := range []string{"token", "tokens", "value", "credential", "credentials", "authentication", "authorization", "header"} {
-		t.Run(word, func(t *testing.T) {
-			body := strings.Replace(envelope, "bearer token", "bearer "+word, 1)
-			remote := remoteErrorFrom(t, http.StatusUnauthorized, body)
-			want := "set a valid Authorization bearer " + word
-			if remote.Suggestion != want {
-				t.Fatalf("suggestion = %q, want %q", remote.Suggestion, want)
+	remote := remoteErrorFrom(t, envelope)
+
+	want := "set a valid token in the Authorization header"
+	if remote.Suggestion != want {
+		t.Fatalf("suggestion = %q, want %q", remote.Suggestion, want)
+	}
+	if remote.Message != "the server rejected the authentication credentials" {
+		t.Fatalf("message = %q", remote.Message)
+	}
+}
+
+// TestDecodeRemoteErrorResponseRedactsGuidanceLikeWords proves the redaction is
+// not weakened for a credential whose value happens to be an ordinary word. A
+// value may be any opaque string, so spelling cannot exempt it.
+func TestDecodeRemoteErrorResponseRedactsGuidanceLikeWords(t *testing.T) {
+	for _, value := range []string{
+		"token", "tokens", "value", "credential", "credentials",
+		"authentication", "authorization", "header",
+		"TOKEN", "Token", "token.", "token!!", "credential.",
+	} {
+		t.Run(value, func(t *testing.T) {
+			body := `{"error":"AUTHENTICATION_FAILED","message":"rejected",` +
+				`"suggestion":"retry with Authorization: Bearer ` + value + `","code":401}`
+			remote := remoteErrorFrom(t, body)
+			if strings.Contains(remote.Suggestion, value) {
+				t.Fatalf("suggestion = %q, want the value %q redacted", remote.Suggestion, value)
+			}
+			if !strings.Contains(remote.Suggestion, "[REDACTED]") {
+				t.Fatalf("suggestion = %q, want a redaction marker", remote.Suggestion)
 			}
 		})
 	}
+}
 
-	t.Run("trailing punctuation", func(t *testing.T) {
-		body := strings.Replace(envelope, "bearer token", "bearer token.", 1)
-		remote := remoteErrorFrom(t, http.StatusUnauthorized, body)
-		if remote.Suggestion != "set a valid Authorization bearer token." {
-			t.Fatalf("suggestion = %q, want the trailing period preserved", remote.Suggestion)
+// TestDecodeRemoteErrorResponseRedactsEveryBearerMatch proves one exempt-looking
+// match cannot shield a second real credential in the same string.
+func TestDecodeRemoteErrorResponseRedactsEveryBearerMatch(t *testing.T) {
+	body := `{"error":"AUTHENTICATION_FAILED","message":"rejected",` +
+		`"suggestion":"Bearer token then Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature","code":401}`
+
+	remote := remoteErrorFrom(t, body)
+
+	for _, leaked := range []string{"token", "eyJhbGci"} {
+		if strings.Contains(remote.Suggestion, leaked) {
+			t.Fatalf("suggestion = %q, want %q redacted", remote.Suggestion, leaked)
 		}
-	})
+	}
+	if strings.Count(remote.Suggestion, "[REDACTED]") != 2 {
+		t.Fatalf("suggestion = %q, want two redaction markers", remote.Suggestion)
+	}
 }
 
 // TestDecodeRemoteErrorResponseStillRedactsBearerCredentials proves the guidance
@@ -297,7 +332,7 @@ func TestDecodeRemoteErrorResponseStillRedactsBearerCredentials(t *testing.T) {
 		t.Run(value, func(t *testing.T) {
 			body := `{"error":"AUTHENTICATION_FAILED","message":"rejected",` +
 				`"suggestion":"retry with Authorization: Bearer ` + value + `","code":401}`
-			remote := remoteErrorFrom(t, http.StatusUnauthorized, body)
+			remote := remoteErrorFrom(t, body)
 			if strings.Contains(remote.Suggestion, value) {
 				t.Fatalf("suggestion = %q, want the credential value redacted", remote.Suggestion)
 			}

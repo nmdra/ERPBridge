@@ -61,17 +61,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Check the control-plane status before decoding a typed body in `bridgectl tool
-  get`, `tool describe`, `tool get` completion, and `log stats`. A rejected or
-  missing credential previously surfaced as
+  get`, `tool describe`, and `log stats`. A rejected or missing credential
+  previously surfaced as
   `json: cannot unmarshal object into Go value of type []*mcp.Tool` and exited
   `1`, hiding the server's own `AUTHENTICATION_FAILED` envelope and its
   suggestion. These commands now report the server's message and exit `4`.
 - Report a tool that is not in the selected deployment from `tool describe` with
   the recognized `RESOURCE_NOT_FOUND` code, matching `tool get`.
-- Stop the bearer redaction from rewriting the server's own guidance, which
-  turned `set a valid Authorization bearer token` into
-  `set a valid Authorization Bearer [REDACTED]`. A small whitelist of guidance
-  words is spared; every other bearer value is still replaced.
+- Report the server's `AUTHENTICATION_FAILED` message and suggestion instead of a
+  decoding failure on every read path, including `log stats`. A rejected
+  credential exits `4`.
+- Reword the control-plane `401` suggestion to
+  `set a valid token in the Authorization header`. The previous wording,
+  `set a valid Authorization bearer token`, was mangled by the client's own
+  bearer redaction into `set a valid Authorization Bearer [REDACTED]`, so the
+  operator could not tell whether the CLI had hidden a value. The redaction stays
+  strict: a credential is redacted whatever it is spelled, and `tool get`
+  completion reports a server error as a directive rather than decoding it.
 - Serialize an empty collection as a list rather than `null` in `tool get`,
   `plugin get`, `plugin binding get`, `token list`, and `context list`. A nil
   slice produced `{"tools": null}`, which a consumer that reads the output as
