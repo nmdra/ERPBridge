@@ -70,6 +70,8 @@ type deploymentFixture struct {
 	mu           sync.Mutex
 	requests     []string
 	probeSuccess bool
+	// blockReads delays read endpoints so transport cancellation can be tested.
+	blockReads time.Duration
 }
 
 func newDeploymentFixture(t *testing.T) *deploymentFixture {
@@ -131,7 +133,17 @@ func newDeploymentFixture(t *testing.T) *deploymentFixture {
 	fixture.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fixture.mu.Lock()
 		fixture.requests = append(fixture.requests, r.Method+" "+r.URL.Path)
+		delay := fixture.blockReads
 		fixture.mu.Unlock()
+		if delay > 0 && r.Method == http.MethodGet {
+			// Stop as soon as the caller disconnects, so a cancelled child does
+			// not hold the fixture open for the whole delay.
+			select {
+			case <-time.After(delay):
+			case <-r.Context().Done():
+				return
+			}
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -795,4 +807,16 @@ func TestRealChildContextSetKeepsTheSessionPinned(t *testing.T) {
 	if strings.Contains(content, fixture.server.URL) && strings.Contains(content, other.server.URL) && strings.Count(content, "server:") != 4 {
 		t.Fatalf("unexpected endpoint changes:\n%s", content)
 	}
+}
+
+// newUnauthorizedFixture serves 401 for every request.
+func newUnauthorizedFixture(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"error":"AUTHENTICATION_FAILED","message":"canary-upstream-detail"}`)
+	}))
+	t.Cleanup(server.Close)
+	return server
 }

@@ -226,6 +226,83 @@ A write operation that is cancelled, times out, or cannot be interpreted is
 reported as `outcome_unknown`. The adapter does not claim that the operation was
 rolled back and does not retry it. Read the target resource before retrying.
 
+## Connect a coding agent
+
+Register the management server separately from the runtime server. The runtime
+server exposes published ERP tools; the management server exposes the catalogue
+above. Use different names so a grant is never ambiguous.
+
+Use an absolute path to the `bridgectl` binary, keep the token in the host
+environment rather than in the configuration file, and start with the read-only
+default. These examples are documentation only: the adapter never edits a
+coding-agent configuration and never launches an agent.
+
+### Codex CLI
+
+```toml
+[mcp_servers.erpbridge_manage]
+command = "/usr/local/bin/bridgectl"
+args = ["mcp", "--stdio", "--context", "staging"]
+env_vars = ["BRIDGE_API_TOKEN"]
+enabled_tools = ["bridgectl_context_list", "bridgectl_api_list", "bridgectl_tool_get"]
+```
+
+`env_vars` forwards host environment variables to the child process, so the
+credential stays outside the configuration file. Add write groups to `args`
+only for the deployment where they are intended:
+
+```toml
+[mcp_servers.erpbridge_manage]
+command = "/usr/local/bin/bridgectl"
+args = ["mcp", "--stdio", "--context", "staging", "--allow-write", "registry,resources"]
+env_vars = ["BRIDGE_API_TOKEN"]
+default_tools_approval_mode = "prompt"
+```
+
+For the runtime server, keep a separate entry that starts `erpbridge-server
+--stdio` or points at `https://<erpbridge-host>/mcp/`.
+
+### Claude Code
+
+```sh
+claude mcp add --transport stdio erpbridge_manage -- \
+  /usr/local/bin/bridgectl mcp --stdio --context staging
+```
+
+With an explicit write grant:
+
+```sh
+claude mcp add --transport stdio erpbridge_manage -- \
+  /usr/local/bin/bridgectl mcp --stdio --context staging --allow-write registry,resources
+```
+
+Keep `BRIDGE_API_TOKEN` in the host environment. Claude Code also supports an
+`--env` option; prefer the host environment when a secret store already provides
+the value.
+
+### What the grant does and does not do
+
+- It governs only this local process. The ERPBridge deployment authorizes every
+  request again on its own.
+- It is not human approval. Confirmation fields prevent a target mismatch; they
+  do not prove that a person reviewed the call. Configure approvals in the agent
+  host as well.
+- It does not cover token creation, OpenAPI import, file output, or arbitrary
+  commands. Those stay in the manual CLI.
+- It does not survive a restart of the MCP process. Adding or removing a group
+  requires a new process.
+
+## Restart and recovery
+
+Endpoints, the credential, and the write grants are captured when the process
+starts. After you change an endpoint, a credential, or a grant, restart the MCP
+process. A running session keeps its pinned selection and never falls back to
+another saved context.
+
+If a write reports `outcome_unknown`, read the target resource before retrying.
+The adapter does not roll back and does not retry, so a second attempt could
+repeat an effect that already happened.
+
 ## Related documentation
 
 - [Agentic tools MCP integration](./agent-integrations.md) covers runtime MCP

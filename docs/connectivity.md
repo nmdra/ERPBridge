@@ -135,3 +135,11 @@ dropped when it is full.
 | **Claude / Cursor** | Stdio | `erpbridge-server --stdio` |
 | **bridgectl / Scripts** | Direct API | `http://localhost:8080/api/` |
 | **Prometheus** | HTTP | `http://localhost:8080/metrics` |
+
+## Management stdio transport
+
+`erpbridge-server --stdio` serves published ERP tools. `bridgectl mcp --stdio`
+is a separate, local management server for AI coding agents: it exposes the
+`bridgectl` management catalogue over stdio, keeps its diagnostics on stderr,
+and pins the session to the selected context. It does not serve ERP tools. See
+the [management MCP server guide](./bridgectl-mcp.md).

@@ -134,6 +134,7 @@ For detailed setup instructions, including Postman collections, see the [Connect
 
 - [**Documentation Wiki**](./docs/README.md) - Central hub for all guides.
 - [**CLI Reference**](./docs/cli/bridgectl.md) - Detailed `bridgectl` command documentation.
+- [**Management MCP server**](./docs/bridgectl-mcp.md) - Serve ERPBridge management operations to an AI coding agent.
 - [**AI Agent Guide**](./AGENTS.md) - Best practices for agentic integration.
 - [**AI Skills**](./skills/bridgectl-ops/SKILL.md) - Operational guidance for AI agents that manage and troubleshoot ERPBridge.
 - [**Docker Deployment**](./docs/docker.md) - Production-ready deployment strategies.

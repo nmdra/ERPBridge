@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edits the raw file, so environment placeholders, stored values, and unknown
   fields survive, the replacement is written with mode 0600, and a concurrent
   external change is refused instead of overwritten.
+- Document the management MCP server end to end: the tool catalogue, result
+  redaction, startup write groups, canonical confirmation targets, the unknown
+  outcome contract, Codex CLI and Claude Code registration examples, session
+  pinning, and restart-based recovery. The runtime `erpbridge-server --stdio`
+  server and the management `bridgectl mcp --stdio` server are documented as
+  separate registrations.
 
 ### Fixed
 
