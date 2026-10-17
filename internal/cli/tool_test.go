@@ -244,6 +244,30 @@ func TestToolDescribeReportsMissingToolAsResourceNotFound(t *testing.T) {
 	require.Equal(t, CodeNotFound, actionable.Code)
 }
 
+// TestToolCompletionReportsServerErrorWithoutDecoding covers the completion
+// path, which decoded the body before it considered the status. A non-2xx answer
+// that happens to be a JSON array must not be offered as a valid, empty
+// catalogue.
+func TestToolCompletionReportsServerErrorWithoutDecoding(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`[{"metadata":{"name":"` + testToolName + `","version":"1.0"}}]`))
+	}))
+	t.Cleanup(ts.Close)
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+
+	completions, directive := toolGetCmd.ValidArgsFunction(toolGetCmd, nil, "")
+
+	require.Empty(t, completions, "an error answer was offered as a catalogue")
+	require.Equal(t, cobra.ShellCompDirectiveError, directive)
+}
+
 // writeCLIContextConfig writes one saved context that points at endpoint, so a
 // helper process can reach a test server without an ambient credential.
 func writeCLIContextConfig(t *testing.T, home, endpoint string) {

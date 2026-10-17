@@ -233,6 +233,12 @@ var toolGetCmd = &cobra.Command{
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		// Completion stays silent, so a server error is reported as a directive
+		// rather than decoded as if it were a catalogue.
+		if resp.StatusCode >= http.StatusBadRequest {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
 		var tools []*mcp.Tool
 		if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
 			return nil, cobra.ShellCompDirectiveError
