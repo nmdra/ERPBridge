@@ -317,7 +317,7 @@ var toolGetCmd = &cobra.Command{
 			tools = []*mcp.Tool{target}
 		}
 
-		res := &ToolListResponse{Tools: tools}
+		res := &ToolListResponse{Tools: output.NonNil(tools)}
 		return printToolList(cmd, res)
 	},
 }

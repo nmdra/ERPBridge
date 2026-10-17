@@ -188,7 +188,7 @@ func renderPluginBinding(out io.Writer, cmd *cobra.Command, target *mcp.PluginBi
 			return (&PluginBindingListResponse{Bindings: []*mcp.PluginBinding{target}}).RenderTable(out)
 		}
 	}
-	response := &PluginBindingListResponse{Bindings: bindings}
+	response := &PluginBindingListResponse{Bindings: output.NonNil(bindings)}
 	if format == string(output.FormatJSON) {
 		encoder := json.NewEncoder(out)
 		encoder.SetIndent("", "  ")

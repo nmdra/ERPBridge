@@ -111,7 +111,7 @@ var tokenListCmd = &cobra.Command{
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			return err
 		}
-		return formatter.Print(&TokenListResponse{Items: result})
+		return formatter.Print(&TokenListResponse{Items: output.NonNil(result)})
 	},
 }
 

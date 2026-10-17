@@ -37,7 +37,7 @@ var contextListCmd = &cobra.Command{
 				Current: current,
 			})
 		}
-		resp := &ContextListResponse{Items: items}
+		resp := &ContextListResponse{Items: output.NonNil(items)}
 		return formatter.Print(resp)
 	},
 }

@@ -310,7 +310,7 @@ func renderPlugin(out io.Writer, cmd *cobra.Command, target *mcp.Plugin, plugins
 			return (&PluginListResponse{Plugins: []*mcp.Plugin{target}}).RenderTable(out)
 		}
 	}
-	response := &PluginListResponse{Plugins: plugins}
+	response := &PluginListResponse{Plugins: output.NonNil(plugins)}
 	if format == string(output.FormatJSON) {
 		encoder := json.NewEncoder(out)
 		encoder.SetIndent("", "  ")

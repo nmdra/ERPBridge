@@ -97,6 +97,16 @@ func (r *RawResponse) MarshalYAML() (any, error) {
 	return r.target, nil
 }
 
+// NonNil returns an empty slice when items is nil, so a rendered collection is
+// always a list rather than null. A consumer that reads the output as data
+// cannot tell an absent collection from an empty one otherwise.
+func NonNil[T any](items []T) []T {
+	if items == nil {
+		return []T{}
+	}
+	return items
+}
+
 // NewTabWriter returns a pre-configured tab writer for table output.
 func NewTabWriter(w io.Writer) *tabwriter.Writer {
 	return tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
