@@ -67,13 +67,15 @@ type deploymentFixture struct {
 	plugins  string
 	bindings string
 
-	mu       sync.Mutex
-	requests []string
+	mu           sync.Mutex
+	requests     []string
+	probeSuccess bool
 }
 
 func newDeploymentFixture(t *testing.T) *deploymentFixture {
 	t.Helper()
 	fixture := &deploymentFixture{
+		probeSuccess: true,
 		tools: encodeFor(t, []any{map[string]any{
 			"apiVersion": "erpbridge.io/v1",
 			"kind":       kindTool,
@@ -105,7 +107,7 @@ func newDeploymentFixture(t *testing.T) *deploymentFixture {
 		plugins: encodeFor(t, []any{map[string]any{
 			"apiVersion": "erpbridge.io/v1",
 			"kind":       kindPlugin,
-			"metadata":   map[string]any{"name": "redact", "version": "2.0.0", "type": "http", "isActive": true},
+			"metadata":   map[string]any{"name": "redact", "version": "2.0.0", "type": "api", "isActive": true},
 			"spec": map[string]any{
 				"endpoint": "https://plugins.internal:9443/v1/process?token=canary-query",            // #nosec G101 -- canary query value
 				"auth":     map[string]any{"type": "bearer", "credentialRef": "PLUGIN_REDACT_TOKEN"}, // #nosec G101 -- logical reference
@@ -118,9 +120,9 @@ func newDeploymentFixture(t *testing.T) *deploymentFixture {
 			"spec": map[string]any{
 				"pluginRef":     map[string]any{"name": "redact", "version": "2.0.0"},
 				"toolRef":       map[string]any{"name": "list_items", "version": "1.0.0"},
-				"phase":         "post-response",
+				"phase":         "after_response",
 				"priority":      10,
-				"failurePolicy": "fail-closed",
+				"failurePolicy": "fail",
 				// #nosec G101 -- a canary configuration value.
 				"config": map[string]any{"apiKey": "canary-config-value"},
 			},
@@ -133,19 +135,36 @@ func newDeploymentFixture(t *testing.T) *deploymentFixture {
 
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/apis/erpbridge.io/v1/tools":
-			_, _ = io.WriteString(w, fixture.tools)
-		case "/apis/erpbridge.io/v1/plugins":
-			_, _ = io.WriteString(w, fixture.plugins)
-		case "/apis/erpbridge.io/v1/pluginbindings":
-			_, _ = io.WriteString(w, fixture.bindings)
+		case "/apis/erpbridge.io/v1/tools", "/apis/erpbridge.io/v1/plugins", "/apis/erpbridge.io/v1/pluginbindings":
+			// A read returns the stored inventory; a write accepts the resource.
+			if r.Method != http.MethodGet {
+				_, _ = io.WriteString(w, `{}`)
+				return
+			}
+			switch r.URL.Path {
+			case "/apis/erpbridge.io/v1/tools":
+				_, _ = io.WriteString(w, fixture.tools)
+			case "/apis/erpbridge.io/v1/plugins":
+				_, _ = io.WriteString(w, fixture.plugins)
+			default:
+				_, _ = io.WriteString(w, fixture.bindings)
+			}
 		case "/api/auth/tokens":
 			// #nosec G101 -- a canary value used to prove it is never returned.
 			_, _ = io.WriteString(w, `[{"id":"t1","name":"agent","scopes":["mcp"],"roles":["viewer"],"createdAt":"2026-01-02T03:04:05Z","token":"canary-token-value","secretHash":"canary-hash"}]`)
+		case "/api/auth/tokens/t1":
+			_, _ = io.WriteString(w, `{}`)
 		case "/api/cache/stats":
 			_, _ = io.WriteString(w, `{"stats":{"exactKeys":7,"redisMemory":"2MB"}}`)
 		case "/api/logs/recent":
 			_, _ = io.WriteString(w, `[{"level":"info","tool_name":"list_items","message":"canary-log-message"},{"level":"info","tool_name":"list_items"},{"level":"error","message":"canary-log-message"}]`)
+		case "/api/apis/test":
+			fixture.mu.Lock()
+			success := fixture.probeSuccess
+			fixture.mu.Unlock()
+			_, _ = fmt.Fprintf(w, `{"status":200,"contentType":"application/json","latency":5,"success":%t}`, success)
+		case "/api/cache/flush":
+			_, _ = io.WriteString(w, `{"deleted":3,"status":"ok"}`)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = io.WriteString(w, `{"error":"RESOURCE_NOT_FOUND"}`)
@@ -169,6 +188,13 @@ func (f *deploymentFixture) methods() []string {
 // realSession returns a session whose child is the real bridgectl binary,
 // configured against the fixture through a temporary home.
 func realSession(t *testing.T, fixture *deploymentFixture) *Server {
+	return realSessionWithGroups(t, fixture, nil)
+}
+
+// realSessionWithGroups builds a real-child session with the given write groups.
+// A second endpoint adds an unused "staging" saved context so a context change
+// can be proven not to retarget the session.
+func realSessionWithGroups(t *testing.T, fixture *deploymentFixture, groups []WriteGroup, stagingEndpoint ...string) *Server {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -179,7 +205,11 @@ func realSession(t *testing.T, fixture *deploymentFixture) *Server {
 	} {
 		t.Setenv(key, "")
 	}
-	writeContextConfig(t, home, fixture.server.URL)
+	endpoints := map[string]string{"test": fixture.server.URL}
+	if len(stagingEndpoint) > 0 && stagingEndpoint[0] != "" {
+		endpoints["staging"] = stagingEndpoint[0]
+	}
+	writeContextConfigWith(t, home, endpoints)
 
 	snapshot := Snapshot{
 		ContextName: "test",
@@ -195,6 +225,7 @@ func realSession(t *testing.T, fixture *deploymentFixture) *Server {
 	session, err := NewServer(Options{
 		Snapshot: snapshot,
 		Version:  "test-version",
+		Groups:   groups,
 		Runner: &Runner{
 			Executable: realCLI(t),
 			Env:        snapshot.ChildEnvironment(os.Environ()),
@@ -210,14 +241,39 @@ func realSession(t *testing.T, fixture *deploymentFixture) *Server {
 
 func writeContextConfig(t *testing.T, home, endpoint string) {
 	t.Helper()
+	writeContextConfigWith(t, home, map[string]string{"test": endpoint})
+}
+
+// writeContextConfigWith writes one saved context per endpoint. The staging
+// context carries an environment placeholder so a later edit can be checked for
+// expansion.
+func writeContextConfigWith(t *testing.T, home string, endpoints map[string]string) {
+	t.Helper()
 	dir := filepath.Join(home, ".bridgectl")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G304 G703 -- test-owned temporary home
 		t.Fatalf("create config directory: %v", err)
 	}
-	content := fmt.Sprintf("current-context: test\ncontexts:\n  test:\n    server: %s\n    mcp-server: %s\n", endpoint, endpoint)
-	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(content), 0o600); err != nil {
+	var builder strings.Builder
+	builder.WriteString("current-context: test\ncontexts:\n")
+	for _, name := range sortedCopy(keysOf(endpoints)) {
+		endpoint := endpoints[name]
+		fmt.Fprintf(&builder, "  %s:\n    server: %s\n    mcp-server: %s\n", name, endpoint, endpoint)
+		if name != "test" {
+			builder.WriteString("    api-token: ${ERPBRIDGE_TEST_TOKEN}\n")
+		}
+	}
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(builder.String()), 0o600); err != nil { // #nosec G304 G703 -- test-owned temporary home
 		t.Fatalf("write config: %v", err)
 	}
+}
+
+func keysOf(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 // registerFixtureAPI writes one API into the context-scoped local registry so
@@ -225,14 +281,14 @@ func writeContextConfig(t *testing.T, home, endpoint string) {
 func registerFixtureAPI(t *testing.T, home string) {
 	t.Helper()
 	dir := filepath.Join(home, ".bridgectl", "registries")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G304 G703 -- test-owned temporary home
 		t.Fatalf("create registry directory: %v", err)
 	}
 	content := `{"apis":{"erp":{"id":"api-1","name":"erp","url":"https://erp.internal:8443/api/items",` +
 		`"method":"GET","module":"erp","description":"ERP items","status":"active",` +
 		`"authType":"api-key","authHeader":"X-API-Key","credentialRef":"ERP_PRIMARY_KEY",` +
 		`"credentialSource":"env","createdAt":"2026-01-01T00:00:00Z"}}}`
-	if err := os.WriteFile(filepath.Join(dir, "test.json"), []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.json"), []byte(content), 0o600); err != nil { // #nosec G304 G703 -- test-owned temporary home
 		t.Fatalf("write registry: %v", err)
 	}
 }
@@ -362,7 +418,7 @@ func TestRealChildReadFamilies(t *testing.T) {
 					t.Fatalf("binding projection = %+v", list)
 				}
 				item := list.Items[0]
-				if item.Name != "orders-redaction" || item.Phase != "post-response" || item.FailurePolicy != "fail-closed" {
+				if item.Name != "orders-redaction" || item.Phase != "after_response" || item.FailurePolicy != "fail" {
 					t.Fatalf("binding metadata = %+v", item)
 				}
 				if item.PluginRef == nil || item.PluginRef.Name != "redact" || item.ToolRef == nil || item.ToolRef.Name != "list_items" {
@@ -556,5 +612,187 @@ func TestRealChildAuthenticationFailureIsMapped(t *testing.T) {
 	}
 	if strings.Contains(result.Error.Message, "canary-upstream-detail") {
 		t.Fatalf("upstream text leaked into the message: %q", result.Error.Message)
+	}
+}
+
+func allWriteGroups() []WriteGroup {
+	return []WriteGroup{GroupRegistry, GroupResources, GroupDestructive, GroupProbe, GroupContext}
+}
+
+func TestRealChildWriteFamilies(t *testing.T) {
+	fixture := newDeploymentFixture(t)
+	session := realSessionWithGroups(t, fixture, allWriteGroups(), fixture.server.URL)
+	registerFixtureAPI(t, os.Getenv("HOME"))
+
+	cases := []struct {
+		tool       string
+		args       map[string]any
+		wantTarget string
+	}{
+		{"bridgectl_api_register", map[string]any{
+			"name": "erp-new", "url": "https://erp.internal/api/items", "module": "erp",
+			"description": "ERP items", "confirmContext": "test", "confirmTarget": "erp-new",
+		}, "erp-new"},
+		{"bridgectl_api_set_credential_ref", nil, "erp"},
+		{"bridgectl_api_test", nil, "erp"},
+		{"bridgectl_tool_apply", nil, "list_items@1.0.0"},
+		{"bridgectl_tool_delete", nil, "list_items@1.0.0"},
+		{"bridgectl_plugin_apply", nil, "redact@2.0.0"},
+		{"bridgectl_plugin_delete", nil, "redact@2.0.0"},
+		{"bridgectl_binding_apply", nil, "orders-redaction"},
+		{"bridgectl_binding_delete", nil, "orders-redaction"},
+		{"bridgectl_token_revoke", nil, "t1"},
+		{"bridgectl_cache_flush", map[string]any{
+			"selector": "tool", "name": "list_items", "confirmContext": "test", "confirmTarget": "tool:list_items",
+		}, "tool:list_items"},
+		{"bridgectl_cache_flush", map[string]any{
+			"selector": "module", "name": "erp", "confirmContext": "test", "confirmTarget": "module:erp",
+		}, "module:erp"},
+		{"bridgectl_cache_flush", nil, "all"},
+		{"bridgectl_context_set", map[string]any{
+			"name": "staging", "confirmContext": "test", "confirmTarget": "staging",
+		}, "staging"},
+	}
+
+	for _, testCase := range cases {
+		args := testCase.args
+		if args == nil {
+			args = validWriteArgs(t, testCase.tool)
+		}
+		t.Run(testCase.tool+"_"+testCase.wantTarget, func(t *testing.T) {
+			result := dispatchTool(t, session, testCase.tool, args)
+			if !result.Success {
+				t.Fatalf("%s failed: %s (%s)", testCase.tool, result.Error.Message, result.Error.Suggestion)
+			}
+			raw, err := json.Marshal(result.Data)
+			if err != nil {
+				t.Fatalf("marshal write data: %v", err)
+			}
+			if testCase.tool != "bridgectl_api_test" && !strings.Contains(string(raw), `"verified":false`) {
+				t.Fatalf("write result claims verification: %s", raw)
+			}
+			if testCase.tool == "bridgectl_context_set" {
+				if !strings.Contains(string(raw), `"activeContext":"test"`) {
+					t.Fatalf("context change reported a different active context: %s", raw)
+				}
+				return
+			}
+			if !strings.Contains(string(raw), testCase.wantTarget) {
+				t.Fatalf("write data does not name the target %q: %s", testCase.wantTarget, raw)
+			}
+		})
+	}
+
+	// Hard deletion is the same command with an extra confirmed flag.
+	hard := validWriteArgs(t, "bridgectl_tool_delete")
+	hard["hard"] = true
+	result := dispatchTool(t, session, "bridgectl_tool_delete", hard)
+	if !result.Success {
+		t.Fatalf("hard delete failed: %s", result.Error.Message)
+	}
+
+	methods := fixture.methods()
+	for _, want := range []string{http.MethodPost, http.MethodDelete, http.MethodGet} {
+		found := false
+		for _, method := range methods {
+			if method == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("the fixture never observed a %s request: %v", want, methods)
+		}
+	}
+}
+
+func TestRealChildProbeFailureIsReported(t *testing.T) {
+	fixture := newDeploymentFixture(t)
+	fixture.probeSuccess = false
+	session := realSessionWithGroups(t, fixture, []WriteGroup{GroupProbe})
+	registerFixtureAPI(t, os.Getenv("HOME"))
+
+	result := dispatchTool(t, session, "bridgectl_api_test", validWriteArgs(t, "bridgectl_api_test"))
+	if result.Success {
+		t.Fatal("a failed probe was reported as success")
+	}
+	if result.Error.Code != CodeProbeFailed {
+		t.Fatalf("code = %q, want %q", result.Error.Code, CodeProbeFailed)
+	}
+	if result.Error.Details == nil || result.Error.Details.HTTPStatus != 200 || result.Error.Details.ProbeSucceeded {
+		t.Fatalf("probe details = %+v", result.Error.Details)
+	}
+}
+
+func TestRealChildDeniedWriteNeverExecutes(t *testing.T) {
+	fixture := newDeploymentFixture(t)
+	session := realSession(t, fixture)
+
+	for name := range writeToolNames() {
+		result := dispatchTool(t, session, name, validWriteArgs(t, name))
+		if result.Success {
+			t.Fatalf("%s succeeded without its startup group", name)
+		}
+		if result.Error.Code != CodePermissionDenied {
+			t.Fatalf("%s returned %q, want %q", name, result.Error.Code, CodePermissionDenied)
+		}
+	}
+	if methods := fixture.methods(); len(methods) != 0 {
+		t.Fatalf("a denied write reached the deployment: %v", methods)
+	}
+}
+
+func TestRealChildContextSetKeepsTheSessionPinned(t *testing.T) {
+	fixture := newDeploymentFixture(t)
+	other := newDeploymentFixture(t)
+	session := realSessionWithGroups(t, fixture, allWriteGroups(), other.server.URL)
+	home := os.Getenv("HOME")
+	registerFixtureAPI(t, home)
+
+	// The environment carries a value that must never be persisted.
+	t.Setenv("ERPBRIDGE_TEST_TOKEN", "canary-environment-token")
+
+	result := dispatchTool(t, session, "bridgectl_context_set", map[string]any{
+		"name": "staging", "confirmContext": "test", "confirmTarget": "staging",
+	})
+	if !result.Success {
+		t.Fatalf("context set failed: %s", result.Error.Message)
+	}
+
+	// A later read and write must still use the pinned endpoint.
+	read := dispatchTool(t, session, "bridgectl_cache_stats", nil)
+	if !read.Success {
+		t.Fatalf("read after a context change failed: %s", read.Error.Message)
+	}
+	write := dispatchTool(t, session, "bridgectl_cache_flush", validWriteArgs(t, "bridgectl_cache_flush"))
+	if !write.Success {
+		t.Fatalf("write after a context change failed: %s", write.Error.Message)
+	}
+
+	if methods := other.methods(); len(methods) != 0 {
+		t.Fatalf("the session retargeted the renamed default context: %v", methods)
+	}
+	if methods := fixture.methods(); len(methods) == 0 {
+		t.Fatal("the pinned endpoint received no request")
+	}
+
+	// The saved file must keep the placeholder and must not gain an override.
+	// #nosec G304 G703 -- test-owned temporary home.
+	data, err := os.ReadFile(filepath.Join(home, ".bridgectl", "config.yaml"))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "current-context: staging") {
+		t.Fatalf("the saved default was not changed:\n%s", content)
+	}
+	if !strings.Contains(content, "${ERPBRIDGE_TEST_TOKEN}") {
+		t.Fatalf("an environment placeholder was expanded:\n%s", content)
+	}
+	if strings.Contains(content, "canary-environment-token") {
+		t.Fatalf("an environment value was persisted:\n%s", content)
+	}
+	if strings.Contains(content, fixture.server.URL) && strings.Contains(content, other.server.URL) && strings.Count(content, "server:") != 4 {
+		t.Fatalf("unexpected endpoint changes:\n%s", content)
 	}
 }

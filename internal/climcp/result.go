@@ -66,6 +66,49 @@ type ProbeDetails struct {
 	ProbeSucceeded bool   `json:"probeSucceeded"`
 }
 
+// WriteData reports a completed write command. It reports command completion,
+// never reconciliation or remote verification.
+type WriteData struct {
+	Target   string `json:"target"`
+	Effect   string `json:"effect"`
+	Verified bool   `json:"verified"`
+	Replaced *bool  `json:"replaced,omitempty"`
+}
+
+// ContextSelectData reports a saved-default change. The running session keeps
+// its pinned context.
+type ContextSelectData struct {
+	SavedDefault  string `json:"savedDefault"`
+	ActiveContext string `json:"activeContext"`
+	Verified      bool   `json:"verified"`
+}
+
+// ProbeData is the typed outcome of a completed server-side API test.
+type ProbeData struct {
+	APIName        string `json:"apiName"`
+	HTTPStatus     int    `json:"httpStatus"`
+	ContentType    string `json:"contentType,omitempty"`
+	LatencyMs      int64  `json:"latencyMs"`
+	ProbeSucceeded bool   `json:"probeSucceeded"`
+}
+
+// CacheFlushData reports the counters returned by a completed flush.
+type CacheFlushData struct {
+	Target   string `json:"target"`
+	Deleted  int    `json:"deleted"`
+	Status   string `json:"status,omitempty"`
+	Verified bool   `json:"verified"`
+}
+
+// effectCommandCompleted is the reported effect of a completed write command.
+const effectCommandCompleted = "command_completed"
+
+// probeFailure marks a completed probe that reported a failed result. It is a
+// finished observation, not an unknown outcome.
+type probeFailure struct{ details *ProbeDetails }
+
+func (e *probeFailure) Error() string { return "the API probe reported a failure" }
+
 // NewSuccess builds a successful envelope.
 func NewSuccess(operation, contextName string, data any) *Result {
 	return &Result{
@@ -364,6 +407,29 @@ type wireTokenList struct {
 	Items []TokenItem `json:"items"`
 }
 
+// wireAPITest is the CLI's server-side probe result. Latency is a Go duration,
+// so its unit is converted explicitly.
+type wireAPITest struct {
+	APIName     string `json:"api"`
+	Status      string `json:"status"`
+	Code        int    `json:"code"`
+	Latency     int64  `json:"latency"`
+	ContentType string `json:"contentType"`
+	IsSuccess   bool   `json:"isSuccess"`
+}
+
+// wireFlush is the cache-flush result.
+type wireFlush struct {
+	Deleted int    `json:"deleted"`
+	Status  string `json:"status"`
+}
+
+// wireRegistration carries only the replacement flag from a registration
+// result; the registration body itself is never returned.
+type wireRegistration struct {
+	Replaced bool `json:"replaced"`
+}
+
 type wireCacheStats struct {
 	Stats struct {
 		ExactKeys   int64  `json:"exactKeys"`
@@ -652,6 +718,40 @@ func projectCacheStats(stdout []byte) (any, error) {
 		return nil, err
 	}
 	return CacheStatsData{ExactKeys: wire.Stats.ExactKeys, RedisMemory: wire.Stats.RedisMemory}, nil
+}
+
+// projectAPITest converts a completed probe into typed data. A probe that
+// reported a failed result is a completed observation, not an unknown outcome.
+func projectAPITest(stdout []byte) (any, error) {
+	var wire wireAPITest
+	if err := decodeChildJSON(stdout, &wire); err != nil {
+		return nil, err
+	}
+	details := &ProbeDetails{
+		APIName:        wire.APIName,
+		HTTPStatus:     wire.Code,
+		ContentType:    wire.ContentType,
+		LatencyMs:      durationToMilliseconds(wire.Latency),
+		ProbeSucceeded: wire.IsSuccess,
+	}
+	if !wire.IsSuccess {
+		return nil, &probeFailure{details: details}
+	}
+	return ProbeData{
+		APIName:        details.APIName,
+		HTTPStatus:     details.HTTPStatus,
+		ContentType:    details.ContentType,
+		LatencyMs:      details.LatencyMs,
+		ProbeSucceeded: true,
+	}, nil
+}
+
+// durationToMilliseconds converts a Go duration in nanoseconds.
+func durationToMilliseconds(nanoseconds int64) int64 {
+	if nanoseconds <= 0 {
+		return 0
+	}
+	return nanoseconds / int64(time.Millisecond)
 }
 
 // knownLogLevels bounds the accepted level labels. An unexpected label is

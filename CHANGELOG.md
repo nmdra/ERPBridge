@@ -28,6 +28,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a structured output branch to `bridgectl log stats`, so `-o json` and
   `-o yaml` return `{"levelCounts":{...},"toolCounts":{...}}` counts without
   log messages. Table output is unchanged.
+- Add the approved write and probe catalogue to `bridgectl mcp --stdio`, gated by
+  the `registry`, `resources`, `destructive`, `probe`, and `context` startup
+  groups: `bridgectl_api_register`, `bridgectl_api_set_credential_ref`,
+  `bridgectl_api_test`, `bridgectl_tool_apply`, `bridgectl_tool_delete`,
+  `bridgectl_plugin_apply`, `bridgectl_plugin_delete`,
+  `bridgectl_binding_apply`, `bridgectl_binding_delete`,
+  `bridgectl_token_revoke`, `bridgectl_cache_flush`, and
+  `bridgectl_context_set`. Every write requires an exact context and target
+  confirmation, and forced registration also requires the destructive group.
+
+### Changed
+
+- Report a launched write or probe as `outcome_unknown` when it fails, times
+  out, is cancelled, exceeds its output limit, or returns unusable output, so a
+  caller reads the target back instead of assuming the change did not happen.
+  Only an argument vector the child rejects before running, or the session
+  `context_changed` precondition, reports a specific failure.
+- Keep `bridgectl context set` from rewriting the whole configuration. It now
+  edits the raw file, so environment placeholders, stored values, and unknown
+  fields survive, the replacement is written with mode 0600, and a concurrent
+  external change is refused instead of overwritten.
 
 ### Fixed
 

@@ -62,6 +62,7 @@ only. A write operation requires the operator to approve its group at launch.
 | `resources` | Applying tool, plugin, and binding manifests |
 | `destructive` | Deletion, deactivation, token revocation, and cache flush |
 | `probe` | Server-side registered API tests, which can cause downstream effects |
+| `context` | Changing the saved default context |
 
 `--allow-write` is repeatable and accepts a comma-separated list. There is no
 wildcard. An unknown group name is a startup error.
@@ -76,6 +77,62 @@ Approval has these limits:
   Using stdio does not add a second authentication layer.
 - Exact-target confirmation prevents accidental target mismatch. It is not
   proof of human consent. Configure approvals in the agent host as well.
+
+### Approved tools
+
+These tools require the stated group. Each one also requires `confirmContext`
+to equal the pinned context and `confirmTarget` to equal the canonical target
+listed below.
+
+| Tool | Group | Canonical target |
+| --- | --- | --- |
+| `bridgectl_api_register` | `registry` (and `destructive` when `force` is true) | the registration name |
+| `bridgectl_api_set_credential_ref` | `registry` | the API name |
+| `bridgectl_api_test` | `probe` | the API name |
+| `bridgectl_tool_apply` | `resources` | the manifest name, or `name@version` |
+| `bridgectl_tool_delete` | `destructive` | `name@version` |
+| `bridgectl_plugin_apply` | `resources` | the manifest name, or `name@version` |
+| `bridgectl_plugin_delete` | `destructive` | `name@version` |
+| `bridgectl_binding_apply` | `resources` | the manifest binding name |
+| `bridgectl_binding_delete` | `destructive` | the binding name |
+| `bridgectl_token_revoke` | `destructive` | the token identifier |
+| `bridgectl_cache_flush` | `destructive` | `tool:<name>`, `module:<name>`, or `all` |
+| `bridgectl_context_set` | `context` | the requested context name |
+
+A mismatch performs no child execution. `bridgectl_cache_flush` accepts exactly
+one selector: `tool`, `module`, or `all`. `bridgectl_tool_delete`,
+`bridgectl_plugin_delete`, and `bridgectl_binding_delete` deactivate by default
+and only delete permanently when `hard` is true.
+
+### Write results
+
+A completed write reports the target, `effect: "command_completed"`, and
+`verified: false`. Registration also reports `replaced`. These results report
+command completion, never reconciliation or remote verification.
+
+When a launched write fails, times out, is cancelled, exceeds its output limit,
+or returns output the adapter cannot interpret, the result is
+`outcome_unknown` rather than a specific failure, because the change may already
+have been applied. Read the target resource before retrying. The adapter never
+retries a write automatically.
+
+Only two failures report a specific code, because both are provably refused
+before the command runs: a rejected argument vector, and a
+`context_changed` precondition from the session guard.
+
+A server-side probe that completes and reports a failed result is a finished
+observation, not an unknown outcome. It returns `probe_failed` with the HTTP
+status, content type, and latency.
+
+### Saved default context
+
+`bridgectl_context_set` changes only the saved default context in the
+configuration file, and it only accepts a context that is already saved. It
+preserves environment placeholders, stored values, and unknown fields, and
+writes the replacement with mode 0600. If the file changed while the update was
+being prepared, the update is refused instead of overwriting the other change.
+
+The running session keeps its pinned context, so this tool cannot retarget it.
 
 ## Tool catalogue
 
@@ -156,6 +213,12 @@ because child output is never trusted. Run the same validation with the
   ERP endpoint is reachable.
 - Log statistics summarise the deployment's recent events. Log messages are
   never returned.
+- Token creation stays in the manual CLI, so a new credential value never enters
+  an agent conversation.
+- Local validation reports that a resource failed, not why. Run the same
+  validation with the `bridgectl` CLI to see the exact reason.
+- Concurrent context edits from another process can still race the final
+  rename. Do not run two context edits at the same time.
 
 ## Interrupted writes
 

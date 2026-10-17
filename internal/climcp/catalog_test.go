@@ -149,12 +149,30 @@ func assertNoSecret(t *testing.T, data any, canaries ...string) {
 	}
 }
 
-func TestCatalogueMatchesPlannedDefaultSet(t *testing.T) {
+// writeToolNames is the planned write and probe catalogue with its groups. It is
+// a literal on purpose so a change to the descriptor table cannot silently widen
+// what a startup grant exposes.
+func writeToolNames() map[string]WriteGroup {
+	return map[string]WriteGroup{
+		"bridgectl_api_register":           GroupRegistry,
+		"bridgectl_api_set_credential_ref": GroupRegistry,
+		"bridgectl_api_test":               GroupProbe,
+		"bridgectl_tool_apply":             GroupResources,
+		"bridgectl_tool_delete":            GroupDestructive,
+		"bridgectl_plugin_apply":           GroupResources,
+		"bridgectl_plugin_delete":          GroupDestructive,
+		"bridgectl_binding_apply":          GroupResources,
+		"bridgectl_binding_delete":         GroupDestructive,
+		"bridgectl_token_revoke":           GroupDestructive,
+		"bridgectl_cache_flush":            GroupDestructive,
+		"bridgectl_context_set":            GroupContext,
+	}
+}
+
+func TestCatalogueMatchesPlannedSet(t *testing.T) {
+	grouped := make(map[WriteGroup][]string)
 	advertised := make([]string, 0, len(catalogue))
 	for _, entry := range catalogue {
-		if entry.requiredGroup != "" {
-			t.Fatalf("%s requires write group %q; the default catalogue must be read-only", entry.name, entry.requiredGroup)
-		}
 		if entry.tool.Name != entry.name {
 			t.Fatalf("descriptor %q advertises tool %q", entry.name, entry.tool.Name)
 		}
@@ -162,12 +180,39 @@ func TestCatalogueMatchesPlannedDefaultSet(t *testing.T) {
 			t.Fatalf("%s has no invoke builder", entry.name)
 		}
 		advertised = append(advertised, entry.name)
+		grouped[entry.requiredGroup] = append(grouped[entry.requiredGroup], entry.name)
 	}
 	if len(advertised) != len(slices.Compact(append([]string(nil), advertised...))) {
 		t.Fatal("the catalogue contains a duplicate tool name")
 	}
-	if got, want := sortedCopy(advertised), defaultToolNames(); !equalStrings(got, want) {
-		t.Fatalf("catalogue = %v, want %v", got, want)
+	if got, want := sortedCopy(grouped[""]), defaultToolNames(); !equalStrings(got, want) {
+		t.Fatalf("default catalogue = %v, want %v", got, want)
+	}
+
+	planned := writeToolNames()
+	got := make([]string, 0, len(planned))
+	for name, group := range planned {
+		entry := descriptorNamed(t, name)
+		if entry.requiredGroup != group {
+			t.Fatalf("%s requires group %q, want %q", name, entry.requiredGroup, group)
+		}
+		if entry.effect != effectWrite && entry.effect != effectProbe {
+			t.Fatalf("%s has side effect %d, want a write or probe effect", name, entry.effect)
+		}
+		got = append(got, name)
+	}
+	groupedNames := make([]string, 0, len(grouped)-1)
+	for group, names := range grouped {
+		if group == "" {
+			continue
+		}
+		groupedNames = append(groupedNames, names...)
+	}
+	if !equalStrings(sortedCopy(got), sortedCopy(groupedNames)) {
+		t.Fatalf("grouped catalogue = %v, want %v", sortedCopy(groupedNames), sortedCopy(got))
+	}
+	if total := len(advertised); total != 24 {
+		t.Fatalf("catalogue holds %d tools, want 24", total)
 	}
 }
 

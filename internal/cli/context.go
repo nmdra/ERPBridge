@@ -3,11 +3,9 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"sort"
 
-	"github.com/goccy/go-yaml"
+	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -78,26 +76,12 @@ var contextSetCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	RunE: func(_ *cobra.Command, args []string) error {
 		name := args[0]
-		if _, ok := cfg.Contexts[name]; !ok {
-			return fmt.Errorf("context %s not found", name)
+		if err := config.SetCurrentContext(name); err != nil {
+			return err
 		}
 		cfg.CurrentContext = name
-		return saveConfig()
+		return nil
 	},
-}
-
-// saveConfig writes the current CLI configuration to ~/.bridgectl/config.yaml.
-func saveConfig() error {
-	home, _ := os.UserHomeDir()
-	path := filepath.Join(home, ".bridgectl", "config.yaml")
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
-	}
-	return os.WriteFile(path, data, 0600)
 }
 
 func init() {
