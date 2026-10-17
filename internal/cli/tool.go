@@ -304,15 +304,11 @@ var toolGetCmd = &cobra.Command{
 					"List the available tools, or correct the name and version.")
 			}
 
-			switch outputFormat {
-			case string(output.FormatYAML):
-				y, _ := yaml.Marshal(target)
-				fmt.Println(string(y))
-				return nil
-			case string(output.FormatJSON):
-				j, _ := json.MarshalIndent(target, "", "  ")
-				fmt.Println(string(j))
-				return nil
+			// Render through the command's writer, so the named branch reaches the
+			// same destination as the list branch.
+			if outputFormat == string(output.FormatJSON) || outputFormat == string(output.FormatYAML) {
+				local := &output.Formatter{Format: output.Format(outputFormat), Out: cmd.OutOrStdout()}
+				return local.Print(target)
 			}
 			tools = []*mcp.Tool{target}
 		}

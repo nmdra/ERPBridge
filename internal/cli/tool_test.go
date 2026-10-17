@@ -194,6 +194,36 @@ func TestToolGetAuthenticationFailureExitCode(t *testing.T) {
 	require.NotContains(t, result.stderr, "cannot unmarshal")
 }
 
+// TestToolGetNamedRendersThroughTheCommandWriter covers the last gap in issue
+// #18: the named branch printed with fmt.Println, so it bypassed the command's
+// output writer and behaved differently from the list branch on the same
+// command.
+func TestToolGetNamedRendersThroughTheCommandWriter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[{"metadata":{"name":"tool1","version":"1.0","module":"hr"},"spec":{"description":{"short":"one"}}}]`))
+	}))
+	t.Cleanup(server.Close)
+	setControlPlaneContext(t, server.URL)
+
+	for _, format := range []string{"json", "yaml"} {
+		t.Run(format, func(t *testing.T) {
+			var buffer bytes.Buffer
+			toolGetCmd.SetOut(&buffer)
+			t.Cleanup(func() { toolGetCmd.SetOut(nil) })
+			t.Cleanup(func() { _ = toolGetCmd.Flags().Set("output", "table") })
+			require.NoError(t, toolGetCmd.Flags().Set("output", format))
+
+			require.NoError(t, toolGetCmd.RunE(toolGetCmd, []string{testToolName + "@1.0"}))
+
+			require.Contains(t, buffer.String(), testToolName)
+			require.NotContains(t, buffer.String(), "tools:")
+			require.NotContains(t, buffer.String(), `"tools"`)
+		})
+	}
+}
+
 // TestToolDescribeReportsAuthenticationFailure covers the same defect as
 // issue #19 on the sibling describe path.
 func TestToolDescribeReportsAuthenticationFailure(t *testing.T) {
