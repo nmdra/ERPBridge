@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `bridgectl mcp --stdio`, a local management MCP server for AI coding
+  agents. It serves existing `bridgectl` management operations over stdio with
+  read-only defaults and operator-approved write groups, pins each session to
+  its launch-time context, endpoints, and credential, keeps stdout strictly for
+  protocol traffic, and reports an interrupted write as `outcome_unknown`
+  instead of claiming rollback.
+
 ## [v0.5.0-alpha.6] - 2026-10-15
 
 ### Changed
