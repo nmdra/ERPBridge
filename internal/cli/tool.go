@@ -539,6 +539,8 @@ var toolGenerateCmd = &cobra.Command{
 	},
 }
 
+const toolVersionQueryParam = "version"
+
 var toolDeleteCmd = &cobra.Command{
 	Use:   "delete [name] [version]",
 	Short: "Remove a tool from the registry",
@@ -568,12 +570,13 @@ var toolDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		url := fmt.Sprintf("%s/apis/erpbridge.io/v1/tools?name=%s&version=%s", baseURL, name, version)
+		query := url.Values{cliNameField: {name}, toolVersionQueryParam: {version}}
 		if hard {
-			url += "&hard=true"
+			query.Set("hard", "true")
 		}
+		requestURL := baseURL + "/apis/erpbridge.io/v1/tools?" + query.Encode()
 
-		resp, err := doBridgeRequest(cmd, http.MethodDelete, url)
+		resp, err := doBridgeRequest(cmd, http.MethodDelete, requestURL)
 		if err != nil {
 			return err
 		}

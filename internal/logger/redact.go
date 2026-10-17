@@ -85,7 +85,7 @@ func redactValue(value reflect.Value) any {
 		iter := value.MapRange()
 		for iter.Next() {
 			key := iter.Key().String()
-			if sensitiveArgKey(key) {
+			if IsSensitiveArgKey(key) {
 				result[key] = redactionMarker
 				continue
 			}
@@ -108,11 +108,15 @@ func redactValue(value reflect.Value) any {
 	}
 }
 
-func sensitiveArgKey(key string) bool {
+// IsSensitiveArgKey reports whether an argument key identifies a sensitive value.
+// It is shared by credential screening and argument log redaction. Matching is
+// case-insensitive, ignores surrounding whitespace, and accepts underscore suffixes.
+func IsSensitiveArgKey(key string) bool {
 	key = strings.ToLower(strings.TrimSpace(key))
 	for _, sensitive := range []string{
 		redactedPasswordKey, "token", redactedAPIKey, "secret", "key", "ssn", "authorization",
 		"credential", "private_key", "access_token", "refresh_token", "client_secret",
+		"passwd", "apikey", "authkey", "authtoken", "credentialvalue", "clientsecret", "privatekey", "bearer",
 	} {
 		if key == sensitive || strings.HasSuffix(key, "_"+sensitive) {
 			return true

@@ -241,8 +241,9 @@ type ResourceItem struct {
 // ResourceData is a named resource or a resource list. Inspection results are
 // explicitly marked non-round-trippable.
 type ResourceData struct {
-	Item     *ResourceItem  `json:"item,omitempty"`
-	Items    []ResourceItem `json:"items,omitempty"`
+	Item *ResourceItem `json:"item,omitempty"`
+	// Omit a nil slice for named gets, but preserve a non-nil empty inventory.
+	Items    []ResourceItem `json:"items,omitzero"`
 	Redacted bool           `json:"redacted"`
 }
 

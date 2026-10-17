@@ -12,6 +12,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/nmdra/ERPBridge/internal/logger"
 )
 
 // Fixed argument tokens. Every child invocation is built from these, so the
@@ -522,9 +523,13 @@ func (ic invocationContext) validateManifest(args map[string]any, expectedKind s
 	return validatedManifest{encoded: encoded, kind: expectedKind, name: name, version: version}, nil
 }
 
-// manifestEndpointProblem rejects a submitted endpoint that could carry
-// credentials in its userinfo or query.
+// manifestEndpointProblem rejects credential-bearing endpoints and noncanonical
+// field spellings along their paths. The child JSON decoder accepts case aliases;
+// refusing them here prevents an alias from bypassing the pre-staging checks.
 func manifestEndpointProblem(document map[string]any, kind string) string {
+	if hasFieldAlias(document, "spec") {
+		return "manifest must use the canonical spec field spelling"
+	}
 	spec, ok := document["spec"].(map[string]any)
 	if !ok {
 		return ""
@@ -532,10 +537,19 @@ func manifestEndpointProblem(document map[string]any, kind string) string {
 	endpoint := ""
 	switch kind {
 	case kindTool:
+		if hasFieldAlias(spec, "execution") {
+			return "manifest must use the canonical execution field spelling"
+		}
 		if execution, ok := spec["execution"].(map[string]any); ok {
+			if hasFieldAlias(execution, "endpoint") {
+				return "manifest must use the canonical endpoint field spelling"
+			}
 			endpoint, _ = execution["endpoint"].(string)
 		}
 	case kindPlugin:
+		if hasFieldAlias(spec, "endpoint") {
+			return "manifest must use the canonical endpoint field spelling"
+		}
 		endpoint, _ = spec["endpoint"].(string)
 	}
 	if endpoint == "" {
@@ -545,6 +559,18 @@ func manifestEndpointProblem(document map[string]any, kind string) string {
 		return "manifest endpoint " + problem
 	}
 	return ""
+}
+
+// hasFieldAlias detects spellings the child's case-insensitive JSON decoder
+// would accept as canonical. Check only structural fields, not schema properties
+// or arbitrary plugin configuration keys.
+func hasFieldAlias(document map[string]any, canonical string) bool {
+	for key := range document {
+		if key != canonical && strings.EqualFold(key, canonical) {
+			return true
+		}
+	}
+	return false
 }
 
 // manifestIdentity reads the resource identity without decoding the whole
@@ -568,16 +594,6 @@ const exitCodeBadArguments = 2
 // maxTargetBytes bounds a canonical confirmation target.
 const maxTargetBytes = 256
 
-// credentialValueKeys are value-bearing credential keys. They are rejected
-// outside a schema declaration, because a tool may legitimately declare an
-// input property named token or password.
-var credentialValueKeys = map[string]bool{
-	"password": true, "passwd": true, "token": true, "secret": true,
-	"apikey": true, "api_key": true, "authkey": true, "authtoken": true,
-	"credentialvalue": true, "clientsecret": true, "privatekey": true,
-	"bearer": true, "authorization": true,
-}
-
 // schemeKeys are subtrees whose property names are declarations, not values.
 var schemeKeys = map[string]bool{"inputschema": true, "outputschema": true}
 
@@ -588,7 +604,7 @@ var schemaValueKeys = map[string]bool{"default": true, "example": true, "example
 // scanCredentialValues reports whether the document carries a literal credential
 // value. Property names and types inside a schema are declarations and stay
 // legal; a concrete default, example, or constant for a credential-like property
-// is a value and is rejected.
+// is a value and is rejected. Key classification is shared with log redaction.
 func scanCredentialValues(node any, insideSchema bool, propertyName string) bool {
 	switch typed := node.(type) {
 	case map[string]any:
@@ -611,10 +627,10 @@ func scanCredentialValues(node any, insideSchema bool, propertyName string) bool
 			}
 			if text, isString := value.(string); isString && text != "" {
 				if insideSchema {
-					if schemaValueKeys[lower] && credentialValueKeys[strings.ToLower(propertyName)] {
+					if schemaValueKeys[lower] && logger.IsSensitiveArgKey(propertyName) {
 						return true
 					}
-				} else if credentialValueKeys[lower] {
+				} else if logger.IsSensitiveArgKey(key) {
 					return true
 				}
 			}

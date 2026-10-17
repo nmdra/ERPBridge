@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve literal tool deletion names and versions in control-plane queries, so
+  identifier characters cannot change the confirmed target or request permanent
+  deletion when `hard` is false
+- Reject noncanonical endpoint field aliases before staging management manifests,
+  and share sensitive-key screening with log redaction so fields such as
+  `client_secret`, `access_token`, and `private_key` cannot carry literal secrets
+- Keep `items: []` in empty management MCP tool, plugin, and binding inventories
+  while named gets retain only `item`
 - Check the control-plane status before decoding a typed body in `bridgectl tool
   get`, `tool describe`, and `log stats`. A rejected or missing credential
   previously surfaced as

@@ -166,6 +166,10 @@ A read tool reports a resource that the selected deployment does not hold as
 managed child now checks the control-plane status before it decodes a typed body. The
 adapter maps these by code and never reads child prose.
 
+Tool, plugin, and binding inventories return `data.items` as an array, including
+`[]` when the inventory is empty. A named get returns `data.item` and omits
+`data.items`.
+
 ### Result redaction
 
 Inspection results are an allow-list, not a copy of the command output. They
@@ -187,13 +191,23 @@ literal credential value or an unsafe endpoint.
 
 - Schemas are strict: an unknown property is rejected before any command runs.
 - Strings are length-bounded, and a value may not start with `-`, so a caller
-cannot inject an option.
+cannot inject an option. Tool deletion encodes the name and version as literal
+query values. Characters such as `&` cannot change the confirmed target or turn
+a soft delete into a hard delete; permanent deletion requires `hard: true`.
 - Manifests are one inline JSON object. Paths, directories, URLs, YAML streams,
 and arrays are rejected.
 - Manifest tools do not accept embedded credential values. They reject a
 `kind` that does not match the tool, an endpoint with credentials in its
 userinfo or query, and a concrete default or example for a credential-like
 schema property. A schema declaration is still allowed.
+- Endpoint paths require the canonical field spellings `spec`, `execution`, and
+`endpoint`. Case aliases such as `Spec` or `Endpoint`, including an alias beside
+a canonical field, are rejected before staging.
+- Credential screening shares the log redaction key policy. It rejects literal
+values under names such as `client_secret`, `access_token`, and `private_key`,
+including case variants and underscore-prefixed forms such as
+`upstream_access_token`. Logical `credentialRef` and `credentialSource` fields
+remain allowed.
 - Remote OpenAPI fetch, `$ref` resolution, output directories, and file writes
 stay in the manual CLI.
 
