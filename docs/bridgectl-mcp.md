@@ -110,9 +110,12 @@ and only delete permanently when `hard` is true.
 
 ### Write results
 
-A completed write reports the target, `effect: "command_completed"`, and
-`verified: false`. Registration also reports `replaced`. These results report
-command completion, never reconciliation or remote verification.
+Most resource writes report the target, `effect: "command_completed"`, and
+`verified: false`. Registration also reports `replaced`. Cache flush instead
+reports `target`, `deleted`, optional `status`, and `verified`; saved-context
+selection reports `savedDefault`, `activeContext`, and `verified`. These results
+report command completion, never independent reconciliation or verification.
+Read back the exact target before claiming the change is verified.
 
 When a launched write fails, times out, is cancelled, exceeds its output limit,
 or returns output the adapter cannot interpret, the result is
@@ -174,14 +177,17 @@ Tool, plugin, and binding inventories return `data.items` as an array, including
 ### Result redaction
 
 Inspection results are an allow-list, not a copy of the command output. They
-never include credential values, literal authentication header values, schema
-defaults or examples, raw endpoint URLs, plugin configuration values, API token
-values, or raw log messages.
+omit credential fields, literal authentication header fields, schema defaults
+and examples, raw endpoint URLs, plugin configuration, API token values, and
+raw log messages. Retained descriptions, usage text, and schema enum values
+are not arbitrary-content redaction. Review those values before sharing or
+persisting them; `redacted: true` is not proof that all retained text is safe.
 
 - Endpoint identity is reported as a neutral host label, so an operator can tell
 deployments apart without exposing paths or credentials.
 - Schema declarations are preserved, including a property named `password` or
-`token`, so a manifest stays reviewable. Only concrete values are removed.
+`token`, so a manifest stays reviewable. Retained descriptions and enum values
+still require review.
 - Inspection results are marked `redacted: true` and are not round-trippable. Use
 `bridgectl_tool_generate` to obtain an applicable manifest.
 - Generation returns the executable manifest, because applying it is the purpose
@@ -190,7 +196,10 @@ literal credential value or an unsafe endpoint.
 
 ### Argument rules
 
-- Schemas are strict: an unknown property is rejected before any command runs.
+- MCP tool argument schemas are strict: an unknown argument is rejected before
+any command runs. Manifest validation is resource-specific; tool manifests do
+not universally reject unknown resource fields. Remove unsupported fields and
+validate the reviewed resource rather than relying on strictness.
 - Strings are length-bounded, and a value may not start with `-`, so a caller
 cannot inject an option. Tool deletion encodes the name and version as literal
 query values. Characters such as `&` cannot change the confirmed target or turn
@@ -328,6 +337,22 @@ another saved context.
 If a write reports `outcome_unknown`, read the target resource before retrying.
 The adapter does not roll back and does not retry, so a second attempt could
 repeat an effect that already happened.
+
+## Operations skill
+
+The repository `bridgectl-ops` skill 3.5.0 covers both CLI and management MCP.
+Its [MCP workflow](../skills/bridgectl-ops/references/mcp.md) explains discovery,
+serial calls, result checking, client setup, grants, and unknown-write recovery.
+The [preflight profiles](../skills/bridgectl-ops/references/preflight.md) separate
+core and remote checks from local Compose, onboarding, and plugin prerequisites.
+Remote log/cache reads do not require local Docker or an API probe.
+
+Use exact-action approval for every mutation or server-side probe, independent
+readback after changes, and separate runtime and management client entries.
+Optional memory lookup starts with a relevant index/area search; the terminal
+redacted-record checkpoint remains in force even when no lesson matches.
+Release binaries install their own embedded skill version, not unreleased
+repository edits.
 
 ## Related documentation
 

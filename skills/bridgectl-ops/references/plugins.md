@@ -4,28 +4,33 @@ Read this guide when a task mentions an ERPBridge external plugin, plugin
 endpoint, plugin authentication, a `PluginBinding`, post-response processing,
 or plugin-related cache and runtime failures.
 
+| Task | Section |
+| --- | --- |
+| Establish prerequisites | [Boundary and prerequisites](#boundary-and-prerequisites) |
+| Review manifests | [Plugin resource](#plugin-resource) and [binding](#pluginbinding-resource) |
+| Apply and read back | [Apply and verify](#apply-and-verify) |
+| Check credentials and transport | [Authentication and transport](#authentication-and-transport) |
+| Investigate processing or removal | [Runtime contract](#runtime-contract) and [diagnosis](#deletion-and-diagnosis) |
+
 ## Boundary and prerequisites
 
 ERPBridge stores plugin definitions and invokes an already-running HTTP
 endpoint. It does not install, start, upgrade, or manage plugin code, images,
 processes, or containers.
 
-Before a plugin change:
+Run [core preflight and the plugin-binding profile](preflight.md) before a
+change. Add only the applicable deployment profile. Keep exact-action approval,
+validation, and independent readback; remote plugin work does not require local
+Docker or demo services. Management MCP uses its pinned context and discovered
+schemas; see [MCP](mcp.md). CLI examples use the selected `CTX` explicitly.
 
-1. Record `bridgectl version`, `bridgectl context list`, and the selected
-   `--context`.
-2. Confirm that the caller has the required authenticated admin access. A
-   `raw_response` binding always needs an authenticated admin control-plane
-   request, even when the plugin has no `spec.auth`.
-3. Confirm the separately operated plugin endpoint, exact plugin version, exact
-   target tool version, timeout, failure policy, and expected cache impact.
-4. Keep credentials in environment variables or a mounted credential directory.
-   A manifest contains a `PLUGIN_*` logical `credentialRef` and optional
-   `credentialSource: file`, never a credential value. File mode requires
-   `ERPBRIDGE_CREDENTIALS_DIR` and a reference-named file.
-
-The complete resource and wire contract is in
-[the plugin schema](../../../docs/plugin-schema.md). Use the field guides
+Use installed `bridgectl plugin --help` and
+`bridgectl plugin binding --help` first. For the complete wire contract, read
+`docs/plugin-schema.md` only in a verified ERPBridge checkout matching the
+installed release, or find the matching release documentation through the
+[published docs](https://toolplane.nimendra.online/). Verify the version and
+page before relying on it; installed skills do not contain repository docs.
+Use the field guides
 [`../assets/plugin.yaml`](../assets/plugin.yaml) and
 [`../assets/plugin-binding.yaml`](../assets/plugin-binding.yaml) as starting
 points, not as substitutes for validation.
@@ -85,31 +90,31 @@ latest-version guess.
 
 ## Apply and verify
 
-Use the CLI command references for the installed release:
-
-- [plugin apply](../../../docs/cli/bridgectl_plugin_apply.md),
-  [get](../../../docs/cli/bridgectl_plugin_get.md),
-  [validate](../../../docs/cli/bridgectl_plugin_validate.md), and
-  [delete](../../../docs/cli/bridgectl_plugin_delete.md)
-- [binding apply](../../../docs/cli/bridgectl_plugin_binding_apply.md),
-  [get](../../../docs/cli/bridgectl_plugin_binding_get.md),
-  [validate](../../../docs/cli/bridgectl_plugin_binding_validate.md), and
-  [delete](../../../docs/cli/bridgectl_plugin_binding_delete.md)
+Inspect installed subcommand help before using flags, for example
+`bridgectl plugin apply --help` and
+`bridgectl plugin binding apply --help`. The same applies to `get`, `validate`,
+and `delete`. If more detail is needed, use the verified-checkout or
+matching published-doc fallback above, not paths relative to the installed skill.
 
 Use this sequence:
 
-1. `bridgectl plugin validate -f <plugin-file>`.
-2. `bridgectl plugin binding validate -f <binding-file>`.
+1. `bridgectl plugin validate -f <plugin-file> --context "$CTX"`.
+2. `bridgectl plugin binding validate -f <binding-file> --context "$CTX"`.
 3. Obtain the exact change confirmation required by `SKILL.md`.
-4. Apply the plugin first, then the binding:
-   `bridgectl plugin apply -f <plugin-file>` and
-   `bridgectl plugin binding apply -f <binding-file>`.
-5. Read back the exact resources with
-   `bridgectl plugin get <name>@<version>` and
-   `bridgectl plugin binding get <name>`.
-6. Verify a safe test tool call through MCP and, where appropriate, the direct
-   invocation seam. Confirm the transformed result, output-schema behavior,
-   and absence of secrets in output and logs.
+4. Apply the confirmed plugin:
+   `bridgectl plugin apply -f <plugin-file> --context "$CTX"`, then independently
+   read back `bridgectl plugin get <name>@<version> --context "$CTX"` and verify
+   that exact version is active before proceeding.
+5. Confirm the exact binding action separately, including cache impact, then
+   run `bridgectl plugin binding apply -f <binding-file> --context "$CTX"`.
+   Independently read back
+   `bridgectl plugin binding get <name> --context "$CTX"` and verify the exact
+   references and active state. Command completion is not reconciliation proof.
+   Invalidate affected [session evidence](preflight.md#session-evidence) after
+   each change; read back an unknown outcome before considering a retry.
+6. Obtain exact approval for a safe test tool call through runtime MCP and,
+   where appropriate, the direct invocation seam. Confirm the transformed
+   result, output-schema behavior, and absence of secrets in output and logs.
 
 Apply accepts JSON, YAML sequences, multi-document YAML, and directories of
 resource files. Validate the exact file before applying a batch, and inspect
@@ -216,7 +221,8 @@ Classify failures before changing state:
 - transformed-output failure: check the tool output schema and binding order;
 - stale result: inspect cache stats and the affected tool's narrow cache entry.
 
-Start with `bridgectl plugin get`, `bridgectl plugin binding get`, bounded log
-stats/tail, and cache stats. Reproduce with safe deterministic data. For
-repository diagnosis, use the existing plugin unit tests and the
+Start with `bridgectl plugin get --context "$CTX"` and
+`bridgectl plugin binding get --context "$CTX"`, then bounded log stats/tail
+and cache stats with the same explicit context. Reproduce with safe
+deterministic data. For repository diagnosis, use the existing plugin unit tests and the
 `pluginintegration` black-box test rather than sending production records.

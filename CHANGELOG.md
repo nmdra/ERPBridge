@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Update the repository `bridgectl-ops` skill to 3.5.0 with management MCP
+  discovery, serial calls, result checks, write readback, action-specific
+  preflight, and lazy operational-memory retrieval; preserve exact approvals,
+  redaction, and the terminal record checkpoint
+
+### Fixed
+
+- Make bundled plugin guidance portable across global and project installs,
+  scope local Compose checks to local work, and complete the skill handoff
+
 ## [v0.6.0-alpha.1] - 2026-10-17
 
 ### Added

@@ -24,6 +24,8 @@ promotion to `active/`.
 
 ## Completed
 
+- [`[COMPLETED]Plan-Bridgectl-Ops-MCP-Best-Practices.md`](./completed/%5BCOMPLETED%5DPlan-Bridgectl-Ops-MCP-Best-Practices.md) — skill 3.5.0: management MCP guidance, scoped preflight, lazy memory routing, portable references, and verified source/public documentation; global installation synced after explicit destination approval.
+
 - [`[COMPLETED]Plan-Release-v0.5.0-alpha.5.md`](./completed/%5BCOMPLETED%5DPlan-Release-v0.5.0-alpha.5.md) — published and verified; pinned revision names stay callable while unlisted.
 - [`[COMPLETED]Plan-Release-v0.5.0-alpha.4.md`](./completed/%5BCOMPLETED%5DPlan-Release-v0.5.0-alpha.4.md) — published; the pinned-name regression it exposed is fixed in `v0.5.0-alpha.5`.
 - [`[COMPLETED]Plan-Release-v0.5.0-alpha.3.md`](./completed/%5BCOMPLETED%5DPlan-Release-v0.5.0-alpha.3.md) — candidate audit, changelog backfill and cut, local/live gates, and prerelease publication.

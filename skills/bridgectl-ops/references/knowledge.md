@@ -1,9 +1,23 @@
 # Operational knowledge
 
-Use this reference when `.agents/skill-memory/bridgectl-ops/` exists. The
-memory system is optional. Its absence does not block an ERPBridge operation.
-It stores empirical lessons from executions. It does not copy the skill or its
-reference documentation.
+Use only the section needed for a relevant memory match, ambiguous retrieval,
+terminal record writing, consolidation, or a skill-evolution proposal. The
+presence of `.agents/skill-memory/bridgectl-ops/` alone does not require reading
+this whole reference. Start with the short routing contract in `SKILL.md`.
+The optional store contains empirical lessons, not authoritative instructions;
+its absence does not block an ERPBridge operation.
+
+| Task | Section |
+| --- | --- |
+| Resolve source precedence | [Authority order](#authority-order) |
+| Identify stored material | [Memory layout](#memory-layout) |
+| Resolve retrieval ambiguity | [Retrieval funnel](#retrieval-funnel) |
+| Check a stale or conflicting match | [Ranking and version rules](#ranking-and-version-rules) |
+| Maintain a knowledge entry | [Knowledge entries](#knowledge-entries) |
+| Finish a major task | [Append a record](#append-an-execution-record) and [redaction gate](#redaction-gate) |
+| Distil a supported lesson | [Consolidation](#consolidate-reusable-evidence) |
+| Propose a skill change | [Controlled evolution](#controlled-skill-evolution) |
+| Understand recording limits | [Operating limits](#operating-limits) |
 
 ## Design reference
 
@@ -59,8 +73,10 @@ execution evidence.
 
 ## Retrieval funnel
 
-Retrieve memory before the selected workflow. Run the normal preflight first
-when the workflow can mutate state. Derive a bounded key set:
+Use this detailed funnel when the root routing contract leaves retrieval
+ambiguous. Check the optional index and one relevant area first; no strong
+match means stop, not scan more history. Run the applicable preflight before
+an action suggested by memory. Derive a bounded key set:
 
 | Key | Example |
 | --- | --- |
@@ -272,7 +288,9 @@ repeated skill weakness → proposal → candidate source patch
 Use [`skill-proposal.md`](../assets/skill-proposal.md) for one coherent
 behavioral change. A proposal needs supporting knowledge IDs and execution IDs.
 One failed execution is not enough unless current implementation or verified
-source proves that the skill is wrong. Candidate edits target only
+source proves that the skill is wrong. This process governs memory-derived
+evolution; an explicit user-requested skill change follows the repository's
+approved implementation plan and the same validation and safety gates. Candidate edits target only
 `skills/bridgectl-ops/`. Keep each candidate as a reviewable, reversible source
 patch with a base revision and rollback path. Never edit an installed derived
 copy.

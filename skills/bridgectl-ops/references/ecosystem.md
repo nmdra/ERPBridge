@@ -14,12 +14,12 @@
 
 ## Documentation source order
 
-The published documentation site is <https://blog.nimendra.xyz/erpbridge-docs/>.
+The published documentation site is <https://toolplane.nimendra.online/>.
 Its complete published documentation reference is the
-[`llms.txt`](https://blog.nimendra.xyz/erpbridge-docs/llms.txt) index. When
+[`llms.txt`](https://toolplane.nimendra.online/llms.txt) index. When
 published guidance may have changed, fetch that index and then only the
 focused Server, Bridgectl, or SDK pages. Use
-[`llms-full.txt`](https://blog.nimendra.xyz/erpbridge-docs/llms-full.txt) only
+[`llms-full.txt`](https://toolplane.nimendra.online/llms-full.txt) only
 when the focused pages do not answer the question.
 
 Compare the published version with `bridgectl version` and the checked-out
@@ -37,11 +37,17 @@ embed local evaluation files. Installation is local and does not contact an
 ERPBridge server.
 
 Use `bridgectl skill install --project` for the current project, omit selectors
-for the default global destination, or pass `--dir <path>` to inspect or
-materialize a specific destination. `--force` replaces the existing skill tree;
-confirm the exact destination before using it. Rebuild `bridgectl` after source
-changes, then refresh any derived installation. Never hand-edit the installed
-copy or treat it as the source of truth.
+for the default global destination, or pass `--dir <path>` to materialize a
+specific destination. `--force` replaces the existing skill tree; confirm the
+exact destination before using it. Never hand-edit the installed copy.
+
+For normal CLI upgrades, use the operator's chosen installation channel. For a
+GitHub release, verify the platform asset against the release checksum before
+replacement. A release binary embeds the skill from that release, not newer
+source edits. To validate an unreleased skill change, build a temporary helper
+from the approved checkout and install to a fresh temporary directory first.
+Keep an existing release CLI in place unless binary replacement is approved.
+Refresh a derived skill installation only after its destination is approved.
 
 ## Project-local operational knowledge
 
@@ -59,17 +65,11 @@ data, unrestricted logs, or private reasoning in the memory tree.
 
 ## Management MCP server
 
-`bridgectl mcp --stdio` is a separate local process from `erpbridge-server
---stdio`. It exposes the same management operations this skill performs
-manually, so an agent can inspect and change ERPBridge through MCP instead of a
-terminal.
-
-The change gates in this skill still apply to the work you perform yourself.
-Approving a write group when starting the management server is an operator
-decision outside this skill, and it never replaces the per-action confirmation
-this skill requires for a register, apply, delete, token, or cache change.
-Treat any write result as unverified until a separate read confirms it, and
-treat `outcome_unknown` as a change that may already have been applied.
+`bridgectl mcp --stdio` is separate from `erpbridge-server --stdio` and exposes
+a bounded management catalogue, not published ERP tools or every CLI command.
+Read [Management MCP](mcp.md) for discovery, serial execution, result handling,
+client setup, grants, and recovery. The skill's per-action confirmation gates
+apply through both interfaces. Preserve separate runtime access.
 
 ## Protocol boundary
 

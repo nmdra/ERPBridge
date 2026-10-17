@@ -1,11 +1,19 @@
 # Diagnose and report ERPBridge issues
 
+| Task | Section |
+| --- | --- |
+| Select evidence and reproduce | [Triage loop](#triage-loop) |
+| Plugin or binding failure | [Plugin diagnosis](#plugin-diagnosis) |
+| Interpret a stable error | [Stable-code evidence](#stable-code-evidence) |
+| Prepare a redacted report | [Bug-report workflow](#bug-report-workflow) |
+
 ## Triage loop
 
-1. Run the read-only [onboarding preflight](onboarding.md#preflight) with the
-   affected `--context`. It establishes context, stack health, quoted Compose
-   input, credential-reference presence, control-plane root, server-side probe
-   mode, registry scope, and manifest ownership before a retry.
+1. Run [core preflight and only the relevant profiles](preflight.md) for the
+   affected context. Remote diagnostics do not require local Docker, localhost
+   health, MockERP, RedisInsight, or an API probe. Use the selected `CTX` in
+   every CLI deployment command as `--context "$CTX"`; management MCP uses
+   its pinned context and [result rules](mcp.md).
 2. Capture `bridgectl version`, safe context names, server/SDK version when
    available, timestamp with timezone, and the smallest affected API or tool.
    Do not source `.env`; use Compose's `--env-file` and inspect only booleans,
@@ -15,24 +23,31 @@
    client/SDK protocol handling, cache, or server runtime. Route stable
    onboarding/API codes through the numbered
    [recovery branches](onboarding.md#recovery-branches).
-4. Inspect the narrowest evidence first: health checks, server-side API probe,
-   tool describe/readback, bounded log stats/tail, then cache stats. Use
+4. Inspect the narrowest evidence first: exact resource readback, bounded log
+   stats/tail, or cache stats. Check deployment health only when relevant.
+   A server-side API test can cause downstream effects. Obtain exact approval
+   before testing the named API; management MCP also requires the `probe`
+   grant. Do not use a probe as a universal read-only health check. Use
    repository history and `git status` without altering unrelated work.
 5. Reproduce with a minimum safe request. Do not use production personal data,
    raw tokens, authorization headers, ERP credentials, upstream bodies, or
    plugin payloads in reproduction artifacts.
 6. State the observed result, expected result, stable code, and evidence that
-   separates them. If an operation would alter production state, obtain the
-   change gate described in `SKILL.md`.
+   separates them. Every mutation or effectful test needs exact per-action
+   confirmation, not only production actions. Follow the shared
+   [verification gates](preflight.md#action-and-verification-gates), independently
+   read back changes, and invalidate affected evidence after a new failure or
+   change. For an unknown write outcome, read back before considering a retry.
 
-A changed quoted environment value requires the explicit Compose
+For the local Compose deployment only, a changed quoted environment value
+requires the explicit Compose
 `--force-recreate` path; recreating a container does not prove health. For a
 file-backed resource, inspect only the presence, permissions, regular-file
 status, and bounded size of the reference-named file under
 `ERPBRIDGE_CREDENTIALS_DIR`; never print its content or use an environment
-fallback. The normal `bridgectl api test` is server-side and body-free. Use
-`--local` only when the report explicitly labels a host-side offline
-diagnostic.
+fallback. The normal `bridgectl api test <name> --context "$CTX"` is
+server-side and body-free, but is still effectful. Use `--local` only for a
+separately approved and explicitly labelled host-side diagnostic.
 
 ## Plugin diagnosis
 

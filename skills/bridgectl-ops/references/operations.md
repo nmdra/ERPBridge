@@ -1,26 +1,39 @@
 # Maintain ERPBridge with bridgectl
 
+| Task | Section |
+| --- | --- |
+| Select context and inspect | [Inspect before changing](#inspect-before-changing) |
+| Update or retire a resource | [Tool and API lifecycle](#tool-and-api-lifecycle) |
+| Plugin lifecycle | [External plugins](#external-plugins) |
+| Identity and roles | [Tokens and guarded tools](#tokens-and-guarded-tools) |
+| Read logs or invalidate cache | [Logs and cache](#logs-and-cache) |
+
 ## Inspect before changing
 
-Run the read-only [onboarding preflight](onboarding.md#preflight) first. Use
-`bridgectl api list`, `bridgectl tool get`, and
-`bridgectl tool describe <name>` with the same explicit `--context` to identify
-the current resource and version. Read command help or generated CLI docs for
-the installed release before using flags. Context-scoped API registries live
+Run [core preflight and only the relevant profiles](preflight.md) first.
+For remote reads or narrow administration, local Docker, localhost health,
+MockERP, RedisInsight, and API probes are not prerequisites. Use the narrowest
+read for the task, such as `bridgectl api list --context "$CTX"`,
+`bridgectl tool get --context "$CTX"`, or
+`bridgectl tool describe <name> --context "$CTX"`, to identify the target.
+Read command help or generated CLI docs for the installed release before
+using flags. Context-scoped API registries live
 under `~/.bridgectl/registries/`; a legacy global registry is a stop for the
 explicit scrub/migration workflow, not data to ignore. Changing the saved
 context is a separate confirmed action.
 
 ## Tool and API lifecycle
 
-- Test a registered API before changing a dependent tool. The default
-  `bridgectl api test` is the authenticated server-side, body-free probe;
-  `--local` is only an explicit host-side offline diagnostic.
+- When a dependent tool change needs ERP connectivity evidence, obtain exact
+  approval before `bridgectl api test <name> --context "$CTX"`. Its bounded,
+  server-side result does not make it read-only: the request can cause downstream
+  effects. Management MCP also needs the `probe` grant; see [MCP](mcp.md).
+  `--local` is only a separately approved host-side diagnostic.
 - Update a manifest as a new reviewed version, validate it locally, then apply
   it only after confirmation. Read the registry back after apply. Keep the
   reviewed source under `manifests/<module>/`; generated YAML is a temporary
   draft and does not create a parallel `schemas/` or per-tool JSON authority.
-- A quoted Compose environment change needs `--env-file .env` and
+- For local Compose only, a quoted environment change needs `--env-file .env` and
   `--force-recreate`; never source `.env`. Confirm health after recreation.
   Environment-backed credential changes need the refreshed process. A
   `credentialSource: file` resource reads its reference-named file from
@@ -45,7 +58,11 @@ cache target after the lifecycle change.
 
 ## Tokens and guarded tools
 
-`bridgectl token create`, `list`, and `revoke` require the admin credential.
+`bridgectl token create --name <name> --context "$CTX"`,
+`bridgectl token list --context "$CTX"`, and
+`bridgectl token revoke <id> --context "$CTX"` require the admin credential.
+Confirm each creation or revocation for its exact target and scope, then
+independently read token metadata back. Token creation stays in CLI, not MCP.
 Create the smallest set of scopes (`mcp`, `metrics`, or `logs`) and roles that
 the caller needs. A created token is disclosed once; direct the recipient to a
 secret manager and omit the value from output thereafter.
@@ -69,14 +86,20 @@ as permission.
 
 ## Logs and cache
 
-Start with `bridgectl log stats` and bounded `bridgectl log tail` filters to
+Start with `bridgectl log stats --context "$CTX"` and bounded
+`bridgectl log tail --context "$CTX"` filters to
 identify a time window, component, tool, request ID, or error class. Treat log
 output as sensitive evidence and redact it before sharing.
 
-Run `bridgectl cache stats` before any invalidation. Confirm the narrowest
-target—tool, module, or all entries—before `bridgectl cache flush`. For an
+Run `bridgectl cache stats --context "$CTX"` before any invalidation. Confirm
+the exact narrowest target (tool, module, or all entries) before
+`bridgectl cache flush --context "$CTX"` with its approved selector. For an
 all-cache flush, repeat the environment and expected blast radius in the
-confirmation, then verify the post-flush statistic or the affected tool call.
+confirmation, then independently verify the post-flush statistic. Use an
+explicitly approved safe tool call only if runtime behavior needs verification.
+Invalidate affected [session evidence](preflight.md#session-evidence) after the
+change. Follow the shared [verification gates](preflight.md#action-and-verification-gates)
+for every lifecycle action; command completion alone is not proof of state.
 File-backed tools and active authenticated file-backed plugin bindings bypass
 response caching, so a file replacement does not need a cache flush merely to
 be observed. Environment-backed rotation keeps the normal cache behavior and

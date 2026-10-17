@@ -4,19 +4,26 @@ import (
 	"bytes"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	bridgectlops "github.com/nmdra/ERPBridge/skills/bridgectl-ops"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestSkillEmbeddedFiles(t *testing.T) {
 	files := embeddedSkillFiles(t)
 	require.Contains(t, files, "SKILL.md")
 	require.Contains(t, files, "references/ecosystem.md")
+	require.Contains(t, files, "references/mcp.md")
+	require.Contains(t, files, "references/preflight.md")
 	require.Contains(t, files, "references/knowledge.md")
 	require.Contains(t, files, "assets/plugin.yaml")
 	require.Contains(t, files, "assets/execution-record.json")
@@ -24,6 +31,60 @@ func TestSkillEmbeddedFiles(t *testing.T) {
 	require.Contains(t, files, "assets/skill-proposal.md")
 	require.NotContains(t, files, "evals/evals.json")
 	require.NotContains(t, files, ".agents/skill-memory/bridgectl-ops/index.md")
+}
+
+func TestSkillFrontmatterAndSections(t *testing.T) {
+	data, err := bridgectlops.Files.ReadFile("SKILL.md")
+	require.NoError(t, err)
+	parts := strings.SplitN(string(data), "---\n", 3)
+	require.Len(t, parts, 3, "skill must have YAML frontmatter")
+	var frontmatter struct {
+		Name          string            `yaml:"name"`
+		Description   string            `yaml:"description"`
+		Compatibility string            `yaml:"compatibility"`
+		Metadata      map[string]string `yaml:"metadata"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(parts[1]), &frontmatter))
+	require.Equal(t, "bridgectl-ops", frontmatter.Name)
+	require.NotEmpty(t, frontmatter.Description)
+	require.LessOrEqual(t, utf8.RuneCountInString(frontmatter.Description), 1024)
+	require.LessOrEqual(t, utf8.RuneCountInString(frontmatter.Compatibility), 500)
+	require.NotEmpty(t, frontmatter.Metadata["version"])
+	require.Less(t, len(strings.Split(parts[2], "\n")), 500)
+	for _, section := range strings.Split(parts[2], "\n## ")[1:] {
+		heading, body, found := strings.Cut(section, "\n")
+		require.True(t, found, "section %q must have a body", heading)
+		require.NotEmpty(t, strings.TrimSpace(body), "section %q must not be empty", heading)
+	}
+}
+
+func TestSkillInstalledLinksStayWithinBundle(t *testing.T) {
+	links := regexp.MustCompile(`\[[^\]\n]*\]\(([^\s)]+)\)`)
+	for _, layout := range []string{"global/.agents/skills", "project/.agents/skills"} {
+		t.Run(layout, func(t *testing.T) {
+			destination := filepath.Join(t.TempDir(), filepath.FromSlash(layout), bridgectlOpsSkillName)
+			require.NoError(t, installEmbeddedSkill(destination, bridgectlops.Files, false))
+			for name, data := range embeddedSkillFiles(t) {
+				if filepath.Ext(name) != ".md" {
+					continue
+				}
+				for _, match := range links.FindAllStringSubmatch(string(data), -1) {
+					target, err := url.Parse(match[1])
+					require.NoError(t, err, "%s: %s", name, match[1])
+					if target.IsAbs() || target.Host != "" || target.Path == "" {
+						continue
+					}
+					require.False(t, filepath.IsAbs(target.Path), "%s: absolute local link", name)
+					resolved := filepath.Join(destination, filepath.Dir(filepath.FromSlash(name)), filepath.FromSlash(target.Path))
+					relative, err := filepath.Rel(destination, resolved)
+					require.NoError(t, err)
+					require.NotEqual(t, "..", relative, "%s: link escapes bundle", name)
+					require.False(t, strings.HasPrefix(relative, ".."+string(filepath.Separator)), "%s: link escapes bundle: %s", name, match[1])
+					require.FileExists(t, resolved, "%s: unresolved link: %s", name, match[1])
+				}
+			}
+		})
+	}
 }
 
 func TestResolveSkillDestination(t *testing.T) {
