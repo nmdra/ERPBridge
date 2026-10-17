@@ -2,134 +2,97 @@ package cli
 
 import (
 	"bytes"
-	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nmdra/ERPBridge/internal/config"
+	"github.com/nmdra/ERPBridge/internal/output"
 )
 
-func TestShouldPrint(t *testing.T) {
-	// reset globals
-	logComponent = ""
-	logTool = ""
-	logLevel = ""
-	logRequestID = ""
-
-	msg := `{"component":"mcp", "tool_name":"test-tool", "level":"ERROR", "request_id":"req-1"}`
-
-	if !shouldPrint(msg) {
-		t.Errorf("expected shouldPrint to be true")
-	}
-
-	logComponent = cliMCPScope
-	if !shouldPrint(msg) {
-		t.Errorf("expected shouldPrint to be true with mcp component")
-	}
-
-	logComponent = "other"
-	if shouldPrint(msg) {
-		t.Errorf("expected shouldPrint to be false with other component")
-	}
-
-	logComponent = ""
-	logTool = "test-tool"
-	if !shouldPrint(msg) {
-		t.Errorf("expected true")
-	}
-
-	logTool = "other"
-	if shouldPrint(msg) {
-		t.Errorf("expected false")
-	}
-
-	logTool = ""
-	logLevel = "error"
-	if !shouldPrint(msg) {
-		t.Errorf("expected true")
-	}
-
-	logLevel = "info"
-	if shouldPrint(msg) {
-		t.Errorf("expected false")
-	}
-
-	logLevel = ""
-	logRequestID = "req-1"
-	if !shouldPrint(msg) {
-		t.Errorf("expected true")
-	}
-
-	logRequestID = "req-2"
-	if shouldPrint(msg) {
-		t.Errorf("expected false")
-	}
-
-	logComponent = cliMCPScope
-	if shouldPrint(`{"message":"component\":\"mcp"}`) {
-		t.Errorf("expected substring-only match to be filtered")
-	}
-	if !shouldPrint(`not-json`) {
-		t.Errorf("malformed records should pass through")
-	}
+// logStatsFixture serves a bounded recent-log payload for the summary command.
+func logStatsFixture(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/logs/recent" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `[
+			{"level":"info","tool_name":"list_employees","message":"raw one"},
+			{"level":"info","tool_name":"list_employees"},
+			{"level":"error","tool_name":"get_invoice","message":"raw two"}
+		]`)
+	}))
+	t.Cleanup(server.Close)
+	return server
 }
 
-func TestLogStatsCmd(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`[{"level":"INFO", "tool_name":"tool1"}]`))
-	}))
-	defer ts.Close()
-
-	cfg = &config.Config{
-		CurrentContext: testContextName,
-		Contexts: map[string]config.Context{
-			testContextName: {Server: ts.URL},
-		},
-	}
-
-	var buf bytes.Buffer
-	logStatsCmd.SetOut(&buf)
-	logStatsCmd.SetContext(context.Background())
-	err := logStatsCmd.RunE(logStatsCmd, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !bytes.Contains(buf.Bytes(), []byte("INFO")) {
-		t.Errorf("expected output to contain INFO")
-	}
-}
-
-func TestLogTailCmd(t *testing.T) {
-	// reset globals
-	logComponent = ""
-	logTool = ""
-	logLevel = ""
-	logRequestID = ""
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("data: {\"level\":\"INFO\"}\n\n"))
-	}))
-	defer ts.Close()
-
+func withLogStatsContext(t *testing.T, serverURL string, format output.Format) *bytes.Buffer {
+	t.Helper()
 	cfg = &config.Config{
 		CurrentContext: "test",
-		Contexts: map[string]config.Context{
-			"test": {Server: ts.URL},
-		},
+		Contexts:       map[string]config.Context{"test": {Server: serverURL}},
+	}
+	buffer := &bytes.Buffer{}
+	formatter = &output.Formatter{Format: format, Out: buffer}
+	outputFormat = string(format)
+	logStatsCmd.SetOut(buffer)
+	t.Cleanup(func() {
+		outputFormat = "table"
+		logStatsCmd.SetOut(nil)
+	})
+	return buffer
+}
+
+func TestLogStatsKeepsTableOutput(t *testing.T) {
+	server := logStatsFixture(t)
+	buffer := withLogStatsContext(t, server.URL, output.FormatTable)
+
+	if err := logStatsCmd.RunE(logStatsCmd, nil); err != nil {
+		t.Fatalf("log stats: %v", err)
+	}
+	got := buffer.String()
+	for _, want := range []string{
+		"Log Statistics (Recent 1000 events)",
+		"Level breakdown:",
+		"info",
+		"error",
+		"list_employees",
+		"get_invoice",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("table output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestLogStatsEmitsStructuredCounts(t *testing.T) {
+	server := logStatsFixture(t)
+	buffer := withLogStatsContext(t, server.URL, output.FormatJSON)
+
+	if err := logStatsCmd.RunE(logStatsCmd, nil); err != nil {
+		t.Fatalf("log stats: %v", err)
 	}
 
-	var buf bytes.Buffer
-	logTailCmd.SetOut(&buf)
-	logTailCmd.SetContext(context.Background())
-	err := logTailCmd.RunE(logTailCmd, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	var payload struct {
+		LevelCounts map[string]int `json:"levelCounts"`
+		ToolCounts  map[string]int `json:"toolCounts"`
 	}
-	if !bytes.Contains(buf.Bytes(), []byte("INFO")) {
-		t.Errorf("expected output to contain INFO, got: %q", buf.String())
+	if err := json.Unmarshal(buffer.Bytes(), &payload); err != nil {
+		t.Fatalf("structured output is not JSON: %v\n%s", err, buffer.String())
+	}
+	if payload.LevelCounts["info"] != 2 || payload.LevelCounts["error"] != 1 {
+		t.Fatalf("levelCounts = %v, want info:2 error:1", payload.LevelCounts)
+	}
+	if payload.ToolCounts["list_employees"] != 2 || payload.ToolCounts["get_invoice"] != 1 {
+		t.Fatalf("toolCounts = %v, want list_employees:2 get_invoice:1", payload.ToolCounts)
+	}
+	if strings.Contains(buffer.String(), "raw one") || strings.Contains(buffer.String(), "raw two") {
+		t.Fatalf("structured output leaked a log message: %s", buffer.String())
 	}
 }

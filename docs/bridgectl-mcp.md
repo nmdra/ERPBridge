@@ -77,6 +77,65 @@ Approval has these limits:
 - Exact-target confirmation prevents accidental target mismatch. It is not
   proof of human consent. Configure approvals in the agent host as well.
 
+## Tool catalogue
+
+A session without `--allow-write` exposes these tools:
+
+| Tool | Operation |
+| --- | --- |
+| `bridgectl_context_list` | List saved contexts, marking the one pinned to this session |
+| `bridgectl_api_list` | List the APIs registered in the local registry |
+| `bridgectl_tool_get` | Read one tool, or list tools |
+| `bridgectl_tool_generate` | Generate the tool manifest for a registered API |
+| `bridgectl_tool_validate` | Validate one tool manifest locally |
+| `bridgectl_plugin_get` | Read one plugin, or list plugins |
+| `bridgectl_plugin_validate` | Validate one plugin manifest locally |
+| `bridgectl_binding_get` | Read one plugin binding, or list bindings |
+| `bridgectl_binding_validate` | Validate one plugin binding manifest locally |
+| `bridgectl_token_list` | List API token metadata |
+| `bridgectl_cache_stats` | Read tool cache statistics |
+| `bridgectl_log_stats` | Read counts by log level and by tool |
+
+Every tool returns one JSON object with `schemaVersion`, `operation`, `context`,
+`success`, and either `data` or a safe `error` object. Failures set the MCP tool
+error flag.
+
+### Result redaction
+
+Inspection results are an allow-list, not a copy of the command output. They
+never include credential values, literal authentication header values, schema
+defaults or examples, raw endpoint URLs, plugin configuration values, API token
+values, or raw log messages.
+
+- Endpoint identity is reported as a neutral host label, so an operator can tell
+deployments apart without exposing paths or credentials.
+- Schema declarations are preserved, including a property named `password` or
+`token`, so a manifest stays reviewable. Only concrete values are removed.
+- Inspection results are marked `redacted: true` and are not round-trippable. Use
+`bridgectl_tool_generate` to obtain an applicable manifest.
+- Generation returns the executable manifest, because applying it is the purpose
+of the operation. The adapter refuses to return a manifest that contains a
+literal credential value or an unsafe endpoint.
+
+### Argument rules
+
+- Schemas are strict: an unknown property is rejected before any command runs.
+- Strings are length-bounded, and a value may not start with `-`, so a caller
+cannot inject an option.
+- Manifests are one inline JSON object. Paths, directories, URLs, YAML streams,
+and arrays are rejected.
+- Manifest tools do not accept embedded credential values. They reject a
+`kind` that does not match the tool.
+- Remote OpenAPI fetch, `$ref` resolution, output directories, and file writes
+stay in the manual CLI.
+
+### Validation results
+
+A manifest that fails local validation returns `invalid_arguments` with an
+adapter-owned message. The command's own validation text is not forwarded,
+because child output is never trusted. Run the same validation with the
+`bridgectl` CLI to see the exact reason.
+
 ## Execution limits
 
 - One operation runs at a time. A concurrent call returns a busy result.
@@ -88,6 +147,15 @@ Approval has these limits:
   the session.
 - Manifests are passed as a single inline JSON object. The adapter stages them
   in a private temporary directory and removes them afterwards.
+
+## Limits of this release
+
+- Only the catalogue above is exposed. There is no generic command tool, no
+  shell, and no filesystem or URL access.
+- Reads report what the pinned deployment returns. They do not prove that an
+  ERP endpoint is reachable.
+- Log statistics summarise the deployment's recent events. Log messages are
+  never returned.
 
 ## Interrupted writes
 

@@ -36,7 +36,7 @@ func (b *syncBuffer) String() string {
 }
 
 // childErrorCode maps a runner error to the adapter code the catalogue uses.
-func childErrorCode(err error) string {
+func runnerErrorCode(err error) string {
 	switch {
 	case errors.Is(err, ErrBusy):
 		return CodeBusy
@@ -80,7 +80,7 @@ func registerTestChildTool(s *Server) {
 		func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			outcome, err := s.runner.Run(ctx, CommandSpec{Argv: []string{"test", "probe"}})
 			if err != nil {
-				return NewFailure(testChildTool, s.snapshot.ContextName, childErrorCode(err),
+				return NewFailure(testChildTool, s.snapshot.ContextName, runnerErrorCode(err),
 					"the child did not complete", "Retry the operation.").callToolResult()
 			}
 			return NewSuccess(testChildTool, s.snapshot.ContextName, map[string]any{

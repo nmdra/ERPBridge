@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/nmdra/ERPBridge/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -67,6 +68,10 @@ frequency analysis of log levels and tool invocations.`,
 		}
 
 		out := cmd.OutOrStdout()
+		if outputFormat == string(output.FormatJSON) || outputFormat == string(output.FormatYAML) {
+			return formatter.Print(&LogStatsResponse{LevelCounts: counts, ToolCounts: tools})
+		}
+
 		_, _ = fmt.Fprintln(out, "Log Statistics (Recent 1000 events)")
 		_, _ = fmt.Fprintln(out, "\nLevel breakdown:")
 		for level, count := range counts {
@@ -80,6 +85,13 @@ frequency analysis of log levels and tool invocations.`,
 
 		return nil
 	},
+}
+
+// LogStatsResponse is the structured form of the log summary. It carries only
+// counts, never log messages or raw event fields.
+type LogStatsResponse struct {
+	LevelCounts map[string]int `json:"levelCounts" yaml:"levelCounts"`
+	ToolCounts  map[string]int `json:"toolCounts" yaml:"toolCounts"`
 }
 
 var logTailCmd = &cobra.Command{

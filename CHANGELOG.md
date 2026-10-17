@@ -15,6 +15,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its launch-time context, endpoints, and credential, keeps stdout strictly for
   protocol traffic, and reports an interrupted write as `outcome_unknown`
   instead of claiming rollback.
+- Add the read-only management catalogue to `bridgectl mcp --stdio`:
+  `bridgectl_context_list`, `bridgectl_api_list`, `bridgectl_tool_get`,
+  `bridgectl_tool_generate`, `bridgectl_tool_validate`, `bridgectl_plugin_get`,
+  `bridgectl_plugin_validate`, `bridgectl_binding_get`,
+  `bridgectl_binding_validate`, `bridgectl_token_list`,
+  `bridgectl_cache_stats`, and `bridgectl_log_stats`. Results are an explicit
+  allow-list: credential values, literal header values, schema defaults and
+  examples, raw endpoint URLs, plugin configuration values, token values, and
+  raw log messages are never returned. Manifests are one inline object, and an
+  embedded credential value is rejected before it reaches disk.
+- Add a structured output branch to `bridgectl log stats`, so `-o json` and
+  `-o yaml` return `{"levelCounts":{...},"toolCounts":{...}}` counts without
+  log messages. Table output is unchanged.
+
+### Fixed
+
+- Make `bridgectl tool get` honour its own `--output` flag when listing tools.
+  The command defines its own flag, which shadows the global one, so the list
+  path previously rendered a table even when JSON or YAML was requested. The
+  named-resource path and the `plugin get` and `plugin binding get` commands are
+  unchanged.
 
 ## [v0.5.0-alpha.6] - 2026-10-15
 

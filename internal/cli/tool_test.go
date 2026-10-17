@@ -58,7 +58,10 @@ func TestToolGetCmd(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	formatter = &output.Formatter{Format: output.FormatJSON, Out: &buf}
+	toolGetCmd.SetOut(&buf)
+	t.Cleanup(func() { toolGetCmd.SetOut(nil) })
+	require.NoError(t, toolGetCmd.Flags().Set("output", "table"))
+	t.Cleanup(func() { _ = toolGetCmd.Flags().Set("output", "table") })
 
 	err := toolGetCmd.RunE(toolGetCmd, nil)
 	if err != nil {
@@ -67,6 +70,57 @@ func TestToolGetCmd(t *testing.T) {
 	if !bytes.Contains(buf.Bytes(), []byte(testToolName)) {
 		t.Errorf("expected output to contain tool1")
 	}
+}
+
+// TestToolGetListHonoursLocalOutputFlag covers the list path, which defines its
+// own --output flag. That flag shadows the global one, so the list path used to
+// render a table whatever the caller asked for.
+func TestToolGetListHonoursLocalOutputFlag(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[{"metadata":{"name":"tool1","version":"1.0","module":"hr","isActive":true}}]`))
+	}))
+	defer ts.Close()
+
+	cfg = &config.Config{
+		CurrentContext: testContextName,
+		Contexts: map[string]config.Context{
+			testContextName: {MCPServer: ts.URL},
+		},
+	}
+	t.Cleanup(func() { _ = toolGetCmd.Flags().Set("output", "table") })
+
+	t.Run("json", func(t *testing.T) {
+		var buf bytes.Buffer
+		toolGetCmd.SetOut(&buf)
+		t.Cleanup(func() { toolGetCmd.SetOut(nil) })
+		require.NoError(t, toolGetCmd.Flags().Set("output", "json"))
+
+		require.NoError(t, toolGetCmd.RunE(toolGetCmd, nil))
+
+		var payload struct {
+			Tools []struct {
+				Metadata struct {
+					Name string `json:"name"`
+				} `json:"metadata"`
+			} `json:"tools"`
+		}
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &payload))
+		require.Len(t, payload.Tools, 1)
+		require.Equal(t, testToolName, payload.Tools[0].Metadata.Name)
+	})
+
+	t.Run("table", func(t *testing.T) {
+		var buf bytes.Buffer
+		toolGetCmd.SetOut(&buf)
+		t.Cleanup(func() { toolGetCmd.SetOut(nil) })
+		require.NoError(t, toolGetCmd.Flags().Set("output", "table"))
+
+		require.NoError(t, toolGetCmd.RunE(toolGetCmd, nil))
+
+		require.Contains(t, buf.String(), "NAME")
+		require.Contains(t, buf.String(), testToolName)
+	})
 }
 
 func TestValidateToolManifestRejectsUntypedOutputSchema(t *testing.T) {

@@ -303,8 +303,26 @@ var toolGetCmd = &cobra.Command{
 		}
 
 		res := &ToolListResponse{Tools: tools}
-		return formatter.Print(res)
+		return printToolList(cmd, res)
 	},
+}
+
+// printToolList renders a tool list in the requested format. This command
+// defines its own --output flag, which shadows the global one, so the list path
+// must read the local flag instead of the shared formatter.
+func printToolList(cmd *cobra.Command, res *ToolListResponse) error {
+	out := cmd.OutOrStdout()
+	format, _ := cmd.Flags().GetString("output")
+	switch format {
+	case string(output.FormatJSON):
+		encoder := json.NewEncoder(out)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(res)
+	case string(output.FormatYAML):
+		return yaml.NewEncoder(out).Encode(res)
+	default:
+		return res.RenderTable(out)
+	}
 }
 
 // ToolListResponse wraps a slice of MCP tools for table formatting.

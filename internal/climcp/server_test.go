@@ -88,7 +88,7 @@ func responseFor(t *testing.T, messages []map[string]any, id float64) map[string
 	return nil
 }
 
-func TestServeAnswersInitializePingAndEmptyToolList(t *testing.T) {
+func TestServeAnswersInitializePingAndDefaultToolList(t *testing.T) {
 	input := strings.Join([]string{testInitRequest, testInitialized, testPingRequest, testListRequest}, "\n") + "\n"
 
 	raw, err := serveInput(t, input)
@@ -127,8 +127,14 @@ func TestServeAnswersInitializePingAndEmptyToolList(t *testing.T) {
 	if !ok {
 		t.Fatalf("tools/list result had no tools array: %q", raw)
 	}
-	if len(tools) != 0 {
-		t.Fatalf("tools/list advertised %d tools, want 0 before the catalogue work package", len(tools))
+	advertised := make([]string, 0, len(tools))
+	for _, entry := range tools {
+		tool, _ := entry.(map[string]any)
+		name, _ := tool["name"].(string)
+		advertised = append(advertised, name)
+	}
+	if got, want := sortedCopy(advertised), sortedCopy(defaultToolNames()); !equalStrings(got, want) {
+		t.Fatalf("tools/list advertised %v, want the default read catalogue %v", got, want)
 	}
 }
 
