@@ -23,6 +23,9 @@ var (
 	cliBuildOnce sync.Once
 	cliBuildPath string
 	cliBuildErr  error
+	// Preserve the host's Go build environment before any fixture changes HOME.
+	// Runtime children still receive their own isolated fixture environment.
+	cliBuildEnvironment = os.Environ()
 )
 
 func realCLI(t *testing.T) string {
@@ -46,6 +49,7 @@ func realCLI(t *testing.T) string {
 		// private temporary directory created by this test.
 		build := exec.Command("go", "build", "-o", binary, "./tools/bridgectl")
 		build.Dir = root
+		build.Env = cliBuildEnvironment
 		build.Stderr = os.Stderr
 		if err := build.Run(); err != nil {
 			cliBuildErr = fmt.Errorf("build bridgectl: %w", err)
