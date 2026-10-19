@@ -97,10 +97,22 @@ func TestRunnerCapturesOutputAndReportsExitCode(t *testing.T) {
 func TestRunnerRejectsSecondChildWhileBusy(t *testing.T) {
 	runner := helperRunner(5*time.Second, MaxChildOutputBytes, helperModeEnv+"=block")
 
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	// Reap the busy child before the test executable can be removed on Windows.
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(6 * time.Second):
+			t.Error("busy runner child did not stop during cleanup")
+		}
+	})
 	started := make(chan struct{})
 	go func() {
+		defer close(done)
 		close(started)
-		_, _ = runner.Run(context.Background(), CommandSpec{Argv: []string{"cache", "stats"}})
+		_, _ = runner.Run(ctx, CommandSpec{Argv: []string{"cache", "stats"}})
 	}()
 	<-started
 	time.Sleep(150 * time.Millisecond)
