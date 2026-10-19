@@ -29,7 +29,7 @@ the release URL does. Do not assume an older release contains unreleased fixes.
 Run in PowerShell. These commands download files, not a script to execute:
 
 ```powershell
-$Tag = 'v0.6.0-alpha.1' # Replace with the intended published release tag.
+$Tag = 'v0.6.0-alpha.2' # Replace with the intended published release tag.
 $Archive = 'bridgectl_Windows_x86_64.zip' # Or bridgectl_Windows_arm64.zip.
 $Release = "https://github.com/nmdra/ERPBridge/releases/download/$Tag"
 $Download = Join-Path $env:TEMP ([guid]::NewGuid().ToString())
@@ -208,7 +208,7 @@ For Codex TOML, escape backslashes in basic strings:
 
 ```toml
 [mcp_servers.erpbridge_manage]
-command = "C:\\Users\\Alice\\AppData\\Local\\ERPBridge CLI\\v0.6.0-alpha.1\\bridgectl.exe"
+command = "C:\\Users\\Alice\\AppData\\Local\\ERPBridge CLI\\v0.6.0-alpha.2\\bridgectl.exe"
 args = ["mcp", "--stdio", "--context", "staging"]
 env_vars = ["BRIDGE_API_TOKEN"]
 ```
@@ -219,7 +219,7 @@ A JSON client with the common `mcpServers` structure uses the same escaping:
 {
   "mcpServers": {
     "erpbridge_manage": {
-      "command": "C:\\Users\\Alice\\AppData\\Local\\ERPBridge CLI\\v0.6.0-alpha.1\\bridgectl.exe",
+      "command": "C:\\Users\\Alice\\AppData\\Local\\ERPBridge CLI\\v0.6.0-alpha.2\\bridgectl.exe",
       "args": ["mcp", "--stdio", "--context", "staging"]
     }
   }
