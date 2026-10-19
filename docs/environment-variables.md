@@ -45,6 +45,17 @@ production. ERPBridge logs a warning for each allowed credentialed HTTP call.
 
 The CLI reads these variables to override the active context.
 
+On Windows, use `$env:BRIDGE_API_TOKEN` supplied by an approved secret provider
+or parent process. Do not type a literal token into commands or client files.
+The config path is `%USERPROFILE%\.bridgectl\config.yaml`. Write YAML and
+manifests as UTF-8 without a BOM on PowerShell 5.1 and 7. Keep
+`${BRIDGE_API_TOKEN}` literal when writing YAML with a single-quoted here-string;
+the CLI expands it when loading the file. See the complete
+[PowerShell example](./windows.md#configure-a-context-without-storing-credentials).
+Restart long-running MCP and Console processes after credential changes.
+Inherited Windows directory ACLs govern file access; Unix `0600` mode is not an
+owner-only Windows ACL guarantee.
+
 | Variable | Purpose |
 | :--- | :--- |
 | `BRIDGE_CONTEXT` | Overrides the active context name. |

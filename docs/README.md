@@ -20,6 +20,8 @@ Welcome to the ERPBridge documentation. This wiki-style guide helps you understa
 
 ## 🛠 Developer Resources
 
+- **[bridgectl on Windows](./windows.md)**: Non-admin ZIP installation, PowerShell configuration, safe contexts, management MCP, and validation limits.
+
 - **[CLI Reference (bridgectl)](./cli/bridgectl.md)**: Comprehensive guide to the developer CLI, including bundled Agent Skill installation.
 - **[Management MCP Server](./bridgectl-mcp.md)**: Serve the `bridgectl mcp --stdio` management catalogue to an AI coding agent, with read-only defaults and operator-approved write groups.
 - **[ERPBridge Console](./web-console.md)**: Local read-only monitoring console launched by `bridgectl web`.
