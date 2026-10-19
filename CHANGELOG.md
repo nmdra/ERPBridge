@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Document non-admin Windows ZIP installation and SHA256 verification, PowerShell
+  5.1/7 UTF-8 configuration, manifest files, skills, Console, and direct management
+  MCP client setup. Add passing native x64 CI and isolated PowerShell smoke
+  checks. Interactive browser/Ctrl+C gates and ARM64 runtime validation remain
+  unverified.
+
 ### Changed
 
 - Update the repository `bridgectl-ops` skill to 3.5.0 with management MCP
@@ -16,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Refuse case-only context ambiguity such as `prod`/`Prod` on Windows before
+  registry access, config selection writes, or management MCP child execution.
+  Reject Windows reserved device stems such as `CON` and `NUL.test` when
+  constructing registry paths. Preserve existing files on refusal and require
+  manual backup and distinct-name recovery, without automatic migration.
+  Linux context naming, paths, and registry behavior remain unchanged.
 - Make bundled plugin guidance portable across global and project installs,
   scope local Compose checks to local work, and complete the skill handoff
 

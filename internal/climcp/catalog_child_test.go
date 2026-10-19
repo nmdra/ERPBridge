@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 // cliBuildOnce compiles the real bridgectl binary once per test run so the
@@ -44,7 +46,7 @@ func realCLI(t *testing.T) string {
 			cliBuildErr = err
 			return
 		}
-		binary := filepath.Join(dir, "bridgectl")
+		binary := filepath.Join(dir, testutil.ExecutableName("bridgectl"))
 		// #nosec G204 -- fixed argument vector; the output path comes from a
 		// private temporary directory created by this test.
 		build := exec.Command("go", "build", "-o", binary, "./tools/bridgectl")
@@ -223,7 +225,7 @@ func realSession(t *testing.T, fixture *deploymentFixture) *Server {
 func realSessionWithGroups(t *testing.T, fixture *deploymentFixture, groups []WriteGroup, stagingEndpoint ...string) *Server {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	for _, key := range []string{
 		"BRIDGE_CONTEXT", "BRIDGE_SERVER", "BRIDGE_MCP_SERVER", "BRIDGE_API_TOKEN",
 		"BRIDGE_ERP_BASE", "BRIDGE_AUTH_TYPE", "BRIDGE_API_KEY", "BRIDGE_AUTH_HEADER",
@@ -254,7 +256,7 @@ func realSessionWithGroups(t *testing.T, fixture *deploymentFixture, groups []Wr
 		Groups:   groups,
 		Runner: &Runner{
 			Executable: realCLI(t),
-			Env:        snapshot.ChildEnvironment(os.Environ()),
+			Env:        snapshot.ChildEnvironment(testutil.HomeEnvironment(os.Environ(), home, ChildSnapshotEnv)),
 			Timeout:    30 * time.Second,
 		},
 		Stager: stager,
@@ -263,6 +265,27 @@ func realSessionWithGroups(t *testing.T, fixture *deploymentFixture, groups []Wr
 		t.Fatalf("NewServer: %v", err)
 	}
 	return session
+}
+
+func TestRealSessionFiltersInheritedEnvironment(t *testing.T) {
+	t.Setenv("BRIDGE_TASK1_CREDENTIAL_CANARY", "synthetic-credential")
+	t.Setenv("LOG_TO_STDERR", "synthetic-log-control")
+	t.Setenv(ChildSnapshotEnv, "synthetic-snapshot")
+	t.Setenv("CLIMCP_TEST_HOST_ESSENTIAL", "preserved")
+	session := realSession(t, newDeploymentFixture(t))
+	joined := "\n" + strings.Join(session.runner.Env, "\n") + "\n"
+	for _, entry := range []string{
+		"BRIDGE_TASK1_CREDENTIAL_CANARY=synthetic-credential",
+		"LOG_TO_STDERR=synthetic-log-control",
+		ChildSnapshotEnv + "=synthetic-snapshot",
+	} {
+		if strings.Contains(joined, "\n"+entry+"\n") {
+			t.Fatalf("runtime child retained inherited control %q", strings.SplitN(entry, "=", 2)[0])
+		}
+	}
+	if !strings.Contains(joined, "\nCLIMCP_TEST_HOST_ESSENTIAL=preserved\n") {
+		t.Fatal("runtime child lost unrelated host environment")
+	}
 }
 
 func writeContextConfig(t *testing.T, home, endpoint string) {
@@ -558,7 +581,7 @@ func TestRealChildValidation(t *testing.T) {
 func TestRealChildGenerateFromRegisteredAPI(t *testing.T) {
 	fixture := newDeploymentFixture(t)
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	for _, key := range []string{"BRIDGE_CONTEXT", "BRIDGE_SERVER", "BRIDGE_MCP_SERVER", "BRIDGE_API_TOKEN", ChildSnapshotEnv} {
 		t.Setenv(key, "")
 	}
@@ -576,7 +599,7 @@ func TestRealChildGenerateFromRegisteredAPI(t *testing.T) {
 		Version:  "test-version",
 		Runner: &Runner{
 			Executable: realCLI(t),
-			Env:        snapshot.ChildEnvironment(os.Environ()),
+			Env:        snapshot.ChildEnvironment(testutil.HomeEnvironment(os.Environ(), home, ChildSnapshotEnv)),
 			Timeout:    30 * time.Second,
 		},
 		Stager: stager,
@@ -625,7 +648,7 @@ func TestRealChildAuthenticationFailureIsMapped(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	for _, key := range []string{"BRIDGE_CONTEXT", "BRIDGE_SERVER", "BRIDGE_MCP_SERVER", "BRIDGE_API_TOKEN", ChildSnapshotEnv} {
 		t.Setenv(key, "")
 	}
@@ -640,7 +663,7 @@ func TestRealChildAuthenticationFailureIsMapped(t *testing.T) {
 	session, err := NewServer(Options{
 		Snapshot: snapshot,
 		Version:  "test-version",
-		Runner:   &Runner{Executable: realCLI(t), Env: snapshot.ChildEnvironment(os.Environ()), Timeout: 30 * time.Second},
+		Runner:   &Runner{Executable: realCLI(t), Env: snapshot.ChildEnvironment(testutil.HomeEnvironment(os.Environ(), home, ChildSnapshotEnv)), Timeout: 30 * time.Second},
 		Stager:   stager,
 	})
 	if err != nil {

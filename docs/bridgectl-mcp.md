@@ -272,6 +272,17 @@ environment rather than in the configuration file, and start with the read-only
 default. These examples are documentation only: the adapter never edits a
 coding-agent configuration and never launches an agent.
 
+### Windows clients
+
+See [Windows management MCP examples](./windows.md#management-mcp-on-windows)
+for TOML and JSON with escaped absolute `.exe` paths, including paths containing
+spaces. Invoke the executable directly with an `args` array, not through a
+shell. Forward `BRIDGE_API_TOKEN` from the host environment using the client's
+supported settings; do not place its value in client files. Defaults remain
+read-only and stdout remains protocol-only. Restart after context or credential
+changes. EOF closes the session; interactive Ctrl+C cleanup is a pending native
+Windows manual gate, not a claim based on Unix SIGTERM tests.
+
 ### Codex CLI
 
 ```toml

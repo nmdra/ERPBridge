@@ -8,11 +8,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 // This file drives the real bridgectl binary over stdio with a strict JSON-RPC
@@ -34,21 +37,7 @@ type stdioSession struct {
 // inherited bridge credentials.
 func acceptanceEnvironment(t *testing.T, home string) []string {
 	t.Helper()
-	blocked := map[string]bool{
-		"HOME": true, "BRIDGE_CONTEXT": true, "BRIDGE_SERVER": true, "BRIDGE_MCP_SERVER": true,
-		"BRIDGE_API_TOKEN": true, "BRIDGE_ERP_BASE": true, "BRIDGE_AUTH_TYPE": true,
-		"BRIDGE_API_KEY": true, "BRIDGE_AUTH_HEADER": true, "BRIDGE_TOKEN": true,
-		"BRIDGE_USERNAME": true, "BRIDGE_PASSWORD": true, ChildSnapshotEnv: true,
-	}
-	env := []string{"HOME=" + home}
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		if blocked[key] {
-			continue
-		}
-		env = append(env, entry)
-	}
-	return env
+	return testutil.HomeEnvironment(os.Environ(), home, ChildSnapshotEnv)
 }
 
 // startSession launches the real management server against one fixture.
@@ -514,6 +503,9 @@ func TestStdioAcceptanceClientCancellation(t *testing.T) {
 }
 
 func TestStdioAcceptanceSignalShutdown(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Process.Signal SIGTERM is POSIX-only; EOF and protocol cancellation remain covered")
+	}
 	fixture := newDeploymentFixture(t)
 	session := startSession(t, fixture)
 	session.initialize(t)

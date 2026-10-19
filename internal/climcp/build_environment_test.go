@@ -4,8 +4,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 const buildHomeHelperEnv = "CLIMCP_BUILD_HOME_HELPER"
@@ -19,30 +22,53 @@ func TestRealCLIBuildUsesHostHome(t *testing.T) {
 	}
 	mode := os.Getenv(buildHomeHelperEnv)
 	if mode == "direct" {
-		t.Setenv("HOME", t.TempDir())
+		testutil.SetHome(t, t.TempDir())
 		realCLI(t)
 		return
 	}
 	if mode == "session" {
 		hostHome := os.Getenv("HOME")
 		session := realSession(t, newDeploymentFixture(t))
+		fixtureHome, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fixtureHome == hostHome {
+			t.Fatal("session did not isolate the runtime home")
+		}
+		required := map[string]bool{"HOME": false}
+		if runtime.GOOS == "windows" {
+			required["USERPROFILE"] = false
+		}
 		for _, entry := range session.runner.Env {
-			if strings.HasPrefix(entry, "HOME=") {
-				if strings.TrimPrefix(entry, "HOME=") == hostHome {
-					t.Fatal("runtime child inherited the build home instead of the fixture home")
+			key, value, _ := strings.Cut(entry, "=")
+			if runtime.GOOS == "windows" {
+				key = strings.ToUpper(key)
+			}
+			if _, needed := required[key]; needed {
+				if value != fixtureHome {
+					t.Fatalf("runtime child %s = %q, want fixture home %q", key, value, fixtureHome)
 				}
-				return
+				required[key] = true
 			}
 		}
-		t.Fatal("runtime child has no isolated HOME")
+		for key, present := range required {
+			if !present {
+				t.Fatalf("runtime child has no isolated %s", key)
+			}
+		}
+		return
 	}
 
 	binDirectory := t.TempDir()
-	builder := filepath.Join(binDirectory, "go")
-	const script = "#!/bin/sh\nprintf '%s' \"$HOME\" > \"$CLIMCP_BUILD_HOME_RECORD\"\n"
-	// #nosec G306 -- the private fake builder must be executable by this test.
-	if err := os.WriteFile(builder, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
+	builder := filepath.Join(binDirectory, testutil.ExecutableName("go"))
+	// Compile with the real tool and preserved host environment before PATH
+	// points at the fake builder. Never place a Go cache in a runtime home.
+	// #nosec G204 -- fixed Go helper source and a test-owned executable path.
+	build := exec.Command("go", "build", "-o", builder, "./testdata/fakego")
+	build.Env = cliBuildEnvironment
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build fake Go helper: %v\n%s", err, output)
 	}
 	hostHome := t.TempDir()
 	executable, err := os.Executable()
@@ -54,7 +80,7 @@ func TestRealCLIBuildUsesHostHome(t *testing.T) {
 			record := filepath.Join(t.TempDir(), "build-home")
 			// #nosec G204 -- execute this test binary with a fixed test selector.
 			command := exec.Command(executable, "-test.run=^TestRealCLIBuildUsesHostHome$")
-			command.Env = append(acceptanceEnvironment(t, hostHome),
+			command.Env = append(testutil.HomeEnvironment(os.Environ(), hostHome, ChildSnapshotEnv, "PATH", "GOPATH", "GOMODCACHE", buildHomeHelperEnv, "CLIMCP_BUILD_HOME_RECORD"),
 				buildHomeHelperEnv+"="+buildMode,
 				"CLIMCP_BUILD_HOME_RECORD="+record,
 				"PATH="+binDirectory+string(os.PathListSeparator)+os.Getenv("PATH"),

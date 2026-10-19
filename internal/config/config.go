@@ -28,6 +28,16 @@ func ValidateContextName(name string) error {
 	return nil
 }
 
+// ValidateRegistryContextName validates context syntax and platform-specific
+// filename rules before constructing a registry path. Selection alone continues
+// to use ValidateContextName.
+func ValidateRegistryContextName(name string) error {
+	if err := ValidateContextName(name); err != nil {
+		return err
+	}
+	return validatePlatformRegistryContextName(name)
+}
+
 // AuthConfig defines the authentication parameters for communicating with an ERP or bridge server.
 type AuthConfig struct {
 	Type     string `yaml:"type"` // api-key | basic | bearer
@@ -64,6 +74,9 @@ func Load() (*Config, error) {
 	if cfg.Contexts == nil {
 		cfg.Contexts = make(map[string]Context)
 	}
+	if err := validatePlatformContexts(cfg.Contexts); err != nil {
+		return nil, err
+	}
 	applyEnvOverrides(cfg)
 	if _, err := cfg.EffectiveContext(); err != nil {
 		return nil, err
@@ -76,6 +89,9 @@ func loadFile() (*Config, error) {
 	// #nosec G304 -- config path is resolved within user's home directory
 	data, err := os.ReadFile(path)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateRawContextNames(data); err != nil {
 		return nil, err
 	}
 	// Expand ${VAR} references inside the YAML before parsing

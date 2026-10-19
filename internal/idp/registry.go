@@ -51,7 +51,7 @@ func GlobalRegistryPath() string {
 
 // ContextRegistryPath returns the isolated registry path for a validated context.
 func ContextRegistryPath(contextName string) (string, error) {
-	if err := config.ValidateContextName(contextName); err != nil {
+	if err := config.ValidateRegistryContextName(contextName); err != nil {
 		return "", err
 	}
 	home, _ := os.UserHomeDir()

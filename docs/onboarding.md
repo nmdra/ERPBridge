@@ -4,6 +4,20 @@
 
 ---
 
+## Windows CLI users
+
+For an already configured remote deployment, follow [bridgectl on Windows](./windows.md)
+instead of the local Make/Compose bootstrap below. Windows CLI use does not
+require a local server, Docker, Go, or Make.
+
+On Windows, configured context keys such as `prod` and `Prod` cannot coexist:
+case-only ambiguity is refused before registry access or MCP child execution.
+Registry paths also reject reserved device stems such as `CON` and `NUL.test`.
+If refused, stop processes, privately back up the config and registries, and
+manually choose distinct safe names with matching registry filenames. Do not
+merge or delete state. See the [recovery steps](./windows.md#windows-context-safety-and-recovery).
+Linux context naming and registry behavior remain unchanged.
+
 ## Before You Start
 
 Make sure that you have the following installed:

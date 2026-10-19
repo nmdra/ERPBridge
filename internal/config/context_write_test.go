@@ -4,15 +4,18 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 // withConfigHome points configuration resolution at a temporary home.
 func withConfigHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	for _, key := range []string{
 		"BRIDGE_CONTEXT", "BRIDGE_SERVER", "BRIDGE_MCP_SERVER", "BRIDGE_API_TOKEN",
 		"BRIDGE_ERP_BASE", "BRIDGE_AUTH_TYPE", "BRIDGE_API_KEY", "BRIDGE_AUTH_HEADER",
@@ -83,7 +86,7 @@ func TestSetCurrentContextChangesOnlyTheDefaultAndKeepsPlaceholders(t *testing.T
 	if err != nil {
 		t.Fatalf("stat config: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm != 0o600 {
 		t.Fatalf("config mode = %o, want 600", perm)
 	}
 }

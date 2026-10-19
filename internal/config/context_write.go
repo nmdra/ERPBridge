@@ -48,6 +48,9 @@ func SetCurrentContext(name string) error {
 	if err != nil {
 		return fmt.Errorf("read configuration: %w", err)
 	}
+	if err := validateRawContextNames(original); err != nil {
+		return err
+	}
 	fingerprint := fingerprintBytes(original)
 
 	// Parse without environment expansion so placeholders stay placeholders.

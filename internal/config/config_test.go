@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 func TestLoad_Defaults(t *testing.T) {
@@ -15,13 +17,11 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	oldHome := os.Getenv("HOME")
-	_ = os.Setenv("HOME", tmpDir)
-	defer func() { _ = os.Setenv("HOME", oldHome) }()
+	testutil.SetHome(t, tmpDir)
 
 	// Ensure no env vars interfere
-	_ = os.Unsetenv("BRIDGE_CONTEXT")
-	_ = os.Unsetenv("BRIDGE_SERVER")
+	t.Setenv("BRIDGE_CONTEXT", "")
+	t.Setenv("BRIDGE_SERVER", "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -39,7 +39,7 @@ func TestLoad_Defaults(t *testing.T) {
 }
 
 func TestLoad_ReturnsParseErrors(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	configDir := filepath.Join(os.Getenv("HOME"), ".bridgectl")
 	// #nosec G703 -- HOME points to t.TempDir in this test.
 	if err := os.MkdirAll(configDir, 0700); err != nil {
@@ -60,7 +60,7 @@ func TestLoad_ReturnsParseErrors(t *testing.T) {
 }
 
 func TestLoad_RejectsDeadCurrentContext(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	configDir := filepath.Join(os.Getenv("HOME"), ".bridgectl")
 	// #nosec G703 -- HOME points to t.TempDir in this test.
 	if err := os.MkdirAll(configDir, 0700); err != nil {
@@ -91,7 +91,7 @@ func TestConfigEffectiveContextRejectsNilConfigAndMissingContext(t *testing.T) {
 }
 
 func TestLoad_RejectsDeadEnvironmentContext(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	t.Setenv("BRIDGE_CONTEXT", "missing")
 	_, err := Load()
 	if !errors.Is(err, ErrContextNotFound) {
@@ -107,14 +107,10 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	oldHome := os.Getenv("HOME")
-	_ = os.Setenv("HOME", tmpDir)
-	defer func() { _ = os.Setenv("HOME", oldHome) }()
+	testutil.SetHome(t, tmpDir)
 
-	_ = os.Setenv("BRIDGE_SERVER", "http://overridden:8082")
-	defer func() { _ = os.Unsetenv("BRIDGE_SERVER") }()
-	_ = os.Setenv("BRIDGE_API_TOKEN", "env-token")
-	defer func() { _ = os.Unsetenv("BRIDGE_API_TOKEN") }()
+	t.Setenv("BRIDGE_SERVER", "http://overridden:8082")
+	t.Setenv("BRIDGE_API_TOKEN", "env-token")
 
 	cfg, err := Load()
 	if err != nil {

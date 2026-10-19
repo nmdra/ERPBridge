@@ -5,6 +5,9 @@ starting implementation work.
 
 ## Active
 
+- [`Plan-Bridgectl-Windows-Support.md`](./active/Plan-Bridgectl-Windows-Support.md) — approved native CLI and PowerShell support with unchanged Linux behavior; Windows verification remains required.
+
+
 - [`Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md`](./active/Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md) — portable completion checkpoint for redacted operational knowledge records.
 - [`Plan-Live-E2E-Issue-Fixes.md`](./active/Plan-Live-E2E-Issue-Fixes.md) — remediation of the live E2E product gaps and fixture classifications.
 - [`Plan-API-Key-Header-Propagation.md`](./active/Plan-API-Key-Header-Propagation.md) — preserve registered upstream API-key headers during MCP tool execution.

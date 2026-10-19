@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nmdra/ERPBridge/internal/climcp"
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 func TestReleaseVersionMatchesMCPIdentity(t *testing.T) {
@@ -17,7 +20,7 @@ func TestReleaseVersionMatchesMCPIdentity(t *testing.T) {
 		t.Skip("skipping release binary build in short mode")
 	}
 	const expectedVersion = "0.6.0-alpha.1"
-	binary := filepath.Join(t.TempDir(), "bridgectl")
+	binary := filepath.Join(t.TempDir(), testutil.ExecutableName("bridgectl"))
 	buildContext, stopBuild := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer stopBuild()
 	// #nosec G204 -- fixed Go build arguments and a test-owned output path.
@@ -28,13 +31,8 @@ func TestReleaseVersionMatchesMCPIdentity(t *testing.T) {
 
 	// Isolate runtime configuration without moving the builder's module cache
 	// into a fixture HOME or inheriting the developer's bridge credentials.
-	environment := []string{"HOME=" + t.TempDir()}
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		if key != "HOME" && !strings.HasPrefix(key, "BRIDGE_") && key != "BRIDGECTL_MCP_CHILD_SNAPSHOT" {
-			environment = append(environment, entry)
-		}
-	}
+	environment := testutil.HomeEnvironment(os.Environ(), t.TempDir(), climcp.ChildSnapshotEnv)
+
 	// #nosec G204 -- run only the release CLI compiled by this test.
 	versionCommand := exec.CommandContext(t.Context(), binary, "--version")
 	versionCommand.Env = environment

@@ -72,6 +72,21 @@ The console stops when the command receives an interrupt or termination signal.
 The first release does not listen on a remote address. It does not discover
 Kubernetes, Docker, or cloud deployments.
 
+## Windows use and validation
+
+Install the Windows CLI using the [PowerShell guide](./windows.md), then run
+`& "C:\path with spaces\bridgectl.exe" web --no-open` with your actual path.
+No local ERPBridge server, Bash, or Make is needed to monitor a configured remote
+deployment. Open the capability URL privately, keep the process running, and
+use Ctrl+C to stop it. Do not record the URL in shared logs.
+
+Native x64 CI passed the no-open Console and embedded-asset smoke checks; see
+[validation evidence](./windows.md#validation-status). Default-browser launch
+and interactive Ctrl+C shutdown without leftover child processes remain
+manual Windows gates. ARM64 cross-build coverage does not prove runtime support.
+These limits do not change Linux behavior. Windows file privacy depends on
+inherited directory ACLs, not Unix permission bits.
+
 ## Security boundary
 
 The console server is a local backend-for-frontend. Browser code never receives

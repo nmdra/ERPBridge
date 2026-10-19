@@ -41,6 +41,10 @@ graph TD
 
 ## 🛠️ Getting Started
 
+For a Windows CLI that manages an existing remote deployment, start with the
+[PowerShell installation guide](./docs/windows.md). It does not require the
+local development prerequisites below.
+
 ### Prerequisites
 
 - **Go**: 1.26.2+

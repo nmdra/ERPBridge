@@ -14,6 +14,8 @@ import (
 
 	"github.com/nmdra/ERPBridge/internal/climcp"
 	"github.com/nmdra/ERPBridge/internal/config"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 // helperArgsEnv transports the CLI argument vector into the helper process.
@@ -49,21 +51,8 @@ func runCLIProcess(t *testing.T, args ...string) cliProcessResult {
 // home directory, so a test can seed a saved context before the run.
 func runCLIProcessIn(t *testing.T, home string, args ...string) cliProcessResult {
 	t.Helper()
-	blocked := map[string]bool{
-		"HOME": true, helperArgsEnv: true, climcp.ChildSnapshotEnv: true,
-		"BRIDGE_CONTEXT": true, "BRIDGE_SERVER": true, "BRIDGE_MCP_SERVER": true,
-		"BRIDGE_API_TOKEN": true, "BRIDGE_ERP_BASE": true, "BRIDGE_AUTH_TYPE": true,
-		"BRIDGE_API_KEY": true, "BRIDGE_AUTH_HEADER": true, "BRIDGE_TOKEN": true,
-		"BRIDGE_USERNAME": true, "BRIDGE_PASSWORD": true, "LOG_TO_STDERR": true,
-	}
-	env := make([]string, 0, len(os.Environ())+2)
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		if !blocked[key] {
-			env = append(env, entry)
-		}
-	}
-	env = append(env, "HOME="+home, helperArgsEnv+"="+strings.Join(args, "\x1f"))
+	env := testutil.HomeEnvironment(os.Environ(), home, helperArgsEnv, climcp.ChildSnapshotEnv)
+	env = append(env, helperArgsEnv+"="+strings.Join(args, "\x1f"))
 
 	// #nosec G204 G702 -- the test binary re-executes itself with a fixed
 	// argument vector; the CLI arguments travel through the environment.
@@ -130,7 +119,7 @@ const (
 // context file or credentials.
 func isolateConfigHome(t *testing.T) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	for _, key := range []string{
 		"BRIDGE_CONTEXT", "BRIDGE_SERVER", "BRIDGE_MCP_SERVER", "BRIDGE_API_TOKEN",
 		"BRIDGE_ERP_BASE", "BRIDGE_AUTH_TYPE", "BRIDGE_API_KEY", "BRIDGE_AUTH_HEADER",

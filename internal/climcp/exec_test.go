@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -96,10 +97,22 @@ func TestRunnerCapturesOutputAndReportsExitCode(t *testing.T) {
 func TestRunnerRejectsSecondChildWhileBusy(t *testing.T) {
 	runner := helperRunner(5*time.Second, MaxChildOutputBytes, helperModeEnv+"=block")
 
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	// Reap the busy child before the test executable can be removed on Windows.
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(6 * time.Second):
+			t.Error("busy runner child did not stop during cleanup")
+		}
+	})
 	started := make(chan struct{})
 	go func() {
+		defer close(done)
 		close(started)
-		_, _ = runner.Run(context.Background(), CommandSpec{Argv: []string{"cache", "stats"}})
+		_, _ = runner.Run(ctx, CommandSpec{Argv: []string{"cache", "stats"}})
 	}()
 	<-started
 	time.Sleep(150 * time.Millisecond)
@@ -188,14 +201,14 @@ func TestStagerWritesPrivateFileAndCleansUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat staged file: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm != 0o600 {
 		t.Fatalf("staged file mode = %o, want 600", perm)
 	}
 	dirInfo, err := os.Stat(stager.Dir())
 	if err != nil {
 		t.Fatalf("stat staging dir: %v", err)
 	}
-	if perm := dirInfo.Mode().Perm(); perm != 0o700 {
+	if perm := dirInfo.Mode().Perm(); runtime.GOOS != "windows" && perm != 0o700 {
 		t.Fatalf("staging dir mode = %o, want 700", perm)
 	}
 
