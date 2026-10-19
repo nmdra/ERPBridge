@@ -13,6 +13,8 @@ import (
 	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/output"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 // emptyAnswerServer answers any request with the JSON null that an empty stored
@@ -134,7 +136,7 @@ func TestEmptyCollectionSerializesAsEmptyArray(t *testing.T) {
 				useTestLogger(t)
 				// api list reads the local registry, not the HTTP fixture, so it
 				// needs its own empty home.
-				t.Setenv("HOME", t.TempDir())
+				testutil.SetHome(t, t.TempDir())
 				cfg = &config.Config{
 					CurrentContext: testContextName,
 					Contexts:       map[string]config.Context{testContextName: {}},

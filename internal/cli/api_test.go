@@ -17,6 +17,8 @@ import (
 	"github.com/nmdra/ERPBridge/internal/output"
 	"github.com/nmdra/ERPBridge/internal/security"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 const (
@@ -99,7 +101,7 @@ func TestAPITestResponse_RenderTable(t *testing.T) {
 
 func TestApiListCmd(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	var buf bytes.Buffer
 	formatter.Out = &buf
 
@@ -111,7 +113,7 @@ func TestApiListCmd(t *testing.T) {
 
 func TestApiTestCmd(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	require.NoError(t, apiTestCmd.Flags().Set("local", "true"))
 	t.Cleanup(func() { _ = apiTestCmd.Flags().Set("local", "false") })
 
@@ -141,7 +143,7 @@ func TestApiTestCmd(t *testing.T) {
 
 func TestAPITestResolvesCredentialReference(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	require.NoError(t, apiTestCmd.Flags().Set("local", "true"))
 	t.Cleanup(func() { _ = apiTestCmd.Flags().Set("local", "false") })
 	// #nosec G101 -- test-only sentinel for the resolved environment credential.
@@ -174,7 +176,7 @@ func TestAPITestResolvesCredentialReference(t *testing.T) {
 func TestAPITestBlocksLegacyRegistry(t *testing.T) {
 	setupTest()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	registryDir := home + string(os.PathSeparator) + ".bridgectl"
 	require.NoError(t, os.MkdirAll(registryDir, 0700))
 	// #nosec G101 -- test-only sentinel proving legacy values are not exposed.
@@ -189,7 +191,7 @@ func TestAPITestBlocksLegacyRegistry(t *testing.T) {
 
 func TestApiRegisterCmd(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	var buf bytes.Buffer
 	formatter.Out = &buf
 	require.Nil(t, apiRegisterCmd.Flags().Lookup("auth-key"))
@@ -214,7 +216,7 @@ func TestApiRegisterCmd(t *testing.T) {
 
 func TestAPITestServerSideSendsOnlyReference(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	const serverProbeValue = "server-probe-value" // #nosec G101 -- test-only credential sentinel.
 	t.Setenv("ERP_SERVER_SIDE_KEY", serverProbeValue)
 
@@ -246,7 +248,7 @@ func TestAPITestServerSideSendsOnlyReference(t *testing.T) {
 
 func TestAPITestServerSideOutputOmitsEndpointMetadata(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	controlPlane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":200,"contentType":"application/json","latency":1,"success":true}`))
@@ -285,7 +287,7 @@ func TestAPITestServerSideOutputOmitsEndpointMetadata(t *testing.T) {
 
 func TestAPITestLocalFailureOmitsEndpoint(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	require.NoError(t, apiTestCmd.Flags().Set("local", "true"))
 	t.Cleanup(func() { _ = apiTestCmd.Flags().Set("local", "false") })
 	const endpoint = "http://127.0.0.1:1/onboarding-check"
@@ -306,7 +308,7 @@ func TestAPITestLocalFailureOmitsEndpoint(t *testing.T) {
 
 func TestAPITestRequiresCredentialReference(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	require.NoError(t, apiTestCmd.Flags().Set("local", "true"))
 	t.Cleanup(func() { _ = apiTestCmd.Flags().Set("local", "false") })
 	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
@@ -319,7 +321,7 @@ func TestAPITestRequiresCredentialReference(t *testing.T) {
 
 func TestAPIRegisterDuplicateRequiresForce(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	for name, value := range map[string]string{
 		"name": "duplicate", "url": "http://first", "module": "hr", "description": "test desc", "credential-ref": "",
 	} {
@@ -342,7 +344,7 @@ func TestAPIRegisterDuplicateRequiresForce(t *testing.T) {
 
 func TestAPIRegisterUsesCredentialReference(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	require.NoError(t, apiRegisterCmd.Flags().Set("name", "refapi"))
 	require.NoError(t, apiRegisterCmd.Flags().Set("url", "https://example.invalid"))
 	require.NoError(t, apiRegisterCmd.Flags().Set("module", "hr"))
@@ -380,7 +382,7 @@ func TestResolveAPICredentialUsesFileSource(t *testing.T) {
 
 func TestAPISetCredentialRefCmd(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
 	require.NoError(t, reg.Register(&idp.API{Name: "setref", AuthType: testBearerAuthType}))
@@ -395,7 +397,7 @@ func TestAPISetCredentialRefCmd(t *testing.T) {
 
 func TestAPIScrubCredentialsRequiresConfirmation(t *testing.T) {
 	setupTest()
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	require.NoError(t, apiScrubCredentialsCmd.Flags().Set("yes", "false"))
 	err := apiScrubCredentialsCmd.RunE(apiScrubCredentialsCmd, nil)
 	require.Error(t, err)
@@ -405,7 +407,7 @@ func TestAPIScrubCredentialsRequiresConfirmation(t *testing.T) {
 func TestAPIScrubCredentialsDoesNotPrintLegacySecret(t *testing.T) {
 	setupTest()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	registryDir := home + string(os.PathSeparator) + ".bridgectl"
 	require.NoError(t, os.MkdirAll(registryDir, 0700))
 	// #nosec G101 -- test-only sentinel proving scrub output is not secret-bearing.

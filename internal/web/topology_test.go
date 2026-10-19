@@ -12,6 +12,8 @@ import (
 	"github.com/nmdra/ERPBridge/internal/config"
 	"github.com/nmdra/ERPBridge/internal/idp"
 	"github.com/nmdra/ERPBridge/internal/mcp"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 func TestRootAPIInfersBasePrefixAcrossHTTPMethods(t *testing.T) {
@@ -134,7 +136,7 @@ func TestTopologyReportsTruncation(t *testing.T) {
 }
 
 func TestTopologyLoadsSelectedContextRegistryWithoutInjectedRegistry(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	registry, err := idp.NewRegistryForContext("selected", slog.Default())
 	if err != nil {
 		t.Fatal(err)

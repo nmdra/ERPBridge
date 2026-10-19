@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/url"
@@ -16,6 +17,8 @@ import (
 	bridgectlops "github.com/nmdra/ERPBridge/skills/bridgectl-ops"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 func TestSkillEmbeddedFiles(t *testing.T) {
@@ -88,6 +91,7 @@ func TestSkillInstalledLinksStayWithinBundle(t *testing.T) {
 }
 
 func TestResolveSkillDestination(t *testing.T) {
+	home, project, custom := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "custom-skill")
 	tests := []struct {
 		name       string
 		project    bool
@@ -97,29 +101,29 @@ func TestResolveSkillDestination(t *testing.T) {
 	}{
 		{
 			name:     "global default",
-			expected: filepath.Join("/home/tester", ".agents", "skills", bridgectlOpsSkillName),
+			expected: filepath.Join(home, ".agents", "skills", bridgectlOpsSkillName),
 		},
 		{
 			name:     "project default",
 			project:  true,
-			expected: filepath.Join("/work/project", ".agents", "skills", bridgectlOpsSkillName),
+			expected: filepath.Join(project, ".agents", "skills", bridgectlOpsSkillName),
 		},
 		{
 			name:     "explicit directory",
-			explicit: "/tmp/custom-skill",
-			expected: "/tmp/custom-skill",
+			explicit: custom,
+			expected: custom,
 		},
 		{
 			name:       "conflicting selectors",
 			project:    true,
-			explicit:   "/tmp/custom-skill",
+			explicit:   custom,
 			wantErrMsg: "--dir cannot be used with --project",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := resolveSkillDestination(test.project, test.explicit, "/home/tester", "/work/project")
+			got, err := resolveSkillDestination(test.project, test.explicit, home, project)
 			if test.wantErrMsg != "" {
 				require.EqualError(t, err, test.wantErrMsg)
 				return
@@ -151,7 +155,7 @@ func TestInstallEmbeddedSkillRequiresForceAndReplacesTree(t *testing.T) {
 	sentinel := filepath.Join(destination, "local-change.txt")
 	require.NoError(t, os.WriteFile(sentinel, []byte("local"), 0600))
 	err := installEmbeddedSkill(destination, bridgectlops.Files, false)
-	require.EqualError(t, err, "skill destination "+`"`+destination+`"`+" already exists; use --force to replace it")
+	require.EqualError(t, err, fmt.Sprintf("skill destination %q already exists; use --force to replace it", destination))
 	require.FileExists(t, sentinel)
 
 	require.NoError(t, installEmbeddedSkill(destination, bridgectlops.Files, true))
@@ -171,10 +175,11 @@ func TestInstallEmbeddedSkillRejectsDestinationSymlink(t *testing.T) {
 	require.NoError(t, os.Symlink(target, link))
 
 	err := installEmbeddedSkill(link, bridgectlops.Files, true)
-	require.EqualError(t, err, "refusing to install through symlink "+`"`+link+`"`)
+	require.EqualError(t, err, fmt.Sprintf("refusing to install through symlink %q", link))
 }
 
 func TestSkillInstallCommandUsesExplicitDirectory(t *testing.T) {
+	testutil.SetHome(t, t.TempDir())
 	t.Cleanup(resetSkillInstallCommand)
 	resetSkillInstallCommand()
 
@@ -188,6 +193,7 @@ func TestSkillInstallCommandUsesExplicitDirectory(t *testing.T) {
 }
 
 func TestSkillInstallCommandRejectsConflictingSelectors(t *testing.T) {
+	testutil.SetHome(t, t.TempDir())
 	t.Cleanup(resetSkillInstallCommand)
 	resetSkillInstallCommand()
 	require.NoError(t, skillInstallCmd.Flags().Set("project", "true"))

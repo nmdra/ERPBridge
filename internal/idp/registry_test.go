@@ -12,11 +12,13 @@ import (
 	"github.com/nmdra/ERPBridge/internal/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 func TestContextRegistryPathValidatesAndScopesByContext(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	path, err := ContextRegistryPath("staging")
 	require.NoError(t, err)
@@ -29,7 +31,7 @@ func TestContextRegistryPathValidatesAndScopesByContext(t *testing.T) {
 
 func TestContextRegistryDoesNotIgnoreGlobalRegistry(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	global := filepath.Join(home, ".bridgectl", "registry.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(global), 0700))
 	require.NoError(t, os.WriteFile(global, []byte(`{"apis":{"legacy":{"name":"legacy"}}}`), 0600))
@@ -39,7 +41,7 @@ func TestContextRegistryDoesNotIgnoreGlobalRegistry(t *testing.T) {
 }
 
 func TestContextRegistriesIsolateSameAPIName(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutil.SetHome(t, t.TempDir())
 	first, err := NewRegistryForContext("first", logger.Init())
 	require.NoError(t, err)
 	second, err := NewRegistryForContext("second", logger.Init())
@@ -107,6 +109,7 @@ func TestNewRegistry(t *testing.T) {
 	log := logger.Init()
 
 	t.Run("empty path uses home dir", func(t *testing.T) {
+		testutil.SetHome(t, t.TempDir())
 		reg, err := NewRegistry("", log)
 		require.NoError(t, err)
 		assert.NotNil(t, reg)
@@ -194,14 +197,17 @@ func TestRegistry_Save(t *testing.T) {
 		assert.Contains(t, string(data), "api1")
 	})
 
-	t.Run("unwritable dir", func(t *testing.T) {
-		unwritableDir := filepath.Join(tmpDir, "readonly")
-		err := os.Mkdir(unwritableDir, 0400)
+	t.Run("rename failure preserves original", func(t *testing.T) {
+		original := mustReadRegistry(t, tmpPath)
+		injected := errors.New("injected registry rename failure")
+		reg.rename = func(_, _ string) error { return injected }
+		t.Cleanup(func() { reg.rename = nil })
+		err := reg.save()
+		assert.ErrorIs(t, err, injected)
+		assert.Equal(t, original, mustReadRegistry(t, tmpPath))
+		temporary, err := filepath.Glob(filepath.Join(tmpDir, ".registry-*.tmp"))
 		require.NoError(t, err)
-
-		reg.path = filepath.Join(unwritableDir, "subdir", "test.json")
-		err = reg.save()
-		assert.Error(t, err)
+		assert.Empty(t, temporary)
 	})
 }
 
@@ -286,7 +292,7 @@ func TestRegistry_LegacyCredentialsAreDetectedAndBlocked(t *testing.T) {
 
 func TestRegistry_MigrateGlobalRegistry(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	global := filepath.Join(home, ".bridgectl", "registry.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(global), 0700))
 	require.NoError(t, os.WriteFile(global, []byte(`{"apis":{"legacy":{"name":"legacy","url":"https://erp"}}}`), 0600))
@@ -304,7 +310,7 @@ func TestRegistry_MigrateGlobalRegistry(t *testing.T) {
 
 func TestRegistry_MigrateRefusesLegacyAndCollisions(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	global := filepath.Join(home, ".bridgectl", "registry.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(global), 0700))
 	require.NoError(t, os.WriteFile(global, []byte(`{"apis":{"same":{"name":"same","authToken":"SECRET"}}}`), 0600))
@@ -323,7 +329,7 @@ func TestRegistry_MigrateRefusesLegacyAndCollisions(t *testing.T) {
 
 func TestRegistry_ScrubAllRegistries(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	dir := filepath.Join(home, ".bridgectl", "registries")
 	require.NoError(t, os.MkdirAll(dir, 0700))
 	secret := "SECRET_SCRUB_ALL"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -425,7 +426,7 @@ func TestSchemaDeclarationsSurviveCredentialScan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("staged manifest is missing: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm != 0o600 {
 		t.Fatalf("staged manifest mode = %o, want 600", perm)
 	}
 

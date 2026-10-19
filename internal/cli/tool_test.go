@@ -20,6 +20,8 @@ import (
 	"github.com/nmdra/ERPBridge/internal/output"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 func TestToolListResponse_RenderTable(t *testing.T) {
@@ -418,7 +420,7 @@ spec:
 func TestToolGenerateCmdUsesSelectedContextRegistry(t *testing.T) {
 	setupTest()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)
@@ -482,7 +484,7 @@ paths:
 func TestToolGenerateCmdWritesOneFilePerTool(t *testing.T) {
 	setupTest()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 
 	reg, err := idp.NewRegistryForContext(testContextName, RootLog)
 	require.NoError(t, err)

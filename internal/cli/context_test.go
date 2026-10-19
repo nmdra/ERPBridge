@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nmdra/ERPBridge/internal/testutil"
 )
 
 func TestContextListResponse_RenderTable(t *testing.T) {
@@ -51,7 +53,7 @@ func TestContextListCmd(t *testing.T) {
 
 func TestContextSetCmd(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testutil.SetHome(t, home)
 	setupTest()
 
 	directory := filepath.Join(home, ".bridgectl")

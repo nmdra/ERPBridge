@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -188,14 +189,14 @@ func TestStagerWritesPrivateFileAndCleansUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat staged file: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm != 0o600 {
 		t.Fatalf("staged file mode = %o, want 600", perm)
 	}
 	dirInfo, err := os.Stat(stager.Dir())
 	if err != nil {
 		t.Fatalf("stat staging dir: %v", err)
 	}
-	if perm := dirInfo.Mode().Perm(); perm != 0o700 {
+	if perm := dirInfo.Mode().Perm(); runtime.GOOS != "windows" && perm != 0o700 {
 		t.Fatalf("staging dir mode = %o, want 700", perm)
 	}
 
