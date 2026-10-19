@@ -80,8 +80,9 @@ No local ERPBridge server, Bash, or Make is needed to monitor a configured remot
 deployment. Open the capability URL privately, keep the process running, and
 use Ctrl+C to stop it. Do not record the URL in shared logs.
 
-Native x64 CI execution is pending until the new pipeline runs. Default-browser
-launch and interactive Ctrl+C shutdown without leftover child processes remain
+Native x64 CI passed the no-open Console and embedded-asset smoke checks; see
+[validation evidence](./windows.md#validation-status). Default-browser launch
+and interactive Ctrl+C shutdown without leftover child processes remain
 manual Windows gates. ARM64 cross-build coverage does not prove runtime support.
 These limits do not change Linux behavior. Windows file privacy depends on
 inherited directory ACLs, not Unix permission bits.

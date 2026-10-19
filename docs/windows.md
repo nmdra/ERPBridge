@@ -8,9 +8,10 @@ installation stay unchanged.
 
 ## Validation status
 
-Windows ZIP artifacts already exist for x64 and ARM64. The new native x64 CI
-workflow and PowerShell smoke checks must pass on an actual Windows runner;
-that pipeline result is still pending. ARM64 has cross-build coverage only,
+Windows ZIP artifacts already exist for x64 and ARM64. Native x64 tests and
+PowerShell smoke checks passed in [GitHub Actions](https://github.com/nmdra/ERPBridge/actions/runs/39213646691)
+on Windows NT 10.0.26100.0 with PowerShell 7.6.6. This validates the implementation
+branch, not older release binaries. ARM64 has cross-build coverage only,
 not verified runtime support. Cross-compilation does not prove runtime behavior.
 Default-browser launch and interactive Ctrl+C shutdown remain manual Windows
 gates. The installation examples target Windows PowerShell 5.1 and PowerShell

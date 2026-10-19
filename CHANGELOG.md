@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Document non-admin Windows ZIP installation and SHA256 verification, PowerShell
   5.1/7 UTF-8 configuration, manifest files, skills, Console, and direct management
-  MCP client setup. Native x64 CI execution and interactive browser/Ctrl+C gates
-  remain pending; ARM64 runtime validation remains unverified.
+  MCP client setup. Add passing native x64 CI and isolated PowerShell smoke
+  checks. Interactive browser/Ctrl+C gates and ARM64 runtime validation remain
+  unverified.
 
 ### Changed
 
