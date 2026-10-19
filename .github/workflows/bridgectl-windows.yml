@@ -1,0 +1,120 @@
+name: bridgectl Windows compatibility
+
+on:
+  pull_request:
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - skills/**
+      - web/**
+      - internal/web/**
+      - scripts/**
+      - .goreleaser.yaml
+      - .github/workflows/bridgectl-windows.yml
+  push:
+    branches: [main, 'feat/bridgectl-windows-support']
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - skills/**
+      - web/**
+      - internal/web/**
+      - scripts/**
+      - .goreleaser.yaml
+      - .github/workflows/bridgectl-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-windows:
+    name: Windows x64 focused tests and local smoke
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.26.2
+          cache: false
+      # Must pass before any package that can resolve a CLI config is tested.
+      - name: Bootstrap home isolation gate
+        run: |
+          go test -count=1 ./internal/testutil -run '^TestHomeIsolation'
+          if ($LASTEXITCODE -ne 0) { throw 'Home isolation bootstrap failed.' }
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: web/.nvmrc
+          package-manager-cache: false
+      - name: Build production frontend assets
+        run: |
+          npm ci --prefix web
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency install failed.' }
+          npm run build --prefix web
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
+      - name: Focused native package suite including MCP acceptance
+        run: |
+          go test -count=1 ./internal/testutil ./internal/config ./internal/idp ./internal/bridgeclient ./internal/cli ./internal/web ./internal/climcp ./tools/bridgectl
+          if ($LASTEXITCODE -ne 0) { throw 'Focused Windows suite failed.' }
+      - name: Build and smoke test native CLI
+        run: |
+          $binary = Join-Path $env:RUNNER_TEMP 'bridgectl-windows-smoke.exe'
+          try {
+            go build -o $binary ./tools/bridgectl
+            if ($LASTEXITCODE -ne 0) { throw 'Native CLI build failed.' }
+            & ./scripts/test-bridgectl-windows.ps1 -BinaryPath $binary
+          } finally {
+            if (Test-Path -LiteralPath $binary) { Remove-Item -LiteralPath $binary -Force }
+          }
+      # This is x64 automation, not ARM64 runtime or interactive browser/Ctrl+C evidence.
+
+  linux-compatibility:
+    name: Linux compatibility and Windows cross-builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.26.2
+          cache: false
+      - name: Bootstrap home isolation gate
+        run: go test -count=1 ./internal/testutil -run '^TestHomeIsolation'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: web/.nvmrc
+          package-manager-cache: false
+      - name: Build production frontend assets
+        run: |
+          npm ci --prefix web
+          npm run build --prefix web
+      - name: Focused Linux package suite
+        run: go test -count=1 ./internal/testutil ./internal/config ./internal/idp ./internal/bridgeclient ./internal/cli ./internal/web ./internal/climcp ./tools/bridgectl
+      - name: Existing Linux project tests
+        run: make test
+      - name: Cross-build Windows CLI architectures (not runtime tests)
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir=$(mktemp -d)
+          trap 'rm -rf "$build_dir"' EXIT
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=windows GOARCH="$arch" go build -o "$build_dir/bridgectl-$arch.exe" ./tools/bridgectl
+            test -s "$build_dir/bridgectl-$arch.exe"
+          done
+      - name: Validate unchanged release configuration (no publication)
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: check
