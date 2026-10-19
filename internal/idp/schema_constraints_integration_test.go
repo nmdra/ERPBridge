@@ -81,7 +81,9 @@ paths:
 	require.NoError(t, store.Save(&manifest))
 	stored, err := store.Get(manifest.Metadata.Name, manifest.Metadata.Version)
 	require.NoError(t, err)
-	s := mcp.NewServer(connector.NewClient(logger.Init()), nil, logger.Init(), mcp.RateLimitConfig{RequestsPerSecond: 1000, Burst: 1000}, filepath.Join(dir, "server.db"))
+	// Persistence is verified through tools.db above. The invocation server has
+	// no public store-close API, so avoid a live file handle during TempDir cleanup.
+	s := mcp.NewServer(connector.NewClient(logger.Init()), nil, logger.Init(), mcp.RateLimitConfig{RequestsPerSecond: 1000, Burst: 1000}, ":memory:")
 	s.RegisterTool(stored)
 	listed := s.MCPServer().HandleMessage(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)).(protocol.JSONRPCResponse)
 	wire, err := json.Marshal(listed.Result)

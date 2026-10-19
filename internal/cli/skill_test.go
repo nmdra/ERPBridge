@@ -39,7 +39,8 @@ func TestSkillEmbeddedFiles(t *testing.T) {
 func TestSkillFrontmatterAndSections(t *testing.T) {
 	data, err := bridgectlops.Files.ReadFile("SKILL.md")
 	require.NoError(t, err)
-	parts := strings.SplitN(string(data), "---\n", 3)
+	// Git may check out the embedded Markdown with CRLF on Windows.
+	parts := strings.SplitN(strings.ReplaceAll(string(data), "\r\n", "\n"), "---\n", 3)
 	require.Len(t, parts, 3, "skill must have YAML frontmatter")
 	var frontmatter struct {
 		Name          string            `yaml:"name"`
