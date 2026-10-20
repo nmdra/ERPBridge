@@ -1,0 +1,13 @@
+{
+  "nonFinal": true,
+  "operations": [
+    "list_companies",
+    "list_items",
+    "get_item",
+    "create_item",
+    "delete_item"
+  ],
+  "phase": "smoke",
+  "repetitions": 1,
+  "scenarioId": "AC-01-happy-path"
+}

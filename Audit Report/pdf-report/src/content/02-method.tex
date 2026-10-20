@@ -1,0 +1,25 @@
+\PageTitle{02 / Method}{Read workload and measurement boundary}
+The demo report records a read-only run started at \texttt{2026-10-18T17:47:18.724Z} through the configured \texttt{mcp\_\_erpnext\_bridge} connection. Figure~\ref{fig:workload} shows the measurement boundary at a conceptual level; it is not a trace of internal processing.
+
+\begin{figure}[h]\centering\input{figures/workload}\caption{Client-observed timing includes the call path. Internal stage timings were not collected.}\label{fig:workload}\end{figure}
+\Source{S1 and S2; conceptual diagram derived from the recorded connection description}
+
+\begin{table}[h]\caption{Demo workload conditions}\EvidenceTableStart
+\begin{tabularx}{\linewidth}{@{}P{41mm}X@{}}\toprule
+Condition & Recorded setting\\\midrule
+Calls and batching & 100 calls; 10 batches of 10 concurrent calls\\
+Pacing & Batch starts at least one second apart, as stated in the source report\\
+Operation mix & Five read tools, 20 calls each\\
+Projection and page cap & Only \texttt{name}; maximum 100 rows per call\\
+Writes / retries & None, as stated in the source report\\
+Logging & Status, duration, batch, row count, and error; no response-body logging\\
+Stop rule & Stop after five failed calls; actual recorded stop is null\\
+Deployment identity & Target version and server resource metrics unavailable\\\bottomrule
+\end{tabularx}\end{table}
+
+\subsection*{Definitions used in the charts}
+Latency is the recorded client duration in milliseconds. Percentiles use nearest rank: for sorted observations $x_{(1)},\ldots,x_{(n)}$, $P_p=x_{(\lceil pn\rceil)}$. Thus the median for 100 calls is the 50th ordered duration, not the average of the 50th and 51st.
+
+Completion rate equals $100/(11946/1000)=8.3710$ calls/s. Its denominator includes pacing and connection setup. It is not the configured offered rate or a measured maximum capacity.
+
+\Limit{The JSON has batch indices but no per-call or batch-start timestamps. Counts and percentiles can be recomputed. Concurrent overlap and the reported pacing cannot be reconstructed independently from these fields.}

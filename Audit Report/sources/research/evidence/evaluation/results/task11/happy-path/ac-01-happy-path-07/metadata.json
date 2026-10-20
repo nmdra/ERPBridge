@@ -1,0 +1,135 @@
+{
+  "artifacts": {
+    "baselineAssertion": "runs/ac-01-happy-path-07/baseline.json",
+    "cleanupResult": "runs/ac-01-happy-path-07/cleanup.json",
+    "controlPlaneTrace": "runs/ac-01-happy-path-07/control-plane.json",
+    "discoveryTrace": "runs/ac-01-happy-path-07/discovery.json",
+    "erpDispatchTrace": "runs/ac-01-happy-path-07/dispatch.json",
+    "invocationTrace": "runs/ac-01-happy-path-07/invocation.json",
+    "runDirectory": "runs/ac-01-happy-path-07",
+    "scenarioDefinition": "runs/ac-01-happy-path-07/scenario.json",
+    "stateAssertion": "runs/ac-01-happy-path-07/state.json"
+  },
+  "assertions": [
+    {
+      "actual": true,
+      "artifact": "runs/ac-01-happy-path-07/invocation.json",
+      "expected": true,
+      "id": "generated-reviewed-active",
+      "passed": true
+    },
+    {
+      "actual": true,
+      "artifact": "runs/ac-01-happy-path-07/invocation.json",
+      "expected": true,
+      "id": "discovered",
+      "passed": true
+    },
+    {
+      "actual": true,
+      "artifact": "runs/ac-01-happy-path-07/invocation.json",
+      "expected": true,
+      "id": "allowed-dispatch",
+      "passed": true
+    },
+    {
+      "actual": true,
+      "artifact": "runs/ac-01-happy-path-07/invocation.json",
+      "expected": true,
+      "id": "mcp-result-valid",
+      "passed": true
+    },
+    {
+      "actual": true,
+      "artifact": "runs/ac-01-happy-path-07/invocation.json",
+      "expected": true,
+      "id": "erp-state-valid",
+      "passed": true
+    },
+    {
+      "actual": true,
+      "artifact": "runs/ac-01-happy-path-07/invocation.json",
+      "expected": true,
+      "id": "cleanup-valid",
+      "passed": true
+    }
+  ],
+  "authority": {
+    "authorizationDecision": "allow",
+    "finalAuthorityDecision": "allow",
+    "principalClass": "allowed"
+  },
+  "campaignId": "toolplane-erpnext-conformance-v1",
+  "credentialIndirection": {
+    "credentialReferenceId": "ERPNEXT_API_TOKEN",
+    "credentialSource": "gitignored-dotenv",
+    "credentialValueRecorded": false
+  },
+  "erpBaseline": {
+    "authenticationInterfaceSha256": "ec6b920fa477c1ebfaef9ae9751165e0f8dac2a516a958f2bdd0a413ff1ba3f7",
+    "dependenciesSha256": "2fa6815f4084a5f39f553b724c63812e4736b8f1fef57493658a3a5035ac5c93",
+    "deploymentSha256": "0ffcdc181b760c400bf70475e83b3e00837ed9c2427bc114b044b765cb1ba47d",
+    "httpContractSha256": "f20f5b389706c0b2586c4a208e586d1fcdf518487ecb9577c77132aee2db7f5e",
+    "imageSha256": "f226f7eb10a2c81ecde2f270551d7b985b80e1ee8dab05e160bdfe28878555ea",
+    "sourceSha256": "08c63a308a2de0a90791f8ed477b2a9d3a42e81fa669fb88d9aec58b34b44e56",
+    "unchanged": true
+  },
+  "execution": {
+    "cleanupAssertion": true,
+    "convergenceMilliseconds": 0,
+    "effectiveOrigin": "http://127.0.0.1:18081",
+    "erpDispatchCount": 5,
+    "erpHttpStatus": 200,
+    "erpStateAssertion": true,
+    "expectedDispatchCount": 5,
+    "mcpOutcome": "success",
+    "preparedRequestShapeSha256": "86c2421d0c336329aa8125cc770abca221a4a59e9e11240e7ca5b0a92f7ab6ae",
+    "reconciliationAttempts": 0,
+    "responseShapeSha256": "42741d98caba9f5affecd183398fdddea3f4834344bf745b956d499b395c7a4d"
+  },
+  "frozenInputs": {
+    "contractSha256": "c38f1a103407b8c860af4635183fe2c5fc7ac12a002cc6fe3eff564c76258f7f",
+    "databaseSchemaVersion": "not-collected-smoke",
+    "deploymentProfileSha256": "d24d5b37cf6cca4de8fbfc5920d6d164cc75a151b839dfc59219ea5a96d512e5",
+    "erpbridgeCommit": "eade51f37be13bda3ef13741e44666af903e712a",
+    "erpbridgeImageDigest": "sha256:7a575937bd5c66cfceb7f0303caf17a126ed455c5ba494bd55cc96475408027f",
+    "erpnextImageDigest": "sha256:5d871cf0b3425f3ad2932e6e65ef9d2318c363b1b0464aa71d119280204ededd",
+    "mcpSdkVersion": "not-collected-smoke",
+    "oracleSha256": "3fb9086d5733f0e2d0f0ea09e7aef46374361735c6bfdb2ee6176315e979d95f",
+    "resetRevision": "not-collected-smoke",
+    "runnerVersion": "architecture-validation-v1-smoke",
+    "scenarioDefinitionSha256": "15cc42dfd12df605ddbe7a181bfa82aa4adcb201e927b9aea259103a192ec1f2"
+  },
+  "invariantIds": [
+    "erp-tool-separation",
+    "active-resource-authorization",
+    "secret-indirection"
+  ],
+  "outcome": {
+    "failedAssertionIds": [],
+    "status": "demonstrated"
+  },
+  "phase": "smoke",
+  "recordType": "architecture-conformance-run",
+  "recordedAt": "2026-09-09T10:02:00.540375Z",
+  "repetition": 1,
+  "reset": {
+    "cacheCleared": true,
+    "erpbridgeStateCleared": true,
+    "fixtureStateBeforeSha256": "b5524e02ae61838521950d48e12d1bcbd8eaa4fb6a7914ed10e530bcc079d07d"
+  },
+  "resource": {
+    "approvedDigest": "3fb9086d5733f0e2d0f0ea09e7aef46374361735c6bfdb2ee6176315e979d95f",
+    "candidateDigest": "3fb9086d5733f0e2d0f0ea09e7aef46374361735c6bfdb2ee6176315e979d95f",
+    "desiredRevision": "smoke",
+    "name": "architecture-validation-bundle",
+    "observedRuntimeRevision": "smoke-observed",
+    "qualifiedName": "architecture-validation-bundle.smoke",
+    "selectedDigest": "3fb9086d5733f0e2d0f0ea09e7aef46374361735c6bfdb2ee6176315e979d95f",
+    "servingPointerAfter": "smoke-observed",
+    "servingPointerBefore": "not-observed"
+  },
+  "runId": "ac-01-happy-path-07",
+  "scenarioId": "AC-01-happy-path",
+  "schemaVersion": "2.0"
+}

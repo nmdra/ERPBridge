@@ -1,0 +1,7 @@
+\begin{tikzpicture}[node distance=8mm]
+\node[evalnode,text width=112mm,fill=PagePaper,draw=MutedInk] (raw) {\textbf{1. Retained records} --- JSON / CSV / source notes\\Observed files, reported outcomes, and explicit gaps};
+\node[evalnode,text width=112mm,below=of raw] (check) {\textbf{2. Local analysis} --- counts / hashes / nearest-rank metrics\\Numerical consistency and file identity can be checked};
+\node[evalnode,text width=112mm,below=of check,fill=PaleOrange,draw=TaskAmber] (release) {\textbf{3. Release attribution} --- not established\\Missing frozen provenance and observed target binary/image};
+\draw[evalarrow] (raw)--(check);
+\draw[evalarrow,dashed] (check)--(release);
+\end{tikzpicture}

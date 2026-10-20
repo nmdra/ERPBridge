@@ -1,0 +1,231 @@
+note: "version 2" Tectonic command-line interface activated
+note: Running TeX ...
+(specimen.tex
+LaTeX2e <2021-11-15> patch level 1
+L3 programming layer <2022-02-24> (preamble (article.cls
+Document Class: article 2021/10/04 v1.4n Standard LaTeX document class
+(size11.clo)) (xcolor.sty (color.cfg) (xetex.def) (colortbl.sty (array.sty)))
+(design/tokens) (design/typography (sourceserifpro.sty (ifxetex.sty (iftex.sty)
+) (ifluatex.sty) (xkeyval.sty (xkeyval (xkvutils (keyval)))) (fontspec.sty
+(xparse.sty (expl3.sty (l3backend-xetex.def))) (fontspec-xetex.sty (fontenc.sty
+) (fontspec.cfg)))) (sourcesanspro.sty) (sourcecodepro.sty)) (design/layout
+(geometry.sty (ifvtex.sty)) (parskip.sty (kvoptions.sty (ltxcmds.sty)
+(kvsetkeys.sty)) (etoolbox.sty)) (titlesec.sty) (float.sty) (graphicx.sty
+(graphics.sty (trig.sty) (graphics.cfg))) (tabularx.sty) (booktabs.sty)
+(caption.sty (caption3.sty)) (listings.sty (lstmisc.sty) (listings.cfg))
+(tcolorbox.sty (pgf.sty (pgfrcs.sty (pgfutil-common.tex
+(pgfutil-common-lists.tex)) (pgfutil-latex.def) (pgfrcs.code.tex
+(pgf.revision.tex))) (pgfcore.sty (pgfsys.sty (pgfsys.code.tex
+(pgfkeys.code.tex (pgfkeysfiltered.code.tex)) (pgf.cfg) (pgfsys-xetex.def
+(pgfsys-dvipdfmx.def (pgfsys-common-pdf.def)))) (pgfsyssoftpath.code.tex)
+(pgfsysprotocol.code.tex)) (pgfcore.code.tex (pgfmath.code.tex
+(pgfmathcalc.code.tex (pgfmathutil.code.tex) (pgfmathparser.code.tex)
+(pgfmathfunctions.code.tex (pgfmathfunctions.basic.code.tex)
+(pgfmathfunctions.trigonometric.code.tex) (pgfmathfunctions.random.code.tex)
+(pgfmathfunctions.comparison.code.tex) (pgfmathfunctions.base.code.tex)
+(pgfmathfunctions.round.code.tex) (pgfmathfunctions.misc.code.tex)
+(pgfmathfunctions.integerarithmetics.code.tex))) (pgfmathfloat.code.tex))
+(pgfint.code.tex) (pgfcorepoints.code.tex) (pgfcorepathconstruct.code.tex)
+(pgfcorepathusage.code.tex) (pgfcorescopes.code.tex)
+(pgfcoregraphicstate.code.tex) (pgfcoretransformations.code.tex)
+(pgfcorequick.code.tex) (pgfcoreobjects.code.tex)
+(pgfcorepathprocessing.code.tex) (pgfcorearrows.code.tex)
+(pgfcoreshade.code.tex) (pgfcoreimage.code.tex (pgfcoreexternal.code.tex))
+(pgfcorelayers.code.tex) (pgfcoretransparency.code.tex)
+(pgfcorepatterns.code.tex) (pgfcorerdf.code.tex))) (pgfmoduleshapes.code.tex)
+(pgfmoduleplot.code.tex) (pgfcomp-version-0-65.sty) (pgfcomp-version-1-18.sty))
+ (verbatim.sty) (environ.sty (trimspaces.sty))) (tcbskins.code.tex
+Library (tcolorbox): 'tcbskins.code.tex' version '5.0.2'
+(tikz.sty (pgffor.sty (pgfkeys.sty (pgfkeys.code.tex)) (pgfmath.sty
+(pgfmath.code.tex)) (pgffor.code.tex (pgfmath.code.tex))) (tikz.code.tex
+(pgflibraryplothandlers.code.tex) (pgfmodulematrix.code.tex)
+(tikzlibrarytopaths.code.tex))) (tcbskinsjigsaw.code.tex
+Library (tcolorbox): 'tcbskinsjigsaw.code.tex' version '5.0.2'
+)) (pgflibraryarrows.meta.code.tex) (tikzlibrarypositioning.code.tex)
+(tikzlibrarycalc.code.tex) (tikzlibraryfit.code.tex)
+(tikzlibrarymatrix.code.tex) (tikzlibrarybackgrounds.code.tex)) (design/headers
+ (fancyhdr.sty)) (design/components) (profiles/plain/profile) (figures/styles)note: downloading pgfplots.sty
+
+(pgfplots.stynote: downloading pgfplots.revision.tex
+ (pgfplots.revision.tex)note: downloading pgfsys-luatex.def
+note: downloading pgfplots.code.tex
+ (pgfplots.code.texnote: downloading pgfplotscore.code.tex
+ (pgfplotscore.code.tex
+note: downloading pgfplotssysgeneric.code.tex
+(pgfplotssysgeneric.code.tex))note: downloading pgfplotslibrary.code.tex
+ (pgfplotslibrary.code.tex)note: downloading pgfplotsoldpgfsupp_loader.code.tex
+
+(pgfplotsoldpgfsupp_loader.code.texnote: downloading pgflibraryfpu.code.tex
+ (pgflibraryfpu.code.tex))note: downloading pgfplotsutil.code.tex
+
+(pgfplotsutil.code.texnote: downloading pgfplotsliststructure.code.tex
+ (pgfplotsliststructure.code.tex)note: downloading pgfplotsliststructureext.code.tex
+
+(pgfplotsliststructureext.code.tex)note: downloading pgfplotsarray.code.tex
+ (pgfplotsarray.code.tex)note: downloading pgfplotsmatrix.code.tex
+
+(pgfplotsmatrix.code.tex)note: downloading pgfplotstableshared.code.tex
+ (pgfplotstableshared.code.tex)note: downloading pgfplotsdeque.code.tex
+
+(pgfplotsdeque.code.tex)note: downloading pgfplotsbinary.code.tex
+ (pgfplotsbinary.code.texnote: downloading pgfplotsbinary.data.code.tex
+ (pgfplotsbinary.data.code.tex
+))note: downloading pgfplotsutil.verb.code.tex
+ (pgfplotsutil.verb.code.tex)note: downloading pgflibrarypgfplots.surfshading.code.tex
+ (pgflibrarypgfplots.surfshading.code.texnote: downloading pgflibrarypgfplots.surfshading.pgfsys-xetex.def
+
+(pgflibrarypgfplots.surfshading.pgfsys-xetex.defnote: downloading pgflibrarypgfplots.surfshading.pgfsys-dvipdfmx.def
+
+(pgflibrarypgfplots.surfshading.pgfsys-dvipdfmx.def))))note: downloading pgfplotscolormap.code.tex
+
+(pgfplotscolormap.code.texnote: downloading pgfplotscolor.code.tex
+ (pgfplotscolor.code.tex))note: downloading pgfplotsstackedplots.code.tex
+
+(pgfplotsstackedplots.code.tex)note: downloading pgfplotsplothandlers.code.tex
+ (pgfplotsplothandlers.code.texnote: downloading pgfplotsmeshplothandler.code.tex
+
+(pgfplotsmeshplothandler.code.texnote: downloading pgfplotsmeshplotimage.code.tex
+ (pgfplotsmeshplotimage.code.tex)))note: downloading pgfplots.scaling.code.tex
+
+(pgfplots.scaling.code.tex)note: downloading pgfplotscoordprocessing.code.tex
+ (pgfplotscoordprocessing.code.tex)note: downloading pgfplots.errorbars.code.tex
+
+(pgfplots.errorbars.code.tex)note: downloading pgfplots.markers.code.tex
+ (pgfplots.markers.code.tex)note: downloading pgfplotsticks.code.tex
+
+(pgfplotsticks.code.tex)note: downloading pgfplots.paths.code.tex
+ (pgfplots.paths.code.tex)note: downloading tikzlibrarydecorations.code.tex
+
+(tikzlibrarydecorations.code.texnote: downloading pgfmoduledecorations.code.tex
+ (pgfmoduledecorations.code.tex))note: downloading tikzlibrarydecorations.pathmorphing.code.tex
+
+(tikzlibrarydecorations.pathmorphing.code.texnote: downloading pgflibrarydecorations.pathmorphing.code.tex
+
+(pgflibrarydecorations.pathmorphing.code.tex))note: downloading tikzlibrarydecorations.pathreplacing.code.tex
+
+(tikzlibrarydecorations.pathreplacing.code.texnote: downloading pgflibrarydecorations.pathreplacing.code.tex
+
+(pgflibrarydecorations.pathreplacing.code.tex))note: downloading tikzlibrarypgfplots.contourlua.code.tex
+
+(tikzlibrarypgfplots.contourlua.code.tex))note: downloading tikzlibraryplotmarks.code.tex
+ (tikzlibraryplotmarks.code.texnote: downloading pgflibraryplotmarks.code.tex
+
+(pgflibraryplotmarks.code.tex))) (amsmath.sty
+For additional information on amsmath, use the `?' option.
+(amstext.sty (amsgen.sty)) (amsbsy.sty) (amsopn.sty)) (xurl.sty (url.sty))
+(enumitem.sty) (design/evaluation) (hyperref.sty (pdftexcmds.sty (infwarerr.sty
+)) (kvdefinekeys.sty) (pdfescape.sty) (hycolor.sty) (letltxmacro.sty)
+(auxhook.sty) (pd1enc.def) (intcalc.sty) (etexcmds.sty) (puenc.def) (bitset.sty
+(bigintcalc.sty)) (atbegshi-ltx.sty)) (hxetex.def (stringenc.sty)
+(rerunfilecheck.sty (atveryend-ltx.sty) (uniquecounter.sty))))
+No file specimen.aux.
+(ts1cmr.fd)
+*geometry* driver: auto-detecting
+*geometry* detected driver: xetex
+Package pgfplots notification 'compat/show suggested version=true': document ha
+s been generated with the most recent feature set (\pgfplotsset{compat=1.18}).
+
+(nameref.sty (refcount.sty) (gettitlestring.sty))
+
+Package hyperref Warning: Rerun to get /PageLabels entry.
+
+(figures/cover-flow) [1] (figures/cover-flow) [1] (specimen.aux)
+
+Package rerunfilecheck Warning: File `specimen.out' has changed.
+(rerunfilecheck)                Rerun to get outlines right
+(rerunfilecheck)                or use package `bookmark'.
+
+ )
+Output written on specimen.xdv (2 pages, 37680 bytes).
+Transcript written on specimen.log.
+note: Rerunning TeX because "specimen.aux" changed ...
+(specimen.tex
+LaTeX2e <2021-11-15> patch level 1
+L3 programming layer <2022-02-24> (preamble (article.cls
+Document Class: article 2021/10/04 v1.4n Standard LaTeX document class
+(size11.clo)) (xcolor.sty (color.cfg) (xetex.def) (colortbl.sty (array.sty)))
+(design/tokens) (design/typography (sourceserifpro.sty (ifxetex.sty (iftex.sty)
+) (ifluatex.sty) (xkeyval.sty (xkeyval (xkvutils (keyval)))) (fontspec.sty
+(xparse.sty (expl3.sty (l3backend-xetex.def))) (fontspec-xetex.sty (fontenc.sty
+) (fontspec.cfg)))) (sourcesanspro.sty) (sourcecodepro.sty)) (design/layout
+(geometry.sty (ifvtex.sty)) (parskip.sty (kvoptions.sty (ltxcmds.sty)
+(kvsetkeys.sty)) (etoolbox.sty)) (titlesec.sty) (float.sty) (graphicx.sty
+(graphics.sty (trig.sty) (graphics.cfg))) (tabularx.sty) (booktabs.sty)
+(caption.sty (caption3.sty)) (listings.sty (lstmisc.sty) (listings.cfg))
+(tcolorbox.sty (pgf.sty (pgfrcs.sty (pgfutil-common.tex
+(pgfutil-common-lists.tex)) (pgfutil-latex.def) (pgfrcs.code.tex
+(pgf.revision.tex))) (pgfcore.sty (pgfsys.sty (pgfsys.code.tex
+(pgfkeys.code.tex (pgfkeysfiltered.code.tex)) (pgf.cfg) (pgfsys-xetex.def
+(pgfsys-dvipdfmx.def (pgfsys-common-pdf.def)))) (pgfsyssoftpath.code.tex)
+(pgfsysprotocol.code.tex)) (pgfcore.code.tex (pgfmath.code.tex
+(pgfmathcalc.code.tex (pgfmathutil.code.tex) (pgfmathparser.code.tex)
+(pgfmathfunctions.code.tex (pgfmathfunctions.basic.code.tex)
+(pgfmathfunctions.trigonometric.code.tex) (pgfmathfunctions.random.code.tex)
+(pgfmathfunctions.comparison.code.tex) (pgfmathfunctions.base.code.tex)
+(pgfmathfunctions.round.code.tex) (pgfmathfunctions.misc.code.tex)
+(pgfmathfunctions.integerarithmetics.code.tex))) (pgfmathfloat.code.tex))
+(pgfint.code.tex) (pgfcorepoints.code.tex) (pgfcorepathconstruct.code.tex)
+(pgfcorepathusage.code.tex) (pgfcorescopes.code.tex)
+(pgfcoregraphicstate.code.tex) (pgfcoretransformations.code.tex)
+(pgfcorequick.code.tex) (pgfcoreobjects.code.tex)
+(pgfcorepathprocessing.code.tex) (pgfcorearrows.code.tex)
+(pgfcoreshade.code.tex) (pgfcoreimage.code.tex (pgfcoreexternal.code.tex))
+(pgfcorelayers.code.tex) (pgfcoretransparency.code.tex)
+(pgfcorepatterns.code.tex) (pgfcorerdf.code.tex))) (pgfmoduleshapes.code.tex)
+(pgfmoduleplot.code.tex) (pgfcomp-version-0-65.sty) (pgfcomp-version-1-18.sty))
+ (verbatim.sty) (environ.sty (trimspaces.sty))) (tcbskins.code.tex
+Library (tcolorbox): 'tcbskins.code.tex' version '5.0.2'
+(tikz.sty (pgffor.sty (pgfkeys.sty (pgfkeys.code.tex)) (pgfmath.sty
+(pgfmath.code.tex)) (pgffor.code.tex (pgfmath.code.tex))) (tikz.code.tex
+(pgflibraryplothandlers.code.tex) (pgfmodulematrix.code.tex)
+(tikzlibrarytopaths.code.tex))) (tcbskinsjigsaw.code.tex
+Library (tcolorbox): 'tcbskinsjigsaw.code.tex' version '5.0.2'
+)) (pgflibraryarrows.meta.code.tex) (tikzlibrarypositioning.code.tex)
+(tikzlibrarycalc.code.tex) (tikzlibraryfit.code.tex)
+(tikzlibrarymatrix.code.tex) (tikzlibrarybackgrounds.code.tex)) (design/headers
+ (fancyhdr.sty)) (design/components) (profiles/plain/profile) (figures/styles)
+(pgfplots.sty (pgfplots.revision.tex) (pgfplots.code.tex (pgfplotscore.code.tex
+(pgfplotssysgeneric.code.tex)) (pgfplotslibrary.code.tex)
+(pgfplotsoldpgfsupp_loader.code.tex (pgflibraryfpu.code.tex))
+(pgfplotsutil.code.tex (pgfplotsliststructure.code.tex)
+(pgfplotsliststructureext.code.tex) (pgfplotsarray.code.tex)
+(pgfplotsmatrix.code.tex) (pgfplotstableshared.code.tex)
+(pgfplotsdeque.code.tex) (pgfplotsbinary.code.tex (pgfplotsbinary.data.code.tex
+)) (pgfplotsutil.verb.code.tex) (pgflibrarypgfplots.surfshading.code.tex
+(pgflibrarypgfplots.surfshading.pgfsys-xetex.def
+(pgflibrarypgfplots.surfshading.pgfsys-dvipdfmx.def))))
+(pgfplotscolormap.code.tex (pgfplotscolor.code.tex))
+(pgfplotsstackedplots.code.tex) (pgfplotsplothandlers.code.tex
+(pgfplotsmeshplothandler.code.tex (pgfplotsmeshplotimage.code.tex)))
+(pgfplots.scaling.code.tex) (pgfplotscoordprocessing.code.tex)
+(pgfplots.errorbars.code.tex) (pgfplots.markers.code.tex)
+(pgfplotsticks.code.tex) (pgfplots.paths.code.tex)
+(tikzlibrarydecorations.code.tex (pgfmoduledecorations.code.tex))
+(tikzlibrarydecorations.pathmorphing.code.tex
+(pgflibrarydecorations.pathmorphing.code.tex))
+(tikzlibrarydecorations.pathreplacing.code.tex
+(pgflibrarydecorations.pathreplacing.code.tex))
+(tikzlibrarypgfplots.contourlua.code.tex)) (tikzlibraryplotmarks.code.tex
+(pgflibraryplotmarks.code.tex))) (amsmath.sty
+For additional information on amsmath, use the `?' option.
+(amstext.sty (amsgen.sty)) (amsbsy.sty) (amsopn.sty)) (xurl.sty (url.sty))
+(enumitem.sty) (design/evaluation) (hyperref.sty (pdftexcmds.sty (infwarerr.sty
+)) (kvdefinekeys.sty) (pdfescape.sty) (hycolor.sty) (letltxmacro.sty)
+(auxhook.sty) (pd1enc.def) (intcalc.sty) (etexcmds.sty) (puenc.def) (bitset.sty
+(bigintcalc.sty)) (atbegshi-ltx.sty)) (hxetex.def (stringenc.sty)
+(rerunfilecheck.sty (atveryend-ltx.sty) (uniquecounter.sty)))) (specimen.aux)
+(ts1cmr.fd)
+*geometry* driver: auto-detecting
+*geometry* detected driver: xetex
+Package pgfplots notification 'compat/show suggested version=true': document ha
+s been generated with the most recent feature set (\pgfplotsset{compat=1.18}).
+
+(nameref.sty (refcount.sty) (gettitlestring.sty)) (specimen.out) (specimen.out)
+(figures/cover-flow) [1] (figures/cover-flow) [1] (specimen.aux) )
+Output written on specimen.xdv (2 pages, 37740 bytes).
+Transcript written on specimen.log.
+note: Running xdvipdfmx ...
+[1][2]28163 bytes written
+note: Writing `./specimen.pdf` (27.5029296875 KiB)
+note: Writing `./specimen.log` (59.162109375 KiB)
+note: Skipped writing 2 intermediate files (use --keep-intermediates to keep them)

@@ -1,0 +1,8 @@
+[doc]
+name = "erpbridge-evaluation"
+bundle = "https://data1b.fullyjustified.net/tlextras-2022.0r0.tar"
+
+[[output]]
+name = "erpbridge-evaluation"
+type = "pdf"
+inputs = ["index.tex"]

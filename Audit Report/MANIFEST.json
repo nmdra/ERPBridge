@@ -1,0 +1,709 @@
+{
+  "schemaVersion": 1,
+  "exportedAtUtc": "2026-10-19T04:35:24.015203+00:00",
+  "repositoryHead": "167082b0fee0f6a1635245f2d70e84d6d193ff7a",
+  "scope": "Curated local working-tree copies, not a frozen or release-verified experimental archive",
+  "updatedAtUtc": "2026-10-19T04:41:41.168648+00:00",
+  "pathResolution": "originalPath is paper-repository-relative unless originalRoot is specified; originalRoot then supplies the source base directory",
+  "fileCount": 116,
+  "files": [
+    {
+      "originalPath": "erpbridge-demo/.agents/artifacts/erpbridge-perf-report.md",
+      "originalRoot": "/home/nimendra",
+      "packagePath": "sources/erpbridge-demo/.agents/artifacts/erpbridge-perf-report.md",
+      "bytes": 2071,
+      "sha256": "30c08318516364014fed4f114b98733682f05f847332e124ccaa46c7b5494c33"
+    },
+    {
+      "originalPath": "erpbridge-demo/.agents/artifacts/erpbridge-perf-evidence.json",
+      "originalRoot": "/home/nimendra",
+      "packagePath": "sources/erpbridge-demo/.agents/artifacts/erpbridge-perf-evidence.json",
+      "bytes": 13974,
+      "sha256": "7b11f2c7cfcfbce0eb49df8fe6141e808596a9a9f770844285166b8ce7412f07"
+    },
+    {
+      "originalPath": "paper/sections/evaluation.tex",
+      "packagePath": "sources/paper/sections/evaluation.tex",
+      "bytes": 7634,
+      "sha256": "9040640c5eacac19030e1028831028e18936bdd996b129eeaa4be8a6ae2cf2ef"
+    },
+    {
+      "originalPath": "research/evidence/comparison/system-capability-matrix.md",
+      "packagePath": "sources/research/evidence/comparison/system-capability-matrix.md",
+      "bytes": 16593,
+      "sha256": "345ed37cc7dd7fc6584977f85f7dc85c659678e2fc4b6050aa8917b58b17073d"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/archive-manifest.json",
+      "packagePath": "sources/research/evidence/evaluation/archive-manifest.json",
+      "bytes": 32401,
+      "sha256": "01493e26c9877fc2e3b72c01e089e7b5d0e69900bb203b67660f7e7bc7b14844"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/evaluated-deployment-profile.yaml",
+      "packagePath": "sources/research/evidence/evaluation/evaluated-deployment-profile.yaml",
+      "bytes": 1470,
+      "sha256": "d24d5b37cf6cca4de8fbfc5920d6d164cc75a151b839dfc59219ea5a96d512e5"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/openapi-support-matrix.md",
+      "packagePath": "sources/research/evidence/evaluation/openapi-support-matrix.md",
+      "bytes": 3563,
+      "sha256": "036b9f5e9c3bfe19822055eb4bb9d77ed9c5983aac7fbae414a53b8f606328bf"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/protocol.md",
+      "packagePath": "sources/research/evidence/evaluation/protocol.md",
+      "bytes": 8323,
+      "sha256": "0be440e5b2ddf178561a15bde4349f49d150822aa37f691b52e99df56eb91f25"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/provenance-audit.md",
+      "packagePath": "sources/research/evidence/evaluation/provenance-audit.md",
+      "bytes": 3510,
+      "sha256": "92d636fb0a2419d3b321c20e89ad273f651e1256012145c7716d2bebfc9cc601"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/release-freeze.md",
+      "packagePath": "sources/research/evidence/evaluation/release-freeze.md",
+      "bytes": 2788,
+      "sha256": "034bad8e0410c8672af04211ef5cf0de332599d1bcc924e2f45982486b568592"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/agent-usability.csv",
+      "packagePath": "sources/research/evidence/evaluation/results/agent-usability.csv",
+      "bytes": 223,
+      "sha256": "1b40a5e5280de723c2ee6d3aab869a9e5521a03481912af156f6fa5a39ef76fd"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/agent-usability.md",
+      "packagePath": "sources/research/evidence/evaluation/results/agent-usability.md",
+      "bytes": 1046,
+      "sha256": "956c8f9a1dadecd487aa5f9af8b2d7e2a82594e05f602eaf94ee1a62cb975d12"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/evolution.csv",
+      "packagePath": "sources/research/evidence/evaluation/results/evolution.csv",
+      "bytes": 2610,
+      "sha256": "96886960bc2bcc197a9576ad0166db49e9916685e72645b7efe3093540685c9a"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/governance-blockers.md",
+      "packagePath": "sources/research/evidence/evaluation/results/governance-blockers.md",
+      "bytes": 1001,
+      "sha256": "4be46d271a2152a2b1da2d581bd4a78de4e3f312806a7f88c7941f2931e61976"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/governance.csv",
+      "packagePath": "sources/research/evidence/evaluation/results/governance.csv",
+      "bytes": 248,
+      "sha256": "2f63ea81d0e5d76106a334463a6e63f39a1ffe082ecb1c8920ffa95cfbb687a3"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/invariant-conformance.json",
+      "packagePath": "sources/research/evidence/evaluation/results/invariant-conformance.json",
+      "bytes": 2774,
+      "sha256": "9606580b0c609c9ecd2cbcdd85fc7ef81b47e4a54e176e58738bfcf11d855262"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/invariant-conformance.md",
+      "packagePath": "sources/research/evidence/evaluation/results/invariant-conformance.md",
+      "bytes": 821,
+      "sha256": "8f4c27088d610d0bdef75ff22af98463ecd7f29608470c7c11c57c48103d01ac"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/overhead.csv",
+      "packagePath": "sources/research/evidence/evaluation/results/overhead.csv",
+      "bytes": 327,
+      "sha256": "2f78b5cc4af8a9d2312cf15a9bd7647c7f76d7135a34d616e492b173f0c5666a"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/repair-log.md",
+      "packagePath": "sources/research/evidence/evaluation/results/repair-log.md",
+      "bytes": 1365,
+      "sha256": "234a1c8f48858cc4720f5fbf409ce64cca28d5841770834948c1ce15c17aa68a"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/summary.md",
+      "packagePath": "sources/research/evidence/evaluation/results/summary.md",
+      "bytes": 2678,
+      "sha256": "bfe68a11a7b3f6d980e30ff528fdf5fa9dfc1644bc71b0741d986702f6ffea63"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/invocation.json",
+      "bytes": 909,
+      "sha256": "0228f2bd56df5ffac3c5a9b84c23b725d721cc5f865a0f6741606c4e03813ebf"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/metadata.json",
+      "bytes": 5167,
+      "sha256": "3901ffacb8ec019bfc46592407bd59d7b4161c08361690e43017973cde52d69a"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-01/state.json",
+      "bytes": 131,
+      "sha256": "142ce03b556ec019389b39cb19e4285dd6c94df5e99a66330913c991fa0168dc"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/invocation.json",
+      "bytes": 909,
+      "sha256": "c512d5fec1daf07e0021c3e1326c354627562c5feddca0e4fb4358f02a488362"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/metadata.json",
+      "bytes": 5167,
+      "sha256": "2a7199efa689e7327a91d575933a38b43e2618dde152a2333b650ebc100eeeb5"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-02/state.json",
+      "bytes": 131,
+      "sha256": "e7dc3c8195d3eda548e116cc1438f802d38b53931436c4b5f4b4090eb50691bc"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/invocation.json",
+      "bytes": 909,
+      "sha256": "41ad1349c0279b91fa40dc905e3d90d6a7de7429b4038a4d89cbfc21d4a30e49"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/metadata.json",
+      "bytes": 5167,
+      "sha256": "3ff62949e50ae3360b16f6d6e4cced853e13666c9e53b46a00798ac3a66cf0f0"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-03/state.json",
+      "bytes": 131,
+      "sha256": "e8a941ad6e28a9234f191e706638a44edd0b519fb9426c736f2511141ec6c8c9"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/invocation.json",
+      "bytes": 909,
+      "sha256": "222601186a456abbf6b87e061f2804f3412cb7ef9d3e49c71813a5bf68dc506a"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/metadata.json",
+      "bytes": 5167,
+      "sha256": "39f9281146c59c71fe8dcbbb671512680739f8eabdaf0544d485a6996deb3d8e"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-04/state.json",
+      "bytes": 131,
+      "sha256": "d0987aa68852ec357d3b07b554c123c144b5310e45d48e2c637b511b6f10df88"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/invocation.json",
+      "bytes": 909,
+      "sha256": "bb7a850d88cb2899f20b76cd43520cb769eab297324e1c9318b1b44d6bc50937"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/metadata.json",
+      "bytes": 5167,
+      "sha256": "f6d5a785b7c50a74ea79114c6ef66aa8e567166e5cd2f5e9f66b88a3cda6f1a9"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-05/state.json",
+      "bytes": 131,
+      "sha256": "4e741845409e9fba806c6e95bd92e58d0415b05a9b29eb38a5235d5b46b50d7d"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/invocation.json",
+      "bytes": 909,
+      "sha256": "339702545b5d7be3a7a0c5561be63a81b25f37ab57134cb8f6dd30b105b2e07a"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/metadata.json",
+      "bytes": 5167,
+      "sha256": "4ea4b129cb0fec2b4d2fb9da80cb9ab09ae23f1404cece9b519e6762033a8eb7"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-06/state.json",
+      "bytes": 131,
+      "sha256": "485f211f8d73d9cbb9ce9739daec6fcc1057b919b7f4bddcc1fea15c6c1b6e84"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/invocation.json",
+      "bytes": 909,
+      "sha256": "de24d51c2507cdc3f9ca880ec9823399a68c1e036e5e60c4e3834685bb0a73c7"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/metadata.json",
+      "bytes": 5167,
+      "sha256": "4effe022e47826a50d20ed3181c2e4c4959a5d8598e975d5e94b7c40b924499c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-07/state.json",
+      "bytes": 131,
+      "sha256": "5fc121e6c255df8e8853a1748be948939be73287845c91e98f3be36c30985cfc"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/invocation.json",
+      "bytes": 909,
+      "sha256": "7ec1de70d0dc1ea10d61b04a07b8cc984a4d4b70ac329d169948892ee0ddc843"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/metadata.json",
+      "bytes": 5167,
+      "sha256": "58879a495d644f28522ece10b6f0f28a71e42f657a529163cfbed6c462d3928a"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-08/state.json",
+      "bytes": 131,
+      "sha256": "741a3e217ce45d97488657901062587260487acd918a7d24b1dc6ac9a6547f8b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/invocation.json",
+      "bytes": 909,
+      "sha256": "c77b12ec4ce3b331e388667ec3d63f88ad2ff7b65c7a139cfd71678e10ab5f84"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/metadata.json",
+      "bytes": 5167,
+      "sha256": "b48d5159bebe5806db4c8ca09091d47306a5d570b70fec80f2c10ee6e5abf7a7"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-09/state.json",
+      "bytes": 131,
+      "sha256": "87f9ad696ea5b4b22763c2a713ddceaf32b2c0e78c6b2089ad96b926f5084341"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/baseline.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/baseline.json",
+      "bytes": 90,
+      "sha256": "bff271d7c0cec6ab7f617d9b1a194d00d4cc719af26eb29c792fee33f5be0a77"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/cleanup.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/cleanup.json",
+      "bytes": 66,
+      "sha256": "f8b28354cc553e25b7e26b89647bbb641050ee9f34c371100becd48e8795642c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/control-plane.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/control-plane.json",
+      "bytes": 138,
+      "sha256": "fa7732568f5d1f6eb5e4edb915bed2d8135b3d68e32e3be8aade760aadaf392b"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/discovery.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/discovery.json",
+      "bytes": 159,
+      "sha256": "7ff028c8d0cdcde664de765cc4b19e7dc54caee93524724f9497a12befb47ff1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/dispatch.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/dispatch.json",
+      "bytes": 438,
+      "sha256": "de558fb086c8435586d110ddbf7c24df8c3e45c5c1057c28438bf30924e857e1"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/invocation.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/invocation.json",
+      "bytes": 909,
+      "sha256": "0048e31e87e45d79643b02f7daf77c5bf96f194fd712add4e655e3a69c026115"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/metadata.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/metadata.json",
+      "bytes": 5167,
+      "sha256": "3b95f12ba55264e0172b8859eb3abb8ba1aca20441f0225abd21922780a12dd8"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/scenario.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/scenario.json",
+      "bytes": 215,
+      "sha256": "74ffdd7b36d7ac52e65790e2f5c937302eeb70037ea5a11cdfb482dcdf3fe52c"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/state.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task11/happy-path/ac-01-happy-path-10/state.json",
+      "bytes": 131,
+      "sha256": "b3660caa45aaca74dbdf9bac42a9708193d345b634871b553c497fc86d8101f3"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/task12/task12-final-06/boundary.json",
+      "packagePath": "sources/research/evidence/evaluation/results/task12/task12-final-06/boundary.json",
+      "bytes": 42737,
+      "sha256": "ab3382271a6e37fc1cf8d05cf2a705c5984544f0798c5822ee465004501ec998"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/transformation-failures.md",
+      "packagePath": "sources/research/evidence/evaluation/results/transformation-failures.md",
+      "bytes": 103,
+      "sha256": "dbbd1e53bc74f5b3c16a49817539c9b160b653e3235247ba90082e8c88bf6af5"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/transformation.csv",
+      "packagePath": "sources/research/evidence/evaluation/results/transformation.csv",
+      "bytes": 961,
+      "sha256": "a1078f292fa0a1b5ebb42cc01f2cfc854a426fc899f042de96a52685dd3a4d4a"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/results/version-consistency.csv",
+      "packagePath": "sources/research/evidence/evaluation/results/version-consistency.csv",
+      "bytes": 237,
+      "sha256": "e08a52794b268bfa9ca9cc51a0267be41e404a872b2359ce416a1f657b526863"
+    },
+    {
+      "originalPath": "research/evidence/evaluation/transformation-profile.md",
+      "packagePath": "sources/research/evidence/evaluation/transformation-profile.md",
+      "bytes": 7068,
+      "sha256": "6ee7fb32fce2c0a5aceb7e6ae3aef4651c02bc35b93083e68d8aeed83597854e"
+    },
+    {
+      "originalPath": "research/project/ToolPlane-Reference-Implementation-Architecture.md",
+      "packagePath": "sources/research/project/ToolPlane-Reference-Implementation-Architecture.md",
+      "bytes": 8498,
+      "sha256": "5c242990fafae2dfe82a371e5bd62b410ecbfae807458aa0bacb9203e5eee573"
+    }
+  ]
+}

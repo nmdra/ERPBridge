@@ -1,0 +1,25 @@
+% Edge gaps default to FigureGap (12mm). Use short labels.
+\tikzset{
+ node distance=\FigureGap,
+ manual node/.style={draw=Rule,fill=PagePaper,rounded corners=\ComponentRadius,
+ line width=\FigureStroke,minimum width=27mm,minimum height=12mm,
+ align=center,font=\sffamily\small,inner sep=\ManualGrid},
+ conversation/.style={manual node,draw=ConversationBlue,fill=ConversationBlue!10},
+ commit/.style={manual node,draw=CommitAqua,fill=CommitAqua!10},
+ model/.style={manual node,draw=ModelPlum,fill=ModelPlum!10},
+ tool/.style={manual node,draw=ToolForest,fill=ToolForest!10},
+ submission/.style={manual node,draw=SubmissionViolet,fill=SubmissionViolet!10},
+ document/.style={manual node,draw=DocumentGreen,fill=DocumentGreen!10},
+ task/.style={manual node,draw=TaskAmber,fill=TaskAmber!10},
+ failure/.style={manual node,draw=FailureRose,fill=FailureRose!10,dashed},
+ hostState/.style={manual node,draw=HostReady,fill=HostReady!10},
+ manual arrow/.style={-{Stealth[length=2mm]},draw=MutedInk,line width=\FigureStroke},
+ commitArrow/.style={manual arrow,draw=CommitAqua},
+ taskArrow/.style={manual arrow,draw=TaskAmber},
+ modelArrow/.style={manual arrow,draw=ModelPlum},
+ toolArrow/.style={manual arrow,draw=ToolForest},
+ watchArrow/.style={manual arrow,draw=ConversationBlue,densely dotted},
+ failureArrow/.style={manual arrow,draw=FailureRose,dashed},
+ boxLabel/.style={font=\sffamily\scriptsize,above=\BoxLabelClearance},
+ arrowLabel/.style={font=\sffamily\scriptsize,above=\ArrowLabelClearance,fill=white,inner sep=0pt}
+}

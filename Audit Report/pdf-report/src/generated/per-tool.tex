@@ -1,0 +1,6 @@
+\begin{tikzpicture}
+\begin{axis}[ybar,bar width=9pt,ymin=0,ymax=750,ylabel={Client-observed latency (ms)},xtick={1,2,3,4,5},xticklabels={Items,Sales orders,Purchase orders,Assets,Search Item},x tick label style={font=\sffamily\scriptsize},ymajorgrids=true,legend style={at={(.5,1.04)},anchor=south,legend columns=2},height=70mm,enlarge x limits=.12]
+\addplot[fill=ConversationBlue,draw=ConversationBlue] coordinates {(1,337) (2,351) (3,352) (4,370) (5,390)};\addlegendentry{Median}
+\addplot[fill=white,draw=TaskAmber,line width=1pt] coordinates {(1,628) (2,643) (3,656) (4,662) (5,634)};\addlegendentry{p95}
+\end{axis}
+\end{tikzpicture}

@@ -1,0 +1,11 @@
+{
+  "mode": "smoke",
+  "status": "discovered",
+  "tools": [
+    "list_companies",
+    "list_items",
+    "get_item",
+    "create_item",
+    "delete_item"
+  ]
+}

@@ -1,0 +1,9 @@
+\begin{center}
+\begin{tikzpicture}[node distance=12mm]
+\node[evalnode] (a) {\textbf{Recorded calls}\\JSON and CSV evidence};
+\node[evalnode,right=of a] (b) {\textbf{Recomputed metrics}\\Counts and percentiles};
+\node[evalnode,right=of b,fill=PaleOrange,draw=TaskAmber] (c) {\textbf{Qualified findings}\\Results with limits};
+\draw[evalarrow] (a)--(b);
+\draw[evalarrow] (b)--(c);
+\end{tikzpicture}
+\end{center}

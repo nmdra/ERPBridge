@@ -1,0 +1,15 @@
+\PageTitle{10 / Evidence integrity}{Provenance, archive state, and limitations}
+The historical audit distinguishes retained behavior from release attribution. Placeholder source/image identifiers and ERP baseline hashes, an unauthorized freeze, incomplete frozen coverage, and author-authored expected results prevent a release-level conformance claim. They do not prove that the recorded calls never occurred. [S10]
+
+\begin{figure}[h]\centering\input{figures/provenance}\caption{Numerical verification does not close the release-attribution gap. The dashed step marks an unsupported inference, not a successful release gate.}\label{fig:provenance}\end{figure}
+\Source{S10 and the report's local analysis; editorial evidence model}
+
+\subsection*{Archive state after the move}
+The original manifest lists 116 files. At report generation, 113 entries resolve at their listed paths with matching hashes. Two demo files have moved out of \texttt{.agents/artifacts/} into \texttt{sources/erpbridge-demo/}; both relocated files match their original manifest hashes. The copied \texttt{sources/paper/sections/evaluation.tex} is absent. There are therefore 115 source files available, not 116 complete manifest-path matches.
+
+The Markdown report still contains links to the old demo paths and missing manuscript section. This PDF uses the current demo paths and identifies the Markdown report as a secondary summary where appropriate. The original files and manifest are preserved unchanged; the generated analysis records the discrepancies.
+
+\subsection*{Principal validity limits}
+One historical single-process instrumented profile, one short demo read run, small collections, fixed principals, an author-authored oracle, missing target identity, and absent resource measurements limit generalization. There are no observed model-usability trials or completed evolution-repair measurements.
+
+\Limit{Neither matching file hashes nor recomputed percentiles establish business-semantic correctness, unchanged ERP deployment, independent review, server resource efficiency, or production readiness.}

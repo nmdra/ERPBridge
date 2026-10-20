@@ -1,0 +1,29 @@
+\PageTitle{09 / Architecture positioning}{Documentation-based capability comparison}
+The retained matrix compares eight criteria against pinned sources. Table~\ref{tab:comparison} reproduces its ratings, not a new product evaluation. External references were not retrieved or independently revalidated for this PDF. [S13]
+
+\begin{table}[h]\caption{Retained version-specific capability ratings}\label{tab:comparison}\EvidenceTableStart
+\begin{tabularx}{\linewidth}{@{}Xcccc@{}}\toprule
+Criterion & AutoMCP & FastMCP & Context & ERPBridge\\
+ & v4 paper & 4.0.3 & Forge 1.0.9 & prototype\\\midrule
+API-derived tools & D & D & D & P\\
+Selective exposure & D & D & D & P\\
+Explicit revision targeting & NE & D & NE & P\\
+Approval-bound exact resource & NE & NE & NE & P\\
+Desired-state reconciliation & NE & NE & NE & P\\
+Per-call revision consistency & NE & NE & NE & P\\
+MCP client authentication & NE & D & D & P\\
+Upstream credential mediation & D & D & D & P\\\bottomrule
+\end{tabularx}\end{table}
+\Source{S13; AutoMCP source is arXiv:2507.16044v4, a preprint}
+
+\KeyPoint{The legend carries the meaning}{\textbf{D}: directly documented by the pinned source. \textbf{P}: partial or profile-specific implementation property. \textbf{NE}: not established by the reviewed source, not evidence of absence.}
+
+\subsection*{Architecture interpretation}
+The comparison positions ToolPlane around explicit tool resources, desired state, revision identity, and runtime governance rather than API conversion alone. This is a design-positioning argument derived from the archived matrix, not a measured superiority claim.
+
+A resource can bind an input contract, HTTP mapping, and credential reference. An admission record does not, by itself, prove an independent reviewer or prior human approval. A stored desired-state model does not, by itself, prove measured recovery time. A version selector does not, by itself, prove that policy and execution share one immutable per-call revision.
+
+\subsection*{Source and version caution}
+The prototype rows describe an evaluated profile. They must not be read as current-source certification or general guarantees across all ToolPlane deployments. The historical advanced behavior is not tied to every retained run by an observed immutable binary identifier.
+
+\Limit{Do not count D/P/NE cells as performance scores or claim that NE systems lack a feature. This table does not benchmark latency, task success, reliability, maintenance effort, or security quality.}

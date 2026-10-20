@@ -1,0 +1,201 @@
+{
+  "status": "checks complete; manual review required",
+  "pdf": "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/build/erpbridge-evaluation/erpbridge-evaluation.pdf",
+  "manual_review": "Inspect rendered pages. Confirm cover descenders and figure geometry from source.",
+  "pages": 14,
+  "log": {
+    "errors": [],
+    "overfull_boxes": [],
+    "missing_references": [],
+    "missing_glyphs": [],
+    "status": "complete",
+    "reason": "final TeX log",
+    "path": "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/build/erpbridge-evaluation/erpbridge-evaluation.log"
+  },
+  "figure_candidates": {
+    "heuristic": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      11
+    ],
+    "explicit": [
+      1,
+      3,
+      4,
+      5,
+      6,
+      7,
+      11
+    ],
+    "candidate_page_count": 7,
+    "verified": false,
+    "limitations": "Candidate pages, not a figure count. Caption text only; lists excluded. Uncaptioned figures require --figure-pages."
+  },
+  "samples": {
+    "cover": [
+      1
+    ],
+    "narrative": [
+      2
+    ],
+    "contents": [],
+    "chapter": [],
+    "code": [
+      13,
+      14
+    ],
+    "table": [
+      8,
+      9,
+      10,
+      12
+    ],
+    "figure": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      11
+    ]
+  },
+  "sample_sources": {
+    "cover": "user selected; manual review required",
+    "narrative": "user selected; manual review required",
+    "contents": "heuristic manual candidate",
+    "chapter": "heuristic manual candidate",
+    "code": "user selected; manual review required",
+    "table": "user selected; manual review required",
+    "figure": "user selected; manual review required"
+  },
+  "fonts": [
+    {
+      "name": "IHAIZV+SourceSansPro-Bold-Identity-H",
+      "family": "SourceSansPro-Bold-Identity-H",
+      "type": "CID Type 0C",
+      "encoding": "Identity-H",
+      "embedded": true
+    },
+    {
+      "name": "BZIVMZ+SourceSerifPro-It-Identity-H",
+      "family": "SourceSerifPro-It-Identity-H",
+      "type": "CID Type 0C",
+      "encoding": "Identity-H",
+      "embedded": true
+    },
+    {
+      "name": "IXFAWU+SourceSansPro-Regular-Identity-H",
+      "family": "SourceSansPro-Regular-Identity-H",
+      "type": "CID Type 0C",
+      "encoding": "Identity-H",
+      "embedded": true
+    },
+    {
+      "name": "TQTHRL+SourceSerifPro-Regular-Identity-H",
+      "family": "SourceSerifPro-Regular-Identity-H",
+      "type": "CID Type 0C",
+      "encoding": "Identity-H",
+      "embedded": true
+    },
+    {
+      "name": "YEUUOC+SourceSerifPro-Bold-Identity-H",
+      "family": "SourceSerifPro-Bold-Identity-H",
+      "type": "CID Type 0C",
+      "encoding": "Identity-H",
+      "embedded": true
+    },
+    {
+      "name": "AKHCZK+SourceCodePro-Regular-Identity-H",
+      "family": "SourceCodePro-Regular-Identity-H",
+      "type": "CID Type 0C",
+      "encoding": "Identity-H",
+      "embedded": true
+    },
+    {
+      "name": "VDVGTR+CMMI10",
+      "family": "CMMI10",
+      "type": "Type 1C",
+      "encoding": "Builtin",
+      "embedded": true
+    },
+    {
+      "name": "CAFSZL+CMR8",
+      "family": "CMR8",
+      "type": "Type 1C",
+      "encoding": "Builtin",
+      "embedded": true
+    },
+    {
+      "name": "DDIEWW+CMMI8",
+      "family": "CMMI8",
+      "type": "Type 1C",
+      "encoding": "Builtin",
+      "embedded": true
+    },
+    {
+      "name": "FKPJSN+CMR10",
+      "family": "CMR10",
+      "type": "Type 1C",
+      "encoding": "Builtin",
+      "embedded": true
+    },
+    {
+      "name": "PVTTLK+CMSY8",
+      "family": "CMSY8",
+      "type": "Type 1C",
+      "encoding": "Builtin",
+      "embedded": true
+    },
+    {
+      "name": "JAGKKY+CMR9",
+      "family": "CMR9",
+      "type": "Type 1C",
+      "encoding": "Builtin",
+      "embedded": true
+    },
+    {
+      "name": "NOMARO+CMSY10",
+      "family": "CMSY10",
+      "type": "Type 1C",
+      "encoding": "Builtin",
+      "embedded": true
+    }
+  ],
+  "expected_fonts_missing_or_unembedded": [],
+  "rendered_pages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "images": [
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-001.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-002.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-003.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-004.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-005.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-006.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-007.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-008.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-009.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-010.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-011.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-012.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-013.png",
+    "/home/nimendra/Documents/Projects/ERPBridge/Audit Report/pdf-report/qa/final/page-014.png"
+  ],
+  "problems": []
+}

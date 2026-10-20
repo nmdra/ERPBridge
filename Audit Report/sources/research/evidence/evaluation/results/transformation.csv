@@ -1,0 +1,9 @@
+corpus,operation,syntactic_valid,tool_name_correct,input_schema_fidelity,parameter_locations_correct,method_correct,path_correct,response_mapping_correct,credential_ref_correct,all_structural_checks_pass,valid_call_status
+mockerp,GET /resource/Employee/{name},True,True,True,True,True,True,True,True,True,unavailable
+mockerp,GET /resource/Bin,True,True,True,True,True,True,True,True,True,unavailable
+mockerp,POST /resource/Attendance,True,True,True,True,True,True,True,True,True,unavailable
+mockerp,POST /resource/Journal Entry,True,True,True,True,True,True,True,True,True,unavailable
+mockerp,POST /integration/echo,True,True,True,True,True,True,True,True,True,unavailable
+mockerp,GET /integration/echo/last,True,True,True,True,True,True,False,True,False,unavailable
+real-sanitized,GET /resource/Company,True,True,True,True,True,True,True,True,True,unavailable
+real-sanitized,GET /resource/Item,True,True,True,True,True,True,True,True,True,unavailable

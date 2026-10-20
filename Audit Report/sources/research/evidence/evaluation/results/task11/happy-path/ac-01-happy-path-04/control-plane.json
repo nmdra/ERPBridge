@@ -1,0 +1,10 @@
+{
+  "events": [
+    "preflight",
+    "reset",
+    "runtime-started",
+    "initialize",
+    "five-operation-path"
+  ],
+  "mode": "smoke"
+}

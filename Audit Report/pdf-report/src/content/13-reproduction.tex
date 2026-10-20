@@ -1,0 +1,23 @@
+\PageTitle{13 / Reproducibility}{How the report was produced}
+\subsection*{Analysis and build}
+The supplied records remain unchanged. The report project is in \path{pdf-report/}. Its Python analysis uses only the standard library and local evidence. It recomputes counts, nearest-rank percentiles, completion rate, per-tool summaries, batch ranges, and manifest-path/hash checks. It emits vector-plot coordinates and machine-readable results under \path{pdf-report/src/generated/}.
+
+From the \texttt{Audit Report} folder:
+\begin{lstlisting}[numbers=none,basicstyle=\CodeFont\footnotesize]
+python3 pdf-report/analyze_evidence.py
+cd pdf-report
+tectonic -X build --keep-logs -p
+\end{lstlisting}
+The canonical build target is \path{build/erpbridge-evaluation/erpbridge-evaluation.pdf}. The deliverable \texttt{ERPBridge-Evaluation-Report.pdf} is a copy of that output. The compiler log, QA report, and rendered pages are retained with the project.
+
+\subsection*{Numerical and archive checks}
+The local analysis confirms 100 demo samples, 20 per tool, ten per batch, all success flags true, all error fields null, and the reported overall and per-tool percentiles. It also checks 50 status-200 historical operation outcomes, 7/8 structural passes, three matching access decisions, 24 blocked evolution rows, and zero usability data rows.
+
+Archive checks identify relocation and absence rather than silently repairing history: 113 original manifest-path matches, two relocated demo files with matching original hashes, and one missing copied manuscript file. The generated \path{analysis-validation.json} records these details and SHA-256 values of key numerical inputs.
+
+\subsection*{Report QA and scope}
+The document uses a restrained standalone report layout, selectable text, embedded fonts, and vector TikZ/PGFPlots figures. A design specimen was compiled and visually checked before the full document. Final structural checks and page renders are retained under \path{pdf-report/qa/}; see \path{pdf-report/QA-NOTES.md} for the final acceptance record.
+
+No live ERP operation, model API call, new timing campaign, external literature discovery, or current-source implementation test was run to produce this PDF. Numerical consistency is not independent experimental replication. This report is not the IEEE conference manuscript and does not alter it.
+
+\KeyPoint{Bottom line}{Use the report to show measured observations with their exact denominators and limits. A new frozen, instrumented campaign is required before making release, capacity, reliability, maintenance, or model-effectiveness claims.}

@@ -1,0 +1,14 @@
+\PageTitle{06 / Historical evidence}{Integration and transformation fidelity}
+The retained happy-path directories contain ten invocation records, each with five status-200 operations: \texttt{list\_companies}, \texttt{list\_items}, \texttt{get\_item}, \texttt{create\_item}, and \texttt{delete\_item}. The source report also describes direct Item creation/deletion state checks. This supports integration feasibility in an earlier ERPNext profile, not unchanged ERP code or general reliability. [S3, S4]
+
+A separate eight-row structural probe covers six MockERP operations and two sanitized ERPNext operations. Figure~\ref{fig:transform} shows that seven rows passed all checks. All eight valid-call statuses are \texttt{unavailable}; structural fidelity is not a live invocation result. [S5]
+
+\begin{figure}[h]\centering\input{generated/transformation}\caption{Historical structural-check counts. Every bar uses the same eight-row denominator; the failed row is retained.}\label{fig:transform}\end{figure}
+\Source{S5; row-level CSV, not a general OpenAPI coverage benchmark}
+
+\subsection*{The response-mapping failure}
+The failing operation is \texttt{GET /integration/echo/last}. Its expected \texttt{data} object uses \texttt{allOf} and \texttt{nullable}, outside the declared historical subset. The generator emitted \texttt{responsePath: data} without an output schema. The profile audit calls this an \textbf{eligibility-oracle inconsistency and response-mapping limitation}. It is neither a supported-pass nor a corrected rerun. [S6]
+
+\KeyPoint{Preserve the denominator}{State ``7 of 8 historical probe rows passed all structural checks.'' Do not turn this into a 7/7 supported-subset claim or general 87.5\% API-conversion accuracy.}
+
+\Limit{The integration records are labelled smoke/non-final and use repetition identifier 1. Dispatch totals were assigned, not independently counted. The before/after ERP baseline hashes are placeholders, not measurements of unchanged ERP code, contracts, or deployment. [S3, S4, S10]}

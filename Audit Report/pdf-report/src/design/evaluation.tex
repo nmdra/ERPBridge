@@ -1,0 +1,50 @@
+% ERPBridge evaluation profile. A standalone report, not the IEEE manuscript.
+\renewcommand{\BodyFont}{\fontfamily{\SerifFamily}\selectfont}
+\definecolor{Ink}{HTML}{222222}
+\definecolor{MutedInk}{HTML}{595959}
+\definecolor{ConversationBlue}{HTML}{234E70}
+\definecolor{TaskAmber}{HTML}{A65318}
+\definecolor{PagePaper}{HTML}{F2F2F2}
+\definecolor{Rule}{HTML}{D5D9DD}
+\definecolor{PaleBlue}{HTML}{E8EFF5}
+\definecolor{PaleOrange}{HTML}{F7EBDD}
+\setlength{\PageMargin}{22mm}
+\geometry{a4paper,margin=22mm,headheight=17pt,headsep=7mm,footskip=11mm}
+\setlength{\SectionGap}{5mm}
+\setlength{\parskip}{6pt}
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.22}
+\renewcommand{\RunningTitle}{ERPBridge / Evaluation}
+\fancyhead[L]{\MetaLabel{ERPBridge / Evaluation}}
+\fancyhead[R]{\sffamily\small\color{MutedInk}Evidence review / 2026.10}
+\fancyfoot[L]{\sffamily\scriptsize\color{MutedInk}Preliminary evidence \textbar\ Not release-verified}
+\fancyfoot[R]{\sffamily\small\thepage}
+\newcounter{reportchapter}
+\newcommand{\PageTitle}[2]{\clearpage\stepcounter{reportchapter}\pdfbookmark[0]{#2}{report-\arabic{reportchapter}}\FigureKind{#1}\par\vspace{3mm}{\DisplayFont\LARGE #2\par}\vspace{3mm}}
+\newcommand{\Source}[1]{\par{\sffamily\footnotesize\color{MutedInk}Source: #1.}\par}
+\newcommand{\KeyPoint}[2]{\begin{tcolorbox}[colback=PaleBlue,colframe=ConversationBlue,boxrule=0.5pt,arc=0pt,left=3mm,right=3mm,top=2mm,bottom=2mm]{\sffamily\bfseries #1}\par #2\end{tcolorbox}}
+\newcommand{\Limit}[1]{\begin{tcolorbox}[colback=PaleOrange,colframe=TaskAmber,boxrule=0.5pt,arc=0pt,left=3mm,right=3mm,top=2mm,bottom=2mm]{\sffamily\bfseries Interpretation limit}\par #1\end{tcolorbox}}
+\newcommand{\Metric}[3]{\begin{minipage}[t]{.30\linewidth}\raggedright{\sffamily\bfseries\fontsize{26}{29}\selectfont\color{ConversationBlue}#1\par}\vspace{1mm}{\sffamily\bfseries #2\par}{\small #3\par}\end{minipage}}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\renewcommand{\tabularxcolumn}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\EvidenceTableStart}{\small\rowcolors{2}{PagePaper}{white}}
+\newcommand{\ReportCover}{\begin{titlepage}\thispagestyle{empty}
+{\sffamily\bfseries\color{ConversationBlue}TOOLPLANE / ERPBRIDGE}\par
+\vspace{16mm}
+{\DisplayFont\fontsize{34}{38}\selectfont ERPBridge\\Evaluation Report\par}
+\vspace{5mm}{\EditorialFont\Large Integration evidence, read performance,\\governance checks, and evaluation limits\par}
+\vspace{7mm}{\color{ConversationBlue}\rule{\linewidth}{1pt}}\par
+\vspace{5mm}{\sffamily\small Evidence review edition \textbar\ 19 October 2026}\par
+\vspace{11mm}
+\Metric{100/100}{Demo read calls}{One short burst workload}\hfill
+\Metric{361 ms}{Median latency}{Client-observed, nearest rank}\hfill
+\Metric{662 ms}{p95 latency}{Client-observed, nearest rank}
+\vspace{13mm}
+\input{figures/cover-flow}
+\vspace{8mm}
+\KeyPoint{What the evidence supports}{Integration feasibility, selected boundary behavior, and a bounded read-latency observation.}
+\Limit{This is not a release certification, a maximum-capacity benchmark, or proof of production reliability. Historical run-to-binary attribution is unknown; the separate demo target version was not recorded.}
+\vfill{\small Prepared from the supplied evidence archive. No new live benchmark or model trial was run to produce this report.}\par
+\end{titlepage}}
+\tikzset{evalnode/.style={draw=ConversationBlue,fill=PaleBlue,align=center,font=\sffamily\small,text width=37mm,minimum height=16mm,inner sep=3mm,line width=.7pt},evalarrow/.style={-{Stealth[length=2mm]},draw=Ink,line width=.8pt}}
+\pgfplotsset{compat=1.18,every axis/.append style={font=\sffamily\small,tick label style={font=\sffamily\footnotesize},label style={font=\sffamily\small},grid style={draw=Rule},axis line style={draw=MutedInk},legend style={draw=none,font=\sffamily\footnotesize},width=.97\linewidth,height=65mm}}

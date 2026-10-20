@@ -1,0 +1,22 @@
+\PageTitle{05 / Run variation}{Batch-level latency distribution}
+The raw evidence retains batch membership. Figure~\ref{fig:batch} shows each batch's nearest-rank median and minimum--maximum range. It deliberately uses a batch index, not a synthetic wall-clock timeline.
+
+\begin{figure}[h]\centering\input{generated/batch}\caption{Recorded latency range and median for each ten-call batch. The first batch includes connection warm-up according to the source report.}\label{fig:batch}\end{figure}
+\Source{S1 and S2; batch summaries recomputed from raw samples}
+
+\subsection*{Observed variation}
+The first batch spans 628--695 ms, with a median of 662 ms. Batches 2 and 3 have medians of 246 and 245 ms. Batch 4 rises to 500 ms. These differences show variation within the short run; the available fields do not establish its causes.
+
+The source report states that the first batch includes connection warm-up. All 100 samples remain in the overall analysis. Removing warm-up observations after viewing the results would define a different analysis and must be labelled separately.
+
+\begin{table}[h]\caption{Interpretation of workload and rate terms}\EvidenceTableStart
+\begin{tabularx}{\linewidth}{@{}P{38mm}X@{}}\toprule
+Term & Meaning in this report\\\midrule
+Burst batch size & Ten calls launched concurrently, as reported by the source\\
+Batch interval & Reported start pacing of at least one second\\
+Completion rate & 100 completions divided by 11.946 seconds of total wall time\\
+Maximum sustainable rate & Not measured; no saturation search or steady-state campaign\\
+Resource efficiency & Not measured; CPU, memory, and database metrics absent\\\bottomrule
+\end{tabularx}\end{table}
+
+\Limit{Do not present this as an evenly spaced 10-RPS stream or a sustained 10-RPS capacity test. The JSON cannot verify overlap, queue depth, server utilization, or latency experienced by other users.}
