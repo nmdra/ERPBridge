@@ -1,6 +1,6 @@
 # Docker Deployment Guide
 
-This guide covers how to deploy and manage the ERPBridge ecosystem with Docker and Docker Compose.
+Use this guide to deploy and manage ToolPlane with Docker and Docker Compose.
 
 ## 1. Quick Start
 
@@ -21,14 +21,15 @@ docker compose up --build --force-recreate -d
 
 The stack includes:
 
-- **ERPBridge Server** (`:8080`): The core MCP middleware. This development
-  Compose path enables the two `system.*_test` demonstration tools; production
-  deployments must leave `MCP_ENABLE_TEST_TOOLS` unset or false.
+- **ToolPlane Server** (`:8080`): The core MCP middleware. This development
+  bootstrap enables the two `system.*_test` demonstration tools. Direct Compose
+  use defaults to false. Production deployments must leave
+  `MCP_ENABLE_TEST_TOOLS` unset or false.
 - **Mock ERP** (`:8081`): Simulates legacy ERP endpoints.
 - **Redis** (`:6379`): Provides the exact-match cache.
 
 RedisInsight binds to `127.0.0.1` by default. Keep this setting unless you
-explicitly need local-network access, and never expose RedisInsight publicly.
+explicitly need local-network access. Never expose RedisInsight publicly.
 
 For a disposable end-to-end onboarding check, run:
 
@@ -37,18 +38,18 @@ For a disposable end-to-end onboarding check, run:
 ```
 
 The check uses an isolated Compose project, temporary CLI home, dynamic
-loopback ports, synthetic fixture data, and ephemeral credentials. It removes
-its containers and temporary files on exit. It does not use caller credentials
+loopback ports, synthetic fixture data, and ephemeral credentials. On exit, it removes
+its containers and temporary files. It does not use caller credentials
 or print ERP response bodies.
 
 ## 2. Configuration
 
-Environment variables for the server are set in the `docker-compose.yml` file.
+Set the server environment variables in `docker-compose.yml`.
 
 | Variable | Description | Default (compose) |
 | :--- | :--- | :--- |
 | `BASE_URL` | Public URL of the MCP server. | `http://localhost:8080` |
-| `ERPBRIDGE_HOST_PORT` | Host port for the ERPBridge container. | `8080` |
+| `ERPBRIDGE_HOST_PORT` | Host port for the ToolPlane container. | `8080` |
 | `ERP_BASE_URL` | Base URL of the underlying ERP system. | `http://mock-erp:8081` |
 | `MOCK_ERP_HOST_PORT` | Host port for the MockERP container. | `8081` |
 | `MOCK_ERP_IMAGE` | MockERP image used by Compose. | `ghcr.io/nmdra/mockerp:0.2.1` |
@@ -62,10 +63,10 @@ Environment variables for the server are set in the `docker-compose.yml` file.
 | `REDIS_INSIGHT_BIND_ADDRESS` | Address bound by RedisInsight. | `127.0.0.1` |
 | `REDIS_INSIGHT_HOST_PORT` | Host port for RedisInsight. | `8001` |
 | `DATABASE_PATH` | Path of the SQLite tool registry inside the container. | `/app/data/erpbridge.db` |
-| `RATE_LIMIT_RPS` | Per-session requests per second. | `10` |
+| `RATE_LIMIT_RPS` | Tool-execution requests per second, keyed by token principal, MCP session, or process fallback. | `10` |
 | `RATE_LIMIT_BURST` | Token bucket burst size. | `20` |
 | `INSECURE_AUTH_ALLOWED_HOSTS` | Development-only exact `host:port` exceptions for credentialed HTTP calls. | `mock-erp:8081` |
-| `MCP_ENABLE_TEST_TOOLS` | Development-only registration of `system.*_test` demo tools. | `true` in this Compose path |
+| `MCP_ENABLE_TEST_TOOLS` | Development-only registration of `system.*_test` demo tools. | `true` with `make dev-up`; false with direct Compose |
 | `MCP_ADVERTISE_REVISION_ALIASES` | Lists exact-revision names in MCP discovery. The default hides them so clients see one entry per tool. | unset |
 | `API_AUTH_TOKEN` | Bearer token for protected admin, MCP, and direct-invoke routes. | unset |
 | `ERPBRIDGE_CREDENTIALS_DIR` | Optional mounted directory used only by resources with `credentialSource: file`. | unset |
@@ -77,23 +78,23 @@ For the full list of server environment variables, see the [Environment Variable
 
 MockERP fails closed when neither `MOCK_ERP_CREDENTIALS_JSON` nor
 `MOCK_ERP_CREDENTIALS_FILE` is configured. `make dev-up` generates an ephemeral
-JSON credential pair only when neither source is set. It validates the rendered
-Compose configuration, force recreates the stack, and polls both service health
-endpoints without writing or printing the generated values. Use the JSON
+JSON credential pair only when neither source is set. It makes sure that the rendered
+Compose configuration is valid. It then force recreates the stack and polls both
+service health endpoints. It does not write or print the generated values. Use the JSON
 variable for local development, or mount a Docker secret and set the file path.
 Do not commit credential values to this repository.
 
 The bootstrap does not source `.env`; Compose reads that file and preserves its
 quoted values. Direct `docker compose` commands do not run the bootstrap
-preflight. Set a credential source first, then run `docker compose config
---quiet` and `docker compose up --build --force-recreate -d`. RedisInsight binds
+preflight. Set a credential source first. Then run `docker compose config
+--quiet`. Run `docker compose up --build --force-recreate -d`. RedisInsight binds
 to `127.0.0.1` by default. Change `REDIS_INSIGHT_BIND_ADDRESS` only when you
 explicitly need another interface.
 
 ### Optional mounted credentials
 
 Environment variables remain the default credential source. For a credential
-that must rotate without recreating the ERPBridge container, mount a directory
+that must rotate without recreating the ToolPlane container, mount a directory
 and set `ERPBRIDGE_CREDENTIALS_DIR` in the server container. Add
 `credentialSource: file` beside the logical `credentialRef` for only the tools,
 APIs, resources, or plugins that use that mount:
@@ -107,20 +108,20 @@ services:
       ERPBRIDGE_CREDENTIALS_DIR: /run/secrets/erpbridge
 ```
 
-The mounted file name is the validated `credentialRef`. ERPBridge reads it on
-each request, accepts complete projected-file generations, and fails closed on
-missing, empty, control-character, invalid UTF-8, non-regular, or oversized
-(over 64 KiB) content. It does not retain the previous value or fall back to an
+The mounted file name is the validated `credentialRef`. ToolPlane reads it on
+each request. It accepts complete projected-file generations. Missing, empty,
+control-character, invalid UTF-8, non-regular, or oversized (over 64 KiB)
+content causes the request to fail closed. It does not retain the previous value or fall back to an
 environment value. For a writable local directory, replace files by writing a
 complete temporary file and atomically renaming it over the live name.
 
-For Kubernetes, use a normal directory volume rather than `subPath`; projected
+For Kubernetes, use a normal directory volume rather than `subPath`. Projected
 Secret updates do not update `subPath` mounts. AWS EKS ASCP, AKS Key Vault CSI,
-and GKE Secret Manager CSI can populate this directory. Use workload identity,
-least privilege, and provider rotation settings. Provider updates are eventual
+and GKE Secret Manager CSI can populate this directory. Use workload identity.
+Apply least privilege. Configure provider rotation. Provider updates are eventual
 and replicas can observe them at different times. Adding a new cloud secret
 may require changing the provider's workload mapping and rolling the workload
-before the new filename is mounted. ERPBridge does not access AWS, Azure, or
+before the new filename is mounted. ToolPlane does not access AWS, Azure, or
 Google Cloud APIs directly. Environment-variable changes still require a
 container recreation.
 
@@ -133,27 +134,31 @@ development only. Do not set a broad or production allowlist.
 
 ## 3. Tool Registry
 
-The server keeps tool definitions in a SQLite database (`DATABASE_PATH`). The `schemas/` directory is NOT mounted into the container. `schemas/` is also not tracked by git. There is no file-system watcher.
+The server stores tool definitions in a SQLite database (`DATABASE_PATH`). The `schemas/` directory is not mounted into the container. Git does not track `schemas/`. The server has no file-system watcher.
 
-To load tools into the registry, generate and apply the schemas from your host:
+To load tools into the registry, generate and apply the manifests from your host:
 
-1. Register the ERP API:
+1. For manual generation, register the ERP API. If you use the default
+   generation task in the next step, skip this registration command:
 
    ```bash
    ./bridgectl api register --name erp --url http://localhost:8081 --module erp --description "Mock ERP"
    ```
 
-2. Fetch the pinned OpenAPI contract, generate, and apply the tool schemas:
+2. If `erp` is not already registered in the selected context, fetch the pinned
+   OpenAPI contract and generate and apply the tool schemas. This task registers
+   `erp` itself. If `erp` already exists, use the manual generation workflow in
+   the [Onboarding Guide](./onboarding.md#step-4--generate-tool-schemas) instead:
 
    ```bash
    make generate-tools
    ```
 
-The server detects new registry entries within 10 seconds and exposes them over MCP. A restart is not necessary.
+Within 10 seconds, the server detects new registry entries and exposes them over MCP. You do not need to restart it.
 
 ## 4. Using bridgectl with Docker
 
-You can use the local `bridgectl` binary to interact with the server running in Docker.
+Use the local `bridgectl` binary to manage the server running in Docker.
 
 1. **Build bridgectl:**
 
@@ -173,7 +178,9 @@ You can use the local `bridgectl` binary to interact with the server running in 
     MOCK_ERP_VERSION=0.2.1 make generate-tools
     ```
 
-    The target fetches the matching tagged OpenAPI contract and applies the generated YAML.
+    The target fetches the matching tagged OpenAPI contract. It applies one
+    temporary YAML stream and removes the temporary files on exit. It does not
+    write generated files to `schemas/`.
 
 4. **Test an API through the server:**
 
@@ -181,7 +188,7 @@ You can use the local `bridgectl` binary to interact with the server running in 
     ./bridgectl api test erp
     ```
 
-    This is the default mode. ERPBridge resolves the API `credentialRef` from
+    This is the default mode. ToolPlane resolves the API `credentialRef` from
     its environment and returns only a status summary. Use
     `./bridgectl api test erp --local` only for a legacy host-side diagnostic.
 
@@ -206,19 +213,19 @@ You can use the local `bridgectl` binary to interact with the server running in 
 
 The REST `/api/logs/stream` endpoint flushes authenticated SSE headers before
 its first event and sends `data: <JSON>\n\n` frames. Closing the client stops
-its subscription. Each subscriber has a bounded 100-event channel; new events
-are dropped when a slow subscriber's channel is full. This raw stream is not
+its subscription. Each subscriber has a bounded 100-event channel. If a slow subscriber's channel
+is full, the server drops new events. This raw stream is not
 the redacted Console BFF projection.
 
 - **Metrics:**
   Prometheus metrics are available at `http://localhost:8080/metrics`.
 
-When the container receives `SIGTERM` or `SIGINT`, ERPBridge stops accepting new
-HTTP connections and gracefully shuts down the listener before the process exits.
+When the container receives `SIGTERM` or `SIGINT`, ToolPlane stops accepting new
+HTTP connections. It shuts down the listener before the process exits.
 
 ## 6. External plugins
 
-ERPBridge does not install, start, update, or schedule plugin code. Deploy each
+ToolPlane does not install, start, update, or schedule plugin code. Deploy each
 plugin process separately, then apply a `Plugin` resource with its reachable
 endpoint and an exact-version `PluginBinding`. See the [External Plugin
 Resource Schema](./plugin-schema.md) for the manifest and `/v1/process` JSON
@@ -233,8 +240,9 @@ services:
     image: ghcr.io/nmdra/erpbridge-plugins/mock-plugin:0.1.0
 ```
 
-The image is not part of the ERPBridge server image. The plugin receives only a
-normalized result and binding configuration; it does not receive ERP
+The image is not part of the ToolPlane server image. An after-response plugin receives a
+normalized result and binding configuration. A raw-response plugin can process
+ERP response bytes before normalization. Plugins do not receive ERP
 credentials, inbound request headers, or caller identity. A credentialed
 plugin resource stores an environment-variable reference, not the key value:
 
@@ -271,7 +279,7 @@ in use.
 
 ## 7. Connecting MCP Clients
 
-ERPBridge supports the **Stdio** and **Streamable HTTP** transports.
+ToolPlane supports the **Stdio** and **Streamable HTTP** transports.
 
 ### Claude Desktop (Stdio)
 
@@ -281,7 +289,7 @@ Claude Desktop connects to MCP servers via standard input and output. The server
     - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
     - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-2. **Add ERPBridge Server:**
+2. **Add ToolPlane Server:**
     Add the following to the `mcpServers` section. This runs the server in stdio mode inside a container.
 
     ```json
@@ -301,16 +309,16 @@ Claude Desktop connects to MCP servers via standard input and output. The server
     }
     ```
 
-    *Note: The tool registry lives in the SQLite database. Tools persist inside the container only while it runs. To keep tools across restarts, run the full `docker compose` stack and connect via Streamable HTTP instead.*
+    *Note: The tool registry uses the SQLite database. In this disposable container, tools persist only while the container runs. To keep tools across restarts, run the full `docker compose` stack. Then connect via Streamable HTTP.*
 
 3. **Restart Claude:** Fully quit and restart Claude Desktop. Look for the tool icon in the chat input.
 
 ### Cursor (Streamable HTTP)
 
-Cursor connects to remote MCP servers via HTTP. Use this method when the ERPBridge stack is already running via `docker compose up`.
+Cursor connects to remote MCP servers via HTTP. Use this method when the ToolPlane stack is already running via `docker compose up`.
 
 1. **Make Sure the Server Is Running:**
-    Verify that the stack is up and the server is reachable at `http://localhost:8080`.
+    Make sure that the stack is running and the server is reachable at `http://localhost:8080`.
 
 2. **Configure Cursor:**
     - Open Cursor **Settings** (`Cmd+,` or `Ctrl+,`).
@@ -327,7 +335,7 @@ Cursor connects to remote MCP servers via HTTP. Use this method when the ERPBrid
 
 - **Connection Refused:** Make sure that `ERP_BASE_URL` in `docker-compose.yml` uses the service name `http://mock-erp:8081` instead of `localhost`. Compose pulls `ghcr.io/nmdra/mockerp:0.2.1`; override `MOCK_ERP_IMAGE` only with a compatible image.
 - **Claude Stdio Timeout:** If Claude fails to connect, build the server binary first and run it directly. This shows any startup errors.
-- **Schema Errors:** Validate the tool definition locally before you apply it:
+- **Schema Errors:** Before you apply the tool definition, make sure that it passes local validation:
 
   ```bash
   ./bridgectl tool validate -f schemas/erp/list_employees.json

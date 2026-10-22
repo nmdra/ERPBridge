@@ -4,11 +4,13 @@
 
 ### How do I configure the server?
 
-Set the environment variables listed in the [Environment Variables Reference](./environment-variables.md). Export them in your shell, or set them in `docker-compose.yml`.
+Set the environment variables in the [Environment Variables Reference](./environment-variables.md).
+Export them in your shell, or set them in `docker-compose.yml`.
 
 ### How do I configure the CLI?
 
-The CLI reads `~/.bridgectl/config.yaml`. The file holds named contexts. Each context has `server`, `mcp-server`, `erp-base`, and an optional `api-token` value.
+The CLI reads `~/.bridgectl/config.yaml`. The file contains named contexts.
+Each context has `server`, `mcp-server`, `erp-base`, and an optional `api-token` value.
 
 For HTTP authentication, the CLI uses the `--token` flag first, then
 `BRIDGE_API_TOKEN`, and then the active context's `api-token`.
@@ -36,11 +38,14 @@ recovery. It removes the temporary stack when it exits.
 
 ### Why do `bridgectl cache` and `bridgectl log` fail with "connection refused"?
 
-The default context points `server` at `http://localhost:8082`. Nothing listens there. Set `BRIDGE_SERVER=http://localhost:8080`, or edit the `server` value in `~/.bridgectl/config.yaml`.
+The default context points `server` at `http://localhost:8082`.
+Nothing listens there. Set `BRIDGE_SERVER=http://localhost:8080`, or edit the
+`server` value in `~/.bridgectl/config.yaml`.
 
 ### How do I enable debug logging?
 
-Set `LOG_LEVEL=debug` on the server. You can also set per-component levels, for example `LOG_LEVEL_MCP=debug`.
+Set `LOG_LEVEL=debug` on the server. To set a component's log level, use its
+variable, for example `LOG_LEVEL_MCP=debug`.
 
 ### How do I run the server in JSON log mode?
 
@@ -48,7 +53,10 @@ Set `APP_ENV=production`.
 
 ### Do I need Redis?
 
-No. The cache uses a bounded in-memory LRU when `REDIS_URL` is empty. Set `CACHE_MEMORY_MAX_ENTRIES=0` to disable memory-cache storage. If `REDIS_URL` is set, Redis remains the selected backend even when it is unreachable; the server reports the backend error instead of silently using memory.
+No. When `REDIS_URL` is empty, the cache uses a bounded in-memory LRU.
+To disable memory-cache storage, set `CACHE_MEMORY_MAX_ENTRIES=0`.
+If `REDIS_URL` is set, Redis remains the selected backend even when it is
+unreachable. The server reports the backend error. It does not silently use memory.
 
 ## Tools & Schemas
 
@@ -59,7 +67,12 @@ and removes its temporary files. It does not create per-tool JSON files or a
 second generated directory.
 
 Reviewed manifests are the single source of truth. Keep them under
-`manifests/<module>/` and apply the reviewed file:
+`manifests/<module>/` and apply the reviewed file. The following block shows
+the default bootstrap task and a reviewed-manifest apply command. These are
+separate operations. `make generate-tools` registers `erp` itself. If `erp`
+is already registered, use the explicit generation procedure in the
+[Onboarding Guide](./onboarding.md#step-4--generate-tool-schemas) instead of
+that task:
 
 ```bash
 make generate-tools
@@ -71,7 +84,11 @@ and save its stdout explicitly to a temporary file. Remove the file after use.
 
 ### How do I update a tool?
 
-Apply the new version with `bridgectl tool apply -f <file>`. The registry keeps multiple versions. MCP clients receive the latest stable version.
+Apply the new version with `bridgectl tool apply -f <file>`.
+The registry keeps multiple versions. An unqualified MCP call uses the selected
+serving revision, not automatically the latest stable version. To select an
+admitted revision for future unqualified calls, apply its manifest with
+`metadata.isServing: true`. See [Activation and serving selection](./toolplane-conformance.md#activation-and-serving-selection).
 
 ### How do I hide a tool without deleting it?
 
@@ -101,13 +118,21 @@ CAUTION: A hard delete removes the tool from the database. You cannot restore it
 
 ### How quickly does the server pick up tool changes?
 
-Within 10 seconds. The reconciliation controller ticks every 10 seconds. A tool applied over the API is visible immediately.
+Within 10 seconds. The reconciliation controller runs every 10 seconds.
+A tool applied over the API is visible immediately.
 
 ## Authentication
 
 ### How does the server authenticate ERP calls?
 
-Tool schemas reference a credential by name (`credentialRef`). The server resolves the reference from environment variables at call time. Schemas never contain raw secrets.
+Tool schemas reference a credential by name (`credentialRef`). By default, the
+server resolves the reference from environment variables at call time.
+For a mounted credential file, set `credentialSource: file`. The server reads
+the named file under `ERPBRIDGE_CREDENTIALS_DIR` at call time.
+Schemas never contain raw secrets.
+
+See [Optional mounted credential files](./environment-variables.md#optional-mounted-credential-files)
+for file requirements and rotation steps.
 
 MockERP accepts the configured ERPNext token header, session cookie, or Basic
 Auth identity. Credential values are supplied through environment variables or
@@ -117,7 +142,9 @@ See the [MockERP Integration Contract](./mock-erp.md) for details.
 
 ## Upgrades
 
-### How do I upgrade ERPBridge?
+<a id="how-do-i-upgrade-erpbridge"></a>
+
+### How do I upgrade ToolPlane?
 
 1. Pull the latest changes: `git pull`
 2. Rebuild the binaries: `make build`
@@ -135,7 +162,7 @@ See [CHANGELOG.md](../CHANGELOG.md).
 
 ### Tool calls return `internal server error`
 
-Check the server logs:
+Make sure that the server logs identify the cause:
 
 ```bash
 docker compose logs erpbridge-server
@@ -143,7 +170,7 @@ docker compose logs erpbridge-server
 
 Common causes:
 
-- The ERP service is unreachable. Make sure `ERP_BASE_URL` uses `http://mock-erp:8081` inside Docker.
+- The ERP service is unreachable. Make sure that `ERP_BASE_URL` uses `http://mock-erp:8081` inside Docker.
 - The tool endpoint path contains a secret pattern and was rejected.
 - The selected Redis or in-memory cache backend is unavailable. Inspect the server logs and run `bridgectl cache stats`.
 

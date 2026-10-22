@@ -1,12 +1,12 @@
 # MockERP integration contract
 
-ERPBridge uses [MockERP](https://github.com/nmdra/mockerp) as a versioned
+ToolPlane uses [MockERP](https://github.com/nmdra/mockerp) as a versioned
 ERPNext-compatible test service. The Compose service name is `mock-erp` and the
 internal URL is `http://mock-erp:8081`.
 
 ## Pinned release
 
-The default image and OpenAPI contract use the same immutable release:
+The default image and OpenAPI contract use the same pinned release:
 
 - Image: `ghcr.io/nmdra/mockerp:0.2.1`
 - Contract: `https://raw.githubusercontent.com/nmdra/mockerp/v0.2.1/openapi.yaml`
@@ -15,20 +15,20 @@ Upgrade both values together. Do not use `latest`.
 
 ## Credentials
 
-MockERP fails closed when it has no credential source. Set one of these values
-before starting Compose:
+If MockERP has no credential source, it fails closed. Before you start Compose,
+set one of these values:
 
 - `MOCK_ERP_CREDENTIALS_JSON` for local development.
 - `MOCK_ERP_CREDENTIALS_FILE` for a mounted JSON Docker secret.
 
 The credential document contains `credentials`, `sessions`, or `basic` lists.
-Each identity has a role and an identity name. Do not commit credential values.
+Each identity has a role and an identity name. Never commit credential values.
 
 ## Data and reset
 
 MockERP stores data in `/data/mockerp.db`. Compose mounts this path in the
-`mockerp-data` volume. Startup applies idempotent SQLite migrations and seeds
-the fictional Serendib Consumer Products scenario.
+`mockerp-data` volume. At startup, MockERP applies idempotent SQLite migrations.
+It seeds the fictional Serendib Consumer Products scenario.
 
 The reset command is development-only:
 
@@ -53,11 +53,12 @@ envelopes. The current release includes:
 - role-gated trial balance, stock, ageing, operational, and audit reports.
 
 `make generate-tools` downloads the pinned contract before tool generation. It
-writes generated schemas to the ignored `schemas/` directory.
+applies one temporary YAML draft stream. It removes both temporary files on
+exit. It does not write generated schemas to the ignored `schemas/` directory.
 
 ## Integration fixture
 
 The authenticated `GET /api/resource/Plugin Fixture` endpoint returns a stable
 source object for external-plugin tests. The authenticated
 `POST /api/integration/echo` endpoint returns the submitted JSON object without
-adding request metadata. Its readback endpoint is process-local test state.
+adding request metadata. Its readback endpoint uses process-local test state.

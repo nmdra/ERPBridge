@@ -1,10 +1,10 @@
 # Exact Match Caching
 
-ERPBridge has a caching layer that reduces latency and load on legacy ERP systems. It uses Redis when configured, or a bounded in-memory LRU when Redis is not configured.
+ToolPlane caches responses to reduce latency and load on legacy ERP systems. If Redis is configured, ToolPlane uses Redis. Otherwise, it uses a bounded in-memory LRU cache.
 
 ## 🚀 Overview
 
-The caching mechanism runs as middleware in the MCP tool execution pipeline. The server selects Redis when `REDIS_URL` is set and the in-memory backend otherwise. A configured but unreachable Redis server is not replaced by memory.
+The caching mechanism runs as middleware in the MCP tool execution pipeline. The server selects Redis when `REDIS_URL` is set and the in-memory backend otherwise. If the configured Redis server is unreachable, ToolPlane does not replace it with memory.
 
 ### Layer 1: Exact Match (SHA256)
 
@@ -16,7 +16,7 @@ The system gives O(1) lookups for identical requests.
 
 ## ⚙️ Configuration
 
-Caching is opt-in. It is configured per tool in the `spec.cache` section of the tool schema.
+Caching is opt-in. Configure each tool in the `spec.cache` section of its tool schema.
 
 ### Example Schema Configuration
 
@@ -49,7 +49,7 @@ Caching is opt-in. It is configured per tool in the `spec.cache` section of the 
 
 ## 🧹 Cache Invalidation (Auto-Flush)
 
-ERPBridge supports automatic cache invalidation. Use it on `POST`, `PUT`, or `PATCH` tools.
+ToolPlane supports automatic cache invalidation. Use it on `POST`, `PUT`, or `PATCH` tools.
 
 **Example: Invalidating "Get Invoices" when a new one is created.**
 
@@ -64,11 +64,11 @@ ERPBridge supports automatic cache invalidation. Use it on `POST`, `PUT`, or `PA
 
 ## 🛠 Management with `bridgectl`
 
-The developer CLI provides tools to monitor and manage the cache.
+Use the developer CLI to monitor and manage the cache.
 
 ### Check Cache Statistics
 
-Shows counts of cached keys and memory usage.
+Read the cached key counts and memory usage:
 
 ```bash
 bridgectl cache stats
@@ -76,7 +76,7 @@ bridgectl cache stats
 
 ### Flush Cache
 
-Clears the cache for a specific tool or an entire module.
+Clear the cache for a specific tool or an entire module:
 
 ```bash
 # Flush specific tool (positional argument)
@@ -103,19 +103,18 @@ The cache endpoints work with both backends:
 Environment-backed tools keep the normal cache behavior. A tool with
 `security.credentialSource: file` bypasses cache reads and writes. A tool with
 an active authenticated file-backed plugin binding also bypasses the cache.
-This prevents a response produced with an earlier file value from being served
-after rotation. Cache keys never contain credential values, file contents, or
+This prevents the cache from serving a response produced with an earlier file
+value after rotation. Cache keys never contain credential values, file contents, or
 file metadata.
 
-File resolution happens immediately before the outbound operation. A complete
-file replacement observed by ERPBridge is used by the next request; missing,
-empty, invalid, control-character, non-regular, or oversized files fail before
-transport. Provider-managed CSI updates are eventual and are outside cache
-coordination. Multiple replicas can observe different versions temporarily.
+File resolution happens immediately before the outbound operation. After ToolPlane observes a complete file replacement, the next request uses
+that replacement. Missing, empty, invalid, control-character, non-regular, or
+oversized files fail before transport. Provider-managed CSI updates take effect over time. Cache coordination does
+not control these updates. Multiple replicas can observe different versions temporarily.
 
 ## 🏗 System Architecture
 
-1. **ERPBridge Server**: Orchestrates the middleware and selects the configured backend.
+1. **ToolPlane Server**: Orchestrates the middleware and selects the configured backend.
 2. **Redis or MemoryBackend**: Stores the hashes and responses for high-speed retrieval.
 
 For deployment details, see the [Docker Guide](./docker.md).

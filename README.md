@@ -1,4 +1,6 @@
-# ERPBridge: AI-to-ERP Model Context Protocol (MCP) Middleware
+# ToolPlane: Declarative and Non-invasive ERP-to-MCP Control Plane
+
+<a id="erpbridge-ai-to-erp-model-context-protocol-mcp-middleware"></a>
 
 [![Build Status](https://github.com/nmdra/ERPBridge/actions/workflows/release.yml/badge.svg)](https://github.com/nmdra/ERPBridge/actions/workflows/release.yml)
 [![Go Version](https://img.shields.io/badge/Go-1.26.2+-00ADD8?style=flat&logo=go)](https://go.dev/)
@@ -6,20 +8,27 @@
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--03--26-blue)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**ERPBridge** is a middleware that connects legacy Enterprise Resource Planning (ERP) systems to Agentic AI. It uses the **Model Context Protocol (MCP)** to turn complex ERP APIs into discoverable, type-safe tools. AI agents such as Claude, Cursor, or custom LLM chains can use these tools.
+**Toolplane(previously known as ERPBridge)** is a declarative, non-invasive control plane that connects legacy Enterprise Resource Planning (ERP) systems to AI agents. It uses the **Model Context Protocol (MCP)** to expose existing ERP APIs as tools with input schemas. AI agents such as Claude, Cursor, or custom LLM chains can discover and call these tools.
+
+ToolPlane is the current project name. Existing commands, configuration keys,
+API namespaces, package names, and repository URLs retain their ERPBridge names.
+This documentation rename does not change those interfaces.
 
 ## 🚀 Key Features
 
-- **Model Context Protocol (MCP) Native**: Supports the latest MCP specifications.
-- **High-Performance Caching**: Exact-match caching layer using Redis and canonical SHA-256 hashing. It reduces redundant ERP API calls.
-- **Rate Limiting**: Built-in per-session rate limiting using the token bucket algorithm. It protects legacy ERP infrastructure.
-- **Resilience & Fault Tolerance**: Circuit breakers (Sony/GoBreaker) and retry logic (Avast/Retry-Go) handle the instability of legacy systems.
-- **Secure Log Streaming**: Real-time structured log streaming to MCP clients. Sensitive data (API keys, passwords, PII) is redacted with `masq` and RFC 5424 level control.
+- **Model Context Protocol (MCP) Native**: Negotiates supported MCP protocol versions. See [AI Integration](#-ai-integration) for the base and negotiated versions.
+- **Exact-Match Caching**: Uses an exact-match cache with Redis or a bounded in-memory LRU backend. Canonical SHA-256 hashing identifies tool arguments. Caching reduces repeated ERP API calls when enabled for a tool.
+- **Rate Limiting**: Uses the token bucket algorithm to protect ERP systems. Authenticated callers share a limit across their sessions. Other calls use a session limit or a shared anonymous limit.
+- **Resilience & Fault Tolerance**: Uses circuit breakers (Sony/GoBreaker) and retries (Avast/Retry-Go). The connector retries eligible failures only for GET, HEAD, and OPTIONS. It does not automatically replay POST, PUT, PATCH, or DELETE.
+- **Secure Log Streaming**: Streams structured logs to MCP clients. Uses `masq` to redact sensitive data, including API keys, passwords, and PII. RFC 5424 levels control log delivery.
 - **Multi-Transport Support**:
-  - **Streamable HTTP**: For remote agents and web-based integrations.
-  - **Stdio**: Native integration for local IDEs and CLI-based agents.
-- **Developer-Centric CLI (`bridgectl`)**: A tool for environment management, schema validation, tool invocation, and real-time monitoring.
-- **Metrics & Monitoring**: Native Prometheus integration for tracking performance and health.
+  - **Streamable HTTP**: Connects remote agents and web clients.
+  - **Stdio**: Connects local IDEs and CLI agents.
+- **Management CLI (`bridgectl`)**: Manages environments, validates schemas, calls tools, and monitors the server.
+- **Metrics & Monitoring**: Exposes Prometheus metrics for performance and health.
+- **External Plugins**: Calls separately deployed plugin processes through exact-version resources and bindings. ToolPlane does not install or start plugin processes.
+- **ERPBridge Console**: Provides a read-only view of configured deployments through `bridgectl web`.
+- **Management MCP Server**: Exposes management operations through `bridgectl mcp --stdio`. Write groups are disabled by default.
 
 ## 🏗️ Project Architecture
 
@@ -34,9 +43,13 @@ graph TD
     G -->|Reconciliation| B
 ```
 
-- **`services/erpbridge-server/`**: The core Go service. It acts as the MCP gateway and Declarative Control Plane.
-- **MockERP**: An independent FastAPI service in [`nmdra/mockerp`](https://github.com/nmdra/mockerp). ERPBridge runs its pinned GHCR image as the legacy ERP dependency.
-- **`tools/bridgectl/`**: Management CLI for developers and AI agents (Kubernetes-style tool management).
+The diagram shows the Redis cache backend. If Redis is not configured, the
+server uses a bounded in-memory LRU cache. See [Exact Match Caching](./docs/caching.md)
+for cache scope, expiration, and credential-related bypass rules.
+
+- **`services/erpbridge-server/`**: The core Go service. It provides the MCP gateway and declarative control plane.
+- **MockERP**: An independent FastAPI service in [`nmdra/mockerp`](https://github.com/nmdra/mockerp). ToolPlane uses its pinned GHCR image as the legacy ERP dependency.
+- **`tools/bridgectl/`**: The management CLI for developers and AI agents. It uses Kubernetes-style resource commands.
 - **`internal/`**: Go libraries for configuration, protocol handling, caching, and resilience.
 
 ## 🛠️ Getting Started
@@ -48,40 +61,44 @@ local development prerequisites below.
 ### Prerequisites
 
 - **Go**: 1.26.2+
-- **Docker & Docker Compose**: For containerized deployment.
-- **Redis**: Optional for the caching layer. Without it, the server uses a bounded in-memory LRU cache.
-- **SQLite**: (Built-in) used for the Tool Registry.
+- **Docker & Docker Compose**: Required for container deployment.
+- **Redis**: Optional. Without Redis, the server uses a bounded in-memory LRU cache.
+- **SQLite**: Built in. Stores the tool registry.
 
 ### Quick Start (Docker)
 
-The fastest way to run the full stack is Docker Compose:
+Use Docker Compose to run the full stack:
 
 ```bash
 make dev-up
 ```
 
-This non-interactive bootstrap generates ephemeral MockERP credentials when no
-credential source is provided, validates Compose, force recreates the stack,
-and waits for both service health endpoints. Direct `docker compose` use
-requires `MOCK_ERP_CREDENTIALS_JSON` or `MOCK_ERP_CREDENTIALS_FILE`; Compose
-reads quoted `.env` values directly, so do not source that file.
+If no credential source is supplied, this non-interactive bootstrap generates
+temporary MockERP credentials. The bootstrap validates the Compose configuration,
+force recreates the stack, and waits for both service health endpoints.
+Direct `docker compose` use requires `MOCK_ERP_CREDENTIALS_JSON` or
+`MOCK_ERP_CREDENTIALS_FILE`. Compose reads quoted `.env` values directly.
+Do not source that file.
 
 This launches:
 
-- **ERPBridge Server**: `http://localhost:8080`
+- **ToolPlane server**: `http://localhost:8080`
 - **Mock ERP**: `http://localhost:8081`
 - **Redis**: Port `6379`
 
-Then build the CLI and load the default schemas:
+Then build the CLI. Generate and apply the default tool manifests:
 
 ```bash
 make build
 make generate-tools
 ```
 
-> **Note:** `schemas/` is not tracked by git. `make generate-tools` fetches the pinned MockERP OpenAPI contract from GitHub before generating tools. Override `MOCK_ERP_VERSION` and `MOCK_ERP_OPENAPI_URL` together when upgrading. See the [Onboarding Guide](./docs/onboarding.md) for the full workflow.
+> **Note:** Git does not track `schemas/`. Before it generates tools, `make generate-tools` downloads the pinned MockERP OpenAPI contract from GitHub. The task generates one temporary manifest and applies it once. When you upgrade MockERP, override `MOCK_ERP_VERSION` and `MOCK_ERP_OPENAPI_URL` together. See the [Onboarding Guide](./docs/onboarding.md) for the full procedure.
 
 ### Local Development
+
+`make run-mock` uses Docker Compose. Supply the MockERP credentials described
+in [Quick Start (Docker)](#quick-start-docker) before you run this command.
 
 1. **Start the pinned MockERP image**:
 
@@ -89,7 +106,7 @@ make generate-tools
    make run-mock
    ```
 
-2. **Run ERPBridge Server**:
+2. **Run the ToolPlane server**:
 
    ```bash
    # Server creates data/erpbridge.db automatically
@@ -119,7 +136,7 @@ make generate-tools
 
 ### Local Agents (Claude/Cursor)
 
-Configure your agent to use the Stdio transport via the server binary:
+Configure the agent to use the Stdio transport through the server binary:
 
 ```bash
 erpbridge-server --stdio
@@ -127,23 +144,43 @@ erpbridge-server --stdio
 
 ### Remote / Web Clients
 
-Connect via Streamable HTTP:
+Connect through Streamable HTTP:
 
 - **Base URL**: `http://localhost:8080/mcp/`
 - **Transport**: MCP 2025-03-26 (the server negotiates up to `2025-11-25`)
 
-For detailed setup instructions, including Postman collections, see the [Connectivity & Transport Guide](./docs/connectivity.md).
+For setup instructions and Postman collections, see the [Connectivity & Transport Guide](./docs/connectivity.md).
+
+The ERP tool server and the management MCP server have different purposes.
+Use `erpbridge-server --stdio` or `/mcp/` to call ERP tools. Use
+`bridgectl mcp --stdio` for management operations. Read-only management tools
+are enabled by default. An operator must explicitly enable a write group.
+See the [Management MCP Server guide](./docs/bridgectl-mcp.md).
+
+When `API_AUTH_TOKEN` is unset or empty, HTTP authentication is disabled.
+Before you expose HTTP endpoints, configure bearer authentication and scoped
+tokens as described in the [API Token Guide](./docs/tokens.md).
 
 ## 📚 Documentation
 
-- [**Documentation Wiki**](./docs/README.md) - Central hub for all guides.
-- [**CLI Reference**](./docs/cli/bridgectl.md) - Detailed `bridgectl` command documentation.
-- [**Management MCP server**](./docs/bridgectl-mcp.md) - Serve ERPBridge management operations to an AI coding agent.
-- [**AI Agent Guide**](./AGENTS.md) - Best practices for agentic integration.
-- [**AI Skills**](./skills/bridgectl-ops/SKILL.md) - Operational guidance for AI agents that manage and troubleshoot ERPBridge.
-- [**Docker Deployment**](./docs/docker.md) - Production-ready deployment strategies.
-- [**Environment Variables**](./docs/environment-variables.md) - Reference for all server and CLI variables.
-- [**REST API Reference**](./docs/api.md) - Direct HTTP endpoints of the server.
+- [**Documentation Wiki**](./docs/README.md) - Index of the developer guides.
+- [**CLI Reference**](./docs/cli/bridgectl.md) - `bridgectl` command reference.
+- [**Management MCP server**](./docs/bridgectl-mcp.md) - Expose ToolPlane management operations to an AI coding agent.
+- [**AI Agent Guide**](./AGENTS.md) - Agent integration and repository development rules.
+- [**AI Skills**](./skills/bridgectl-ops/SKILL.md) - Instructions for AI agents that manage and troubleshoot ToolPlane.
+- [**Docker Deployment**](./docs/docker.md) - Container deployment instructions and production requirements.
+- [**Environment Variables**](./docs/environment-variables.md) - Server and CLI environment variable reference.
+- [**REST API Reference**](./docs/api.md) - Direct HTTP endpoint reference.
+
+## Related Projects
+
+| Project | Purpose |
+| --- | --- |
+| [ERPBridge Plugins](https://github.com/nmdra/ERPBridge-Plugins) | External plugin processes and integration examples. Deploy plugins separately from the ToolPlane server. |
+| [ERPBridge SDK](https://github.com/nmdra/erpbridge-sdk) | TypeScript client with MCP tool calls and typed REST clients. |
+| [ERPBridge Documentation](https://github.com/nmdra/erpbridge-docs) | Source for the public documentation site. |
+| [Public Documentation Site](https://toolplane.nimendra.online/) | Published server, `bridgectl`, plugin, and SDK guides. |
+| [MockERP](https://github.com/nmdra/mockerp) | Test ERP service and the pinned OpenAPI contract. |
 
 ## 🛠️ Development & Contributing
 
@@ -157,7 +194,7 @@ make test
 
 ### Quality Control
 
-We enforce quality with `golangci-lint` and `lefthook` for pre-commit checks.
+Use `golangci-lint` and `lefthook` for pre-commit checks.
 
 ```bash
 # Install hooks

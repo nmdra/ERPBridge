@@ -3,10 +3,10 @@
 The ERPBridge Console is a read-only local web interface for `bridgectl`.
 It shows configured contexts, deployment state, MCP tools, logs, live metrics,
 and API-to-MCP paths. It also shows safe external plugin and binding metadata
-when the selected deployment supports the completed plugin contract. The
-homepage states this boundary clearly: use the console to monitor ERPBridge and
-use `bridgectl` to configure or modify it.
-The CLI remains the automation and mutation interface.
+when the selected deployment supports the completed plugin contract.
+Use the console to monitor ToolPlane. Use `bridgectl` to configure or change
+ToolPlane, as the homepage states. The CLI remains the interface for automation
+and changes.
 
 ## Frontend development
 
@@ -32,26 +32,26 @@ run the frontend build before GoReleaser and reject a fallback asset.
 
 ## Workspace, themes, and accessibility
 
-The console uses an operations-first workspace. Monitor contains Overview,
-Logs, and Metrics. Inventory contains Contexts, Tools, and Plugins. Diagnose
-contains Integration topology. The visible Contexts page lists configured
-`bridgectl` contexts; `/deployments` remains as a compatible deep link. The
-context selector starts from the configured current context and applies browser-
-local changes without changing persistent CLI configuration.
+The console groups pages by task. Monitor contains Overview, Logs, and Metrics.
+Inventory contains Contexts, Tools, and Plugins. Diagnose contains Integration
+topology. The visible Contexts page lists configured `bridgectl` contexts.
+`/deployments` remains as a compatible deep link. The context selector starts
+from the configured current context. Changes apply only in the browser. They do
+not change the saved CLI configuration.
 
 The Overview dashboard starts with context health and freshness, then shows
 active tools, cache keys, server version, current-session rates, and safe
-investigation links. Partial refresh failures retain the last safe observation
-and identify it as stale. Inventory and topology pages expose Refresh and Retry
-controls and show the last observation time for their bounded snapshots.
+investigation links. If part of a refresh fails, the console keeps the last
+safe observation and marks it as stale. Inventory and topology pages provide
+Refresh and Retry controls. They show the last observation time for their
+bounded snapshots.
 
-The console uses green as its brand accent and keeps success, warning, danger,
-and information colors semantically distinct. It defaults to light mode and
-supports direct light, dark, and system choices. Preferences are stored in
-browser storage. The sidebar becomes an accessible navigation drawer on small
-screens, and the console provides a skip link, visible keyboard focus,
-`aria-current` navigation, reduced-motion support, and text alternatives for
-charts and topology.
+The console uses green as its brand accent. It uses distinct colors for success,
+warning, danger, and information. It defaults to light mode. You can select
+light, dark, or system mode. The console saves preferences in browser storage.
+On small screens, the sidebar becomes an accessible navigation drawer.
+The console provides a skip link, visible keyboard focus, `aria-current`
+navigation, reduced-motion support, and text alternatives for charts and topology.
 
 Status badges include text and an icon. Color does not carry status meaning by
 itself. Graph and chart pages provide an HTML list or table alternative.
@@ -74,11 +74,11 @@ Kubernetes, Docker, or cloud deployments.
 
 ## Windows use and validation
 
-Install the Windows CLI using the [PowerShell guide](./windows.md), then run
-`& "C:\path with spaces\bridgectl.exe" web --no-open` with your actual path.
-No local ERPBridge server, Bash, or Make is needed to monitor a configured remote
-deployment. Open the capability URL privately, keep the process running, and
-use Ctrl+C to stop it. Do not record the URL in shared logs.
+Install the Windows CLI with the [PowerShell guide](./windows.md).
+Then run `& "C:\path with spaces\bridgectl.exe" web --no-open` with your actual path.
+You do not need a local ToolPlane server, Bash, or Make to monitor a configured
+remote deployment. Open the capability URL privately. Keep the process running.
+To stop it, use Ctrl+C. Do not record the URL in shared logs.
 
 Native x64 CI passed the no-open Console and embedded-asset smoke checks; see
 [validation evidence](./windows.md#validation-status). Default-browser launch
@@ -90,7 +90,7 @@ inherited directory ACLs, not Unix permission bits.
 ## Security boundary
 
 The console server is a local backend-for-frontend. Browser code never receives
-ERPBridge bearer tokens, ERP credentials, registry credentials, or raw upstream
+ToolPlane bearer tokens, ERP credentials, registry credentials, or raw upstream
 responses.
 
 Each launch creates a high-entropy capability. The URL contains the capability
@@ -103,15 +103,15 @@ created. It rejects cross-origin `Origin` values. It sends a content security
 policy, disables framing, prevents MIME sniffing, disables referrer forwarding,
 and marks console responses as non-cacheable.
 
-The configured context file is trusted operator input. Browser requests cannot
-select an arbitrary upstream URL. The server accepts only known context names
-and fixed read operations. It validates configured `Server` and `MCPServer`
-URLs, disables redirects, forwards no browser headers, and bounds response
-sizes.
+The server trusts the operator's configured context file. Browser requests
+cannot select an arbitrary upstream URL. The server accepts only known context
+names and fixed read operations. It makes sure that configured `Server` and
+`MCPServer` URLs are valid. It disables redirects, forwards no browser headers,
+and limits response sizes.
 
-The console does not add mutation routes. It cannot apply or delete tools, flush
-cache, invoke tools, create or revoke tokens, deploy plugins, or restart a
-deployment.
+The console does not add routes that change deployment state. It cannot apply
+or delete tools, flush cache, invoke tools, create or revoke tokens, deploy
+plugins, or restart a deployment.
 
 ## Context and data sources
 
@@ -150,6 +150,9 @@ The browser uses these same-origin, read-only routes. Every route except
 The contexts and deployment routes return safe projections without upstream
 URLs or credentials.
 
+The console reloads configured contexts while it runs. If a configuration reload
+fails, it keeps the last valid snapshot and marks the context data as stale.
+
 | Route | Purpose |
 | --- | --- |
 | `GET /healthz` | Check the local console process. |
@@ -169,11 +172,11 @@ URLs or credentials.
 The console returns stable JSON error states for missing contexts, unavailable
 endpoints, unauthorized reads, timeouts, malformed upstream data, and bounded
 response failures. It does not return an upstream error body. Frontend requests
-preserve the safe BFF error code and message for retry guidance without displaying
-arbitrary response bodies. Logs, tools, and
-plugins use shared search/filter surfaces and distinguish empty results from
-filtered results. The Tools page renders the safe tool projection as a
-filterable table. Tool names link to a read-only manifest page with descriptive
+keep the safe BFF error code and message for retry guidance. They do not display
+arbitrary response bodies. Logs, tools, and plugins use shared search and filter
+controls. They distinguish empty results from results with no filter matches.
+The Tools page shows the safe tool projection in a filterable table.
+Tool names link to a read-only manifest page with descriptive
 guidance, input fields, execution paths, security roles, routing hints, cache
 settings, and lifecycle metadata. The page does not invoke or mutate tools.
 Manifest projections omit credential references, default values, raw output
@@ -188,8 +191,8 @@ MCP client -> MCP tool -> ERP API component -> exact ERP endpoint
                     `-> plugin binding -> external plugin -> result
 ```
 
-The server resolves the local API registry for the selected Console context,
-then matches each tool execution method and endpoint against that registry. It
+The server finds the local API registry for the selected console context.
+It then matches each tool execution method and endpoint against that registry. It
 normalizes methods, trailing slashes, default ports, and configured ERP base
 substitutions before matching. A registry entry from another context is not
 used for the selected context.
@@ -200,8 +203,8 @@ Each relationship has one match state:
 - `base-prefix`: the server inferred a match from a configured base prefix.
   A root API registration can infer paths across HTTP methods, but the edge is
   not authoritative. For generated tools that share an ERP base, register the
-  API at that base/root URL. A path-specific registration only verifies that
-  path and can leave other working tool paths unresolved.
+  API at that base/root URL. A path-specific registration establishes a match only for
+  that path. It can leave other working tool paths unresolved.
 - `ambiguous`: more than one API entry matches. No API is selected as the
   winner.
 - `unresolved`: no safe API match exists.
@@ -224,16 +227,17 @@ search, and filters expose additional components. Focused layouts collapse
 collections larger than ten members and can expand them on demand.
 
 The topology opens as a bounded component overview. From a Tool Details page,
-select **View in topology** to open that tool's focused execution path. Select
-a component or MCP tool in the component sidebar to drill down to its connected tools, exact ERP
-endpoint, bindings, plugins, and relationships. Selecting an MCP tool narrows
-the canvas to its direct execution path: MCP transport, that tool, its ERP API
-component, its exact ERP endpoint, and any attached plugin binding and plugin.
+select **View in topology** to open that tool's focused execution path.
+To see connected tools, the exact ERP endpoint, bindings, plugins, and
+relationships, select a component or MCP tool in the component sidebar.
+When you select an MCP tool, the canvas shows only its direct execution path:
+MCP transport, that tool, its ERP API component, its exact ERP endpoint, and any
+attached plugin binding and plugin.
 The relationship table remains complete. High-cardinality tool, binding, and
 plugin relationships are represented by expandable groups until the user
-requests the individual nodes. Selecting a node in the canvas or relationship
-list shares the same selection and inspector; Escape or Back to compact overview
-returns to the overview.
+requests the individual nodes. The canvas and relationship list use the same
+node selection and inspector. To return to the overview, use Escape or Back to
+compact overview.
 
 React Flow renders the read-only canvas and ELK computes relationship-aware
 layered positions. The focused graph preserves the chain from each MCP tool to
@@ -250,12 +254,13 @@ Nodes, edges, component buttons, and controls have keyboard focus and accessible
 labels. The raw relationship table remains available as the complete non-canvas
 alternative.
 
-Use **Show filters** to reveal the search field and the node kind,
-match-confidence, and context-state filters when you need to narrow the graph. The canvas and accessible relationship list share
-selection state: selecting a node highlights its immediate relationships, while
-selecting an edge shows its source, target, match confidence, authority, context
-state, and safe endpoint paths. The BFF reports when safety caps omit nodes or
-edges, so an incomplete graph is not mistaken for a complete one. The BFF reads
+To narrow the graph, use **Show filters**. This control shows the search field
+and the node kind, match-confidence, and context-state filters. The canvas and
+accessible relationship list share selection state. When you select a node, the
+console highlights its immediate relationships. When you select an edge, the
+console shows its source, target, match confidence, authority, context state,
+and safe endpoint paths. If safety limits omit nodes or edges, the BFF reports
+this. This prevents an incomplete graph from appearing complete. The BFF reads
 the selected context's local registry server-side and strips all registry
 authentication fields. The canvas loads on demand so the list view remains
 available on small or keyboard-only clients.
@@ -264,19 +269,19 @@ available on small or keyboard-only clients.
 
 The console projects log events into a fixed safe shape. The shape contains a
 timestamp, level, component, tool name, request ID, and redacted summary. The
-Logs page sorts events by timestamp with the most recent events first; events
-without a valid timestamp appear last. It filters first, then paginates the
-bounded client-side result at 50 events per page. The page range and Previous /
-Next controls show the current range, and live-log updates keep the current
-page when it remains valid while filters reset to page 1. It omits unknown
+Logs page sorts events by timestamp, with the most recent events first.
+Events without a valid timestamp appear last. The page filters first, then
+paginates the bounded client-side result at 50 events per page. The page range
+and Previous / Next controls show the current range. Live-log updates keep the
+current page when it remains valid. Filters reset to page 1. It omits unknown
 fields, raw payloads, credentials, personal data, and malformed or oversized
 events. Live streams use a capability-protected fetch stream and stop when the
 browser disconnects. The server limits concurrent streams.
 
-Metrics are live scrape samples. The console preserves cumulative totals and
-calculates rates only from successive samples during the current browser
-session. It joins each rate to the complete metric label set, shows compact
-responsive session trends, and keeps a labeled table and text summary as the
+Metrics are live scrape samples. The console keeps cumulative totals.
+It calculates rates only from successive samples during the current browser
+session. It joins each rate to the complete metric label set. It shows compact
+responsive session trends. A labeled table and text summary provide an
 accessible alternative. The metric table shows 25 samples per page after the
 source list is prepared and includes its current page range. It uses histogram
 sum and count for average latency. It does not claim percentile latency or
@@ -286,16 +291,16 @@ historical Prometheus data. Unknown metric families do not fail the snapshot.
 
 The Plugins page reads the final plugin and `PluginBinding` list routes. Each
 plugin entry links to an exact `/plugins/<name>/<version>` detail page. The
-page shows exact version, active state, deployment type, timeout,
+page shows the exact version, active state, deployment type, timeout,
 endpoint/configuration booleans, unknown health, and matching bindings. Plugin
 metadata is kept out of the Tools inventory. A deployment that returns `404`
 for either route shows an unavailable feature state instead of a failed
 console.
 
 The plugin and binding tables paginate their bounded client-side lists at 25
-rows per page. Filtering or source changes reset or clamp the page, and each
-table shows its page range with accessible Previous and Next controls. The
-plugin view exposes only `endpointConfigured` and `configurationPresent`
+rows per page. Filtering or source changes reset the page or keep it within the
+available range. Each table shows its page range with accessible Previous and
+Next controls. The plugin view exposes only `endpointConfigured` and `configurationPresent`
 booleans. It does not expose plugin endpoints, static binding configuration,
 credentials, or invocation payloads. It reports plugin health as `unknown`
 unless the final plugin API provides an approved health field.

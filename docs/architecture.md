@@ -1,14 +1,19 @@
-# ERPBridge V2 Architecture: Declarative Control Plane
+<a id="erpbridge-v2-architecture-declarative-control-plane"></a>
 
-ERPBridge V2 adopts a **Declarative Control Plane** architecture, inspired by Kubernetes. This design moves away from static, file-system-bound configurations toward a live API-managed resource system for MCP tools.
+# ToolPlane V2 Architecture: Declarative Control Plane
+
+ToolPlane V2 uses a **Declarative Control Plane** architecture based on Kubernetes concepts. An API manages MCP tool resources instead of static file-system configurations.
+
+ToolPlane is the current project name. Existing ERPBridge commands, environment
+variables, resource namespaces, and paths retain their names.
 
 For implementation details about revision binding and execution authority, read [ToolPlane conformance mechanisms](./toolplane-conformance.md).
 
 ## 🏗 High-Level Overview
 
-The system is divided into three distinct layers:
+The system has three layers:
 
-1. **Management Layer (The CLI)**: Developers use `bridgectl` to declare the desired state of the system by "applying" YAML/JSON resource definitions.
+1. **Management Layer (The CLI)**: Developers use `bridgectl` to apply YAML/JSON resource definitions. These definitions declare the desired system state.
 2. **Control Plane (The Server)**: A centralized API server stores tool definitions in a persistent SQLite database, validates them against strict admission rules, and manages versioning.
 3. **Runtime Layer (MCP Engine)**: A background reconciliation controller keeps the active MCP server aligned with the desired state in the database.
 
@@ -16,7 +21,7 @@ The system is divided into three distinct layers:
 
 ## 🧩 Endpoint vs. Tool: Key Concepts
 
-One of the most important concepts in ERPBridge V2 is the distinction between registering an **API Endpoint** and applying an **MCP Tool**.
+Registering an **API Endpoint** and applying an **MCP Tool** are separate operations in ToolPlane V2.
 
 | Feature | **API Endpoint** (`api register`) | **MCP Tool** (`tool apply`) |
 | :--- | :--- | :--- |
@@ -29,9 +34,9 @@ One of the most important concepts in ERPBridge V2 is the distinction between re
 
 ### Why separate them?
 
-- **Technical vs. Semantic**: A single ERP API endpoint (e.g., `/api/v1/resource/Employee`) might be used by multiple MCP tools with different filters or versions.
-- **Safety**: Registering an API is a developer-only technical step. Applying a tool is a conscious decision to expose functionality to an AI agent.
-- **Lifecycle**: You can "discover" and test 100 API endpoints locally, but only "apply" the 5 that are safe and ready for the LLM to use.
+- **Technical vs. Semantic**: Multiple MCP tools can use one ERP API endpoint (e.g., `/api/v1/resource/Employee`) with different filters or versions.
+- **Safety**: Registering an API is a developer-only technical step. Applying a tool exposes its functionality to an AI agent.
+- **Lifecycle**: You can discover and test 100 API endpoints locally. You can then apply only the 5 that are safe and ready for the LLM to use.
 
 ---
 
@@ -39,27 +44,27 @@ One of the most important concepts in ERPBridge V2 is the distinction between re
 
 ### 1. Tool Resource Registry (The Source of Truth)
 
-Instead of loading files from a directory, the server maintains an internal **Tool Registry** backed by **SQLite**. This registry stores multiple versions of the same tool, allowing for safe rollouts and rollbacks.
+The server stores tool definitions in an internal **Tool Registry** backed by **SQLite**, not in a directory of files. The registry stores multiple versions of each tool for controlled rollouts and rollbacks.
 
 Each admitted name and version is immutable executable content identified by a canonical SHA-256 digest and server-authored admission record. A changed definition requires a new version. `IsActive` controls exact-revision eligibility, while `IsServing` selects the active revision used by future unqualified calls. Soft deletion retains the resource but removes execution authority.
 
 ### 2. Version resolver and invocation snapshot
 
-An unqualified request such as `list_employees` selects the operator-controlled serving revision, not the highest semantic version. Every active revision is also exposed through a protocol-safe exact name, and clients can bind an unqualified call with the digest published in MCP `_meta`. Exact requests never fall forward.
+An unqualified request such as `list_employees` selects the operator-controlled serving revision, not the highest semantic version. Every active revision also has a callable protocol-safe exact name. Clients can bind an unqualified call with the digest published in MCP `_meta`. Exact requests never select a later revision.
 
-ERPBridge clones the selected resource before argument validation and middleware construction. Validation, authorization, mapping, revision-scoped caching, response processing, and output use that one snapshot even if the serving pointer changes concurrently.
+ToolPlane clones the selected resource before argument validation and middleware construction. Validation, authorization, mapping, revision-scoped caching, response processing, and output use that one snapshot even if the serving pointer changes concurrently.
 
 ### 3. Visibility Filtering (JSON-RPC Interception)
 
-Because the underlying MCP runtime does not always support dynamic removal of tools from an active session, ERPBridge implements a **Visibility Filtering Layer**.
+ToolPlane uses a **Visibility Filtering Layer** because the underlying MCP runtime does not always support tool removal from an active session.
 
-- **The Problem**: Once a tool is registered in memory, standard libraries often provide no way to "unregister" it without a restart.
-- **The Solution**: ERPBridge wraps the MCP server's HTTP handler and intercepts the `tools/list` response. Before the JSON-RPC result reaches the client, ERPBridge parses the list and removes any tools marked as `IsActive = false` in the internal registry.
-- **Result**: The client receives a truthful list of tools. The list matches the desired state of the control plane. This works even when the underlying runtime still knows the "ghost" tools.
+- **The Problem**: A runtime library can retain a registered tool in memory until restart.
+- **The Solution**: ToolPlane wraps the MCP server's HTTP handler and intercepts the `tools/list` response. Before the JSON-RPC result reaches the client, ToolPlane parses the list and removes any tools marked as `IsActive = false` in the internal registry.
+- **Result**: The client receives a tool list that matches the control-plane state. The filter hides inactive tools even if the runtime retains them.
 
 ### 4. Final execution authority and target origin
 
-Immediately before connector entry, ERPBridge validates the final effective request origin against the origins bound at admission. This check includes `ERP_BASE_URL` rewrites. The authority wrapper forces the production connector to return redirect responses without following them.
+Immediately before connector entry, ToolPlane validates the final effective request origin against the origins bound at admission. This check includes `ERP_BASE_URL` rewrites. The authority wrapper forces the production connector to return redirect responses without following them.
 
 Withdrawal and connector commitment use one process-local synchronization boundary. If withdrawal commits first, the queued call fails with no connector entry. If connector commitment commits first, that call can complete before withdrawal is acknowledged. This is a single-process guarantee; it is not distributed revocation. Protected cache-hit revocation is outside this boundary and requires a separate release check.
 
@@ -73,7 +78,7 @@ The controller runs every 10 seconds. It compares the database state against the
 - If a tool is inactive (soft-deleted) or missing from SQLite, the controller deregisters it from the MCP runtime.
 - If a tool changes, the controller re-registers the new version.
 
-Each check uses a SHA-256 state hash from the store. The hash covers ordered tool, plugin, and binding identity, activity, update timestamp, and stored resource data. If the hash is unchanged, the controller skips the pass. This keeps the check cheap.
+Each check uses a SHA-256 state hash from the store. The hash covers ordered tool, plugin, and binding identity, activity, update timestamp, and stored resource data. If the hash is unchanged, the controller skips the pass. This reduces reconciliation work.
 
 The authenticated `/api/info` response exposes process-local reconciliation attempt count, last attempt, last success, safe error state, desired-state hash, observed generation, and convergence. Desired resources and soft-delete tombstones remain durable in SQLite; cycle timestamps and counters reset with the process. The periodic scan continues after failed intervals and can converge when dependencies recover without a restart.
 
@@ -83,7 +88,7 @@ The controller also runs immediately after a `tool apply` HTTP request. The tool
 
 ### 6. External response plugins
 
-ERPBridge invokes an already-running external plugin. The control plane stores
+ToolPlane invokes an already-running external plugin. The control plane stores
 only the plugin endpoint and exact version. It never installs, starts, upgrades,
 or schedules plugin code.
 
@@ -139,13 +144,13 @@ known.
 
 ## 🛠 Tool Generation & Templating
 
-ERPBridge uses a "Template-Based Generation" approach. When generating tools (especially in bulk from OpenAPI):
+ToolPlane uses template-based tool generation, including bulk generation from OpenAPI:
 
 1. **The Template**: A `Registered API` acts as the source of technical truth (URL, Auth, Module).
 2. **The Spec**: An `OpenAPI Definition` acts as the source of semantic truth (Paths, Parameters, Descriptions).
-3. **The Result**: The generator merges these, creating production-ready MCP tools that are pre-configured with your environment's connectivity and security settings.
+3. **The Result**: The generator combines these sources into draft MCP tools with the environment's connectivity and security settings. Review the drafts before applying them.
 
-This decoupling allows you to use the same OpenAPI spec to generate tools for different environments (Dev, Staging, Prod) simply by pointing to a different registered API.
+To generate tools for different environments (Dev, Staging, Prod), use the same OpenAPI spec with a different registered API.
 
 ### Safe onboarding boundary
 
@@ -172,16 +177,18 @@ removes its temporary resources on exit.
 ## 🔄 Lifecycle of a Tool Change
 
 1. **Define**: Developer creates a V2 YAML schema for a new tool.
-2. **Validate**: Runs `bridgectl tool validate -f tool.yaml` to check for syntax and admission rules (e.g., no raw secrets).
+2. **Validate**: Run `bridgectl tool validate -f tool.yaml`. Make sure that the schema meets syntax and admission rules (e.g., no raw secrets).
 3. **Apply**: Runs `bridgectl tool apply -f tool.yaml`.
-4. **Store**: The ERPBridge API validates the payload again and saves it to the SQLite `tools` table.
+4. **Store**: The ToolPlane API validates the payload again and saves it to the SQLite `tools` table.
 5. **Reconcile**: The background controller detects the new DB entry and registers it with the `mcp-go` runtime.
 6. **Execute**: AI agents now see the new tool and can invoke it immediately.
 
 ---
 
+<a id="security-design"></a>
+
 ## 🛡 Security Design
 
-- **Secret Decoupling**: Schemas never contain raw tokens or keys. They only contain a reference (`credentialRef`). The middleware resolves these references at the moment of execution using secure environment variables.
+- **Secret Decoupling**: Schemas never contain raw tokens or keys. They only contain a reference (`credentialRef`). At execution, the middleware resolves these references from environment variables or an explicitly configured mounted credential file.
 - **Admission Controllers**: The API server rejects any tool definition that contains suspicious strings (like `token` or `key=`) in its endpoint path. Plugin endpoints must be absolute `http` or `https` URLs without userinfo, query parameters, or fragments.
 - **Redaction**: Root, buffered, and MCP log sinks filter sensitive attributes using `internal/types/sensitive.go`. ERP request and response bodies are never logged.

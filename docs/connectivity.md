@@ -1,10 +1,13 @@
 # Connectivity & Transport Guide
 
-ERPBridge supports multiple transport protocols. It works with modern AI agents, IDEs, and standard developer tools like Postman.
+ToolPlane supports multiple transport protocols. AI agents, IDEs, and developer tools such as Postman can connect to it.
+
+ToolPlane was previously named ERPBridge. Commands, environment variables,
+paths, and API namespaces keep their existing names.
 
 ## 1. Streamable HTTP (Modern MCP)
 
-This transport is the MCP streamable HTTP specification. It suits stateless or web-friendly environments. It is the recommended way to connect Postman and other modern MCP clients.
+This transport implements the MCP Streamable HTTP specification. Use it to connect Postman and other HTTP MCP clients.
 
 - **Base URL:** `http://localhost:8080/mcp/`
 - **Handshake:** `POST /mcp/` with a JSON-RPC `initialize` request
@@ -18,8 +21,8 @@ This transport is the MCP streamable HTTP specification. It suits stateless or w
       stateful session.
 
 Set `CORS_ALLOWED_ORIGINS` to a comma-separated list of browser origins. An
-allowed preflight does not require a bearer token, but the following MCP
-request does when `API_AUTH_TOKEN` is configured. In open mode, the server
+allowed preflight does not require a bearer token. If `API_AUTH_TOKEN` is
+configured, the following MCP request requires a bearer token. In open mode, the server
 keeps the existing wildcard CORS behavior.
 
 The CORS policy applies to the MCP endpoint only. The management, direct
@@ -38,7 +41,7 @@ browser can complete its CORS negotiation without exposing credentials.
 
 ## 2. Stdio (Local Integration)
 
-Stdio is the preferred transport for local integrations. The client starts the ERPBridge server as a child process.
+Stdio is the preferred transport for local integrations. The client starts the ToolPlane server as a child process.
 
 - **Best For:** Claude Desktop, Cursor, and other IDE-integrated agents running locally.
 - **Usage:** Run the server with the `--stdio` flag.
@@ -47,9 +50,9 @@ Stdio is the preferred transport for local integrations. The client starts the E
 erpbridge-server --stdio
 ```
 
-The stdio stream reserves stdout for MCP JSON-RPC. ERPBridge writes its
-startup banner and diagnostics to stderr in this mode, so agents can parse
-stdout without a wrapper-specific preamble. HTTP bearer authentication does
+The stdio stream reserves stdout for MCP JSON-RPC. In this mode, ToolPlane
+writes its startup banner and diagnostics to stderr. Agents can parse stdout
+without a wrapper-specific preamble. HTTP bearer authentication does
 not apply to stdio; the child process must receive any upstream ERP
 credentials it needs through its environment.
 
@@ -58,7 +61,7 @@ Codex CLI, OpenCode, OpenClaw, and Hermes Agent configuration examples.
 
 ## 3. Direct API (Internal/CLI)
 
-The server exposes direct HTTP endpoints for internal management, performance monitoring, and the `bridgectl` CLI. These do not require a full MCP handshake.
+The server exposes direct HTTP endpoints for internal management, performance monitoring, and the `bridgectl` CLI. These endpoints do not require a full MCP handshake.
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
@@ -79,7 +82,7 @@ For the full endpoint reference, see the [REST API Reference](./api.md).
 
 ## 4. Protection & Limits
 
-ERPBridge includes built-in protection for underlying ERP systems.
+ToolPlane limits tool execution to protect downstream ERP systems.
 
 - **Rate Limiting:** Tool execution uses a token bucket. Authenticated HTTP
   requests are keyed by token principal; unauthenticated stateful MCP requests
@@ -100,14 +103,14 @@ These results may include the namespaced `com.erpbridge/error` metadata with a
 safe error type, retryability, and a bounded `retryAfterMs` value.
 
 ERP retries are bounded by three attempts and a 30-second overall deadline.
-`Retry-After` is honored when supplied. Automatic retries are limited to
-GET, HEAD, and OPTIONS so POST, PUT, PATCH, and DELETE operations are not
-blindly replayed without an idempotency mechanism.
+If the response supplies `Retry-After`, ToolPlane uses it. Automatic retries
+apply only to GET, HEAD, and OPTIONS. ToolPlane does not automatically repeat
+POST, PUT, PATCH, or DELETE operations without an idempotency mechanism.
 
 The 30-second overall connector deadline continues to cover response-body
 reads after headers arrive. The HTTP client's 15-second timeout and any earlier
-caller deadline or cancellation still apply. Returned bodies own the connector
-context until EOF, a read error, or `Close`; callers must always close the body,
+caller deadline or cancellation still apply. Returned bodies retain the connector
+context until EOF, a read error, or `Close`. Callers must always close the body,
 including when they reject a response or stop reading early. Calls that fail
 without returning a body release their context immediately. This prevents a
 successful upstream HTTP status from becoming a decoding failure because the
@@ -116,7 +119,7 @@ authentication, tool schemas, retry eligibility, or ERP write semantics.
 
 ## 5. Monitoring & Health
 
-Standard endpoints for system health and observability.
+Use these endpoints for system health and monitoring.
 
 - **Health Check:** `GET /mcp/health` (Returns `{"status": "ok"}`)
 - **Metrics:** `GET /metrics` (Prometheus formatted metrics)
@@ -124,8 +127,8 @@ Standard endpoints for system health and observability.
 Authenticated clients can open `/api/logs/stream` for SSE events. The server
 flushes headers before the first event and frames each event as
 `data: <JSON>\n\n`. The raw stream is distinct from the redacted Console BFF
-projection. A slow subscriber uses a bounded 100-event channel; new events are
-dropped when it is full.
+projection. Each subscriber uses a bounded 100-event channel. If it is full, the server
+drops new events.
 
 ## Summary Table
 
@@ -139,7 +142,7 @@ dropped when it is full.
 ## Management stdio transport
 
 `erpbridge-server --stdio` serves published ERP tools. `bridgectl mcp --stdio`
-is a separate, local management server for AI coding agents: it exposes the
-`bridgectl` management catalogue over stdio, keeps its diagnostics on stderr,
-and pins the session to the selected context. It does not serve ERP tools. See
+is a separate, local management server for AI coding agents. It exposes the
+`bridgectl` management catalogue over stdio. It writes diagnostics to stderr.
+The session keeps the selected context. It does not serve ERP tools. See
 the [management MCP server guide](./bridgectl-mcp.md).

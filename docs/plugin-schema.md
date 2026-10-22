@@ -1,6 +1,8 @@
 # External Plugin Resource Schema
 
-This page defines the control-plane and wire contract for a plugin that runs in a separate process or container. ERPBridge stores the plugin endpoint and does not start, install, or update plugin code.
+This page defines the control-plane and HTTP protocol contract for external plugins.
+A plugin runs in a separate process or container. ToolPlane stores its endpoint.
+ToolPlane does not start, install, or update plugin code.
 
 ## Plugin
 
@@ -24,12 +26,12 @@ spec:
     header: X-API-Key
 ```
 
-`metadata.type` is `api` or `docker`. If it is omitted, ERPBridge stores `api`.
-The type describes the plugin deployment. ERPBridge does not start, install, or
+`metadata.type` is `api` or `docker`. If it is omitted, ToolPlane stores `api`.
+The type describes how the plugin is deployed. ToolPlane does not start, install, or
 update Docker images.
 
 `spec.endpoint` must be an absolute `http` or `https` URL. It must not contain
-userinfo, query parameters, or a fragment. ERPBridge sends requests to
+userinfo, query parameters, or a fragment. ToolPlane sends requests to
 `/v1/process` below that endpoint. The timeout must be between 1 millisecond
 and 5 minutes.
 
@@ -40,21 +42,21 @@ accepts `env` (the default) or `file`. File mode reads
 `<ERPBRIDGE_CREDENTIALS_DIR>/<credentialRef>` for every invocation and never
 falls back to an environment value. Manifests never contain the credential
 value. Bearer authentication cannot set `header`. API-key authentication
-cannot use reserved HTTP headers. At invocation, ERPBridge resolves the
-reference and sends exactly one header: `Authorization: Bearer <value>` for
+cannot use reserved HTTP headers. At invocation, ToolPlane resolves the reference. It sends exactly one
+authentication header: `Authorization: Bearer <value>` for
 bearer auth, or the raw value in the API-key header. If the reference is
-missing or empty, or a file is invalid, ERPBridge makes no plugin request and
+missing or empty, or a file is invalid, ToolPlane makes no plugin request and
 reports a safe configuration error without exposing the credential.
 File-backed authenticated plugin bindings bypass the tool response cache. The
-sample `mock-plugin` service reads `MOCK_PLUGIN_API_KEY`; its ERPBridge resource
+sample `mock-plugin` service reads `MOCK_PLUGIN_API_KEY`; its ToolPlane resource
 must continue to reference the same runtime value through `PLUGIN_MOCK_API_KEY`.
 
-Plugin JSON and YAML manifests reject unknown fields. This prevents a misspelled
-or raw credential field from changing the authentication behavior.
+ToolPlane rejects unknown fields in plugin JSON and YAML manifests. This
+prevents misspelled fields or raw credential fields from changing authentication.
 
 A credentialed plugin requires `API_AUTH_TOKEN` and an authenticated admin
 request. Set `PLUGIN_ENDPOINT_ALLOWLIST` to comma-separated exact `host:port`
-values. The plugin endpoint must match one value before ERPBridge stores it.
+values. Before ToolPlane stores the plugin, its endpoint must match one value.
 A `raw_response` binding always requires the same configured API token, an
 authenticated admin control-plane request, an active HTTP-backed tool, and an
 explicit object-shaped output schema. Its plugin endpoint must be allowlisted
@@ -89,9 +91,8 @@ The control plane accepts `raw_response` and `after_response` phases. Raw
 bindings run before response normalization; after-response bindings run after a
 successful tool result has passed its output schema. Active bindings use
 ascending priority order within each phase. A raw binding must target an
-HTTP-backed tool with an explicit object-shaped final output schema. The default failure policy is
-`continue`; it returns the original schema-valid result when plugin processing
-fails. `fail` returns a generic tool error: direct invocation uses HTTP `500`,
+HTTP-backed tool with an explicit object-shaped final output schema. The default failure policy is `continue`. If plugin processing fails, this
+policy returns the original result only when that result satisfies the schema. `fail` returns a generic tool error: direct invocation uses HTTP `500`,
 while MCP keeps HTTP `200` with `result.isError=true`.
 Plugin resources are versioned declarative records. Bindings are named
 declarative records that reference exact plugin and tool versions. A soft delete
@@ -148,10 +149,10 @@ The plugin must return a JSON object with a `result` member:
 The protocol does not include original tool arguments, inbound headers, caller
 identity, caller tokens, or ERP credentials. Authentication headers are
 transport metadata and are not included in the JSON payload. Request and
-response JSON are limited to 1 MiB. Calls use the invocation context and
-resource timeout, disable redirects, and do not retry.
+response JSON are limited to 1 MiB. Calls use the invocation context and resource timeout. Calls do not follow
+redirects or retry.
 
-Raw bindings can inspect terminal HTTP responses, but successful response
+Raw bindings can inspect terminal HTTP responses. Successful response
 normalization and after-response bindings apply only to 2xx responses. Raw and
 after-response bindings run only on a cache miss. The cache stores the final
 transformed MCP result. Applying, updating, or deleting
@@ -163,5 +164,4 @@ Use `bridgectl plugin apply|get|delete|validate` for plugin resources. Plugin
 identities use `name@version`. Use `bridgectl plugin binding
 apply|get|delete|validate` for named bindings. Apply accepts JSON, YAML
 sequences, multi-document YAML, and directories of resource files. Validate
-accepts a JSON or YAML resource file. Use `--hard --yes` to skip the
-hard-delete confirmation.
+accepts a JSON or YAML resource file. To skip the hard-delete confirmation, use `--hard --yes`.

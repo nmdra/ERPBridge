@@ -2,13 +2,15 @@
 
 ## Status
 
-This document describes the ToolPlane changes in the current ERPBridge source tree. It does not describe a published release.
+This document describes the ToolPlane changes in the current ToolPlane source tree. It does not describe a published release.
 
-The changes bind an admitted MCP tool revision to one runtime invocation. They also define a process-local boundary between withdrawal and ERP connector entry.
+The mechanisms bind an admitted MCP tool revision to one runtime invocation.
+They also define a process-local boundary between withdrawal and ERP connector
+entry.
 
 ## Scope
 
-The implementation adds these mechanisms:
+The implementation provides these mechanisms:
 
 1. An immutable admission digest for each tool name and version.
 2. A separate serving pointer for unqualified MCP calls.
@@ -24,7 +26,7 @@ The implementation does not provide distributed revocation. It does not provide 
 
 `POST /apis/erpbridge.io/v1/tools` is the admission operation. The authenticated caller is the reviewing actor.
 
-ERPBridge validates the resource and calculates a SHA-256 digest. The canonicalization identifier is `erpbridge-tool-json-v1`.
+ToolPlane validates the resource and calculates a SHA-256 digest. The canonicalization identifier is `erpbridge-tool-json-v1`.
 
 The digest includes executable fields:
 
@@ -58,9 +60,11 @@ The server writes these fields after admission:
 }
 ```
 
-An identical apply is idempotent. Changed executable content with the same name and version returns HTTP `409` and `REGISTRY_CONFLICT`.
+Applying identical content is idempotent. If executable content changes under
+the same name and version, the request returns HTTP `409` and
+`REGISTRY_CONFLICT`.
 
-Create a new semantic version when executable content changes. ERPBridge does not replace an admitted revision.
+Create a new semantic version when executable content changes. ToolPlane does not replace an admitted revision.
 
 ## Activation and serving selection
 
@@ -78,15 +82,16 @@ An unqualified call resolves only the serving revision. It does not select the h
 
 ## Exact revision discovery and calls
 
-ERPBridge registers every active revision with a protocol-safe exact name:
+ToolPlane registers every active revision with a protocol-safe exact name:
 
 ```text
 <tool-name>.rev_<base64url-semver>
 ```
 
-These exact names stay callable but are hidden from `tools/list` by default, so a client sees one
-entry per tool name. Set `MCP_ADVERTISE_REVISION_ALIASES=true` to list them. Digest binding below
-pins a revision without relying on the exact name.
+Exact names remain callable. By default, `tools/list` hides them, so a client
+sees one entry per tool name. To list exact names, set
+`MCP_ADVERTISE_REVISION_ALIASES=true`. The digest binding described below
+selects a revision without its exact name.
 
 The unqualified serving tool and each exact tool include these MCP `_meta` fields:
 
@@ -110,7 +115,9 @@ A client can bind an unqualified `tools/call` request to a discovered digest:
 }
 ```
 
-An exact-name or digest-bound request executes that active revision. An unknown, stale, or inactive revision fails and requests rediscovery. ERPBridge does not fall forward to another revision.
+An exact-name or digest-bound request executes the selected active revision.
+If the revision is unknown, stale, or inactive, the request fails and requires
+rediscovery. ToolPlane does not select another revision.
 
 The direct compatibility endpoint accepts `name@version` for an exact version.
 
@@ -118,7 +125,7 @@ The direct compatibility endpoint accepts `name@version` for an exact version.
 
 `ToolRegistry.Add` stores a clone of the tool resource. `ToolRegistry.Resolve` returns a new clone.
 
-The MCP handler resolves one serving, exact-name, or digest-bound revision before it constructs middleware. ERPBridge validates arguments against that selected clone rather than against a mutable unqualified alias in the MCP SDK. The same clone controls:
+The MCP handler resolves one serving, exact-name, or digest-bound revision before it constructs middleware. ToolPlane validates arguments against that selected clone rather than against a mutable unqualified alias in the MCP SDK. The same clone controls:
 
 - Argument handling and schema validation.
 - Role authorization.
@@ -154,9 +161,17 @@ The ordering rules are:
 - If dispatch obtains the read lock first, the call can complete.
 - Withdrawal acknowledgment waits until that committed connector call returns.
 
-The implementation holds the read lock for the connector call. This is a conservative process-local design. It does not cancel an ERP request after commitment.
+The implementation holds the read lock for the connector call. This design
+applies only within one process. It does not cancel an ERP request after
+commitment.
 
-Authority events contain only sequence, event type, tool name, tool version, digest, and time. They do not contain arguments, headers, credentials, paths, or ERP data. The sequence is assigned at commitment. Observer callbacks run after the authority lock is released, so a callback can safely perform a follow-up withdrawal; consumers must use the sequence field as the ordering authority.
+Authority events contain only sequence, event type, tool name, tool version,
+digest, and time. They do not contain arguments, headers, credentials, paths,
+or ERP data. ToolPlane assigns the sequence at commitment.
+
+Observer callbacks run after ToolPlane releases the authority lock. A callback
+can safely perform a follow-up withdrawal. Consumers must use the sequence
+field to determine event order.
 
 ## Effective origin binding
 
@@ -168,7 +183,7 @@ scheme://host[:port]
 
 If `approvedOrigins` is absent, admission derives one origin from `endpoint` and the current `ERP_BASE_URL`.
 
-Before connector entry, ERPBridge calculates the final origin again. The calculation includes these rules:
+Before connector entry, ToolPlane calculates the final origin again. The calculation includes these rules:
 
 - `ERP_BASE_URL` prefixes a relative endpoint.
 - `ERP_BASE_URL` replaces the origin of a local absolute endpoint.
@@ -176,7 +191,11 @@ Before connector entry, ERPBridge calculates the final origin again. The calcula
 
 The connector wrapper rejects a final origin that is not in `approvedOrigins`. The rejection occurs before the underlying connector call.
 
-The authority wrapper forces redirect suppression at the production HTTP connector boundary, including uncredentialed requests. Thus, a redirect response cannot move execution to another origin. Custom connectors must either implement `ERPResponseConnector` and honor `DisableRedirects` or provide equivalent no-redirect behavior.
+The authority wrapper prevents redirects at the production HTTP connector
+boundary. This also applies to requests without credentials. A redirect
+response cannot move execution to another origin. Custom connectors must
+implement `ERPResponseConnector` and honor `DisableRedirects`, or provide
+equivalent no-redirect behavior.
 
 ## Reconciliation status and recovery
 
@@ -200,7 +219,8 @@ The controller still runs immediately and every 10 seconds. A failed interval do
 
 SQLite stores the desired resources and soft-delete tombstones. Attempt counters and timestamps are process-local. They reset after a restart.
 
-A focused test injects a dependency failure for more than one complete interval. The same process then recovers, discovers the tool, and completes an ERP call.
+A focused test injects a dependency failure for more than one complete interval.
+The same process then recovers. It discovers the tool and completes an ERP call.
 
 ## Test and evaluation hooks
 
@@ -226,15 +246,15 @@ The control plane returns stable errors for admission conflicts. Runtime failure
 
 ## Migration behavior
 
-At store initialization, ERPBridge migrates legacy tools that lack admission fields. It binds approved origins using the current endpoint rewrite rules, calculates the canonical digest, and records the actor as `legacy-migration`. For a legacy tool with no serving flag, migration persists the latest stable semantic version, or the latest prerelease when no stable revision exists. This preserves the previous unqualified resolver behavior.
+At store initialization, ToolPlane migrates legacy tools that lack admission fields. It binds approved origins using the current endpoint rewrite rules, calculates the canonical digest, and records the actor as `legacy-migration`. For a legacy tool with no serving flag, migration persists the latest stable semantic version, or the latest prerelease when no stable revision exists. This preserves the previous unqualified resolver behavior.
 
 Migration does not create a fallback for already-admitted tools whose serving revision was withdrawn. Their active exact revisions remain callable, while the unqualified name remains unavailable.
 
-Built-in native tools do not use the HTTP connector boundary. The new withdrawal and origin rules apply to declarative ERP HTTP tools.
+Built-in native tools do not use the HTTP connector boundary. The withdrawal and origin rules apply to declarative ERP HTTP tools.
 
 ## Known limits
 
-- The authority lock is process-local. Multiple ERPBridge processes do not share it.
+- The authority lock is process-local. Multiple ToolPlane processes do not share it.
 - Protected cache hits do not use the connector commitment boundary.
 - The implementation does not cancel or roll back a committed ERP operation.
 - Reconciliation counters and timestamps are not durable.

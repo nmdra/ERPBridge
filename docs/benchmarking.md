@@ -1,7 +1,7 @@
 # Benchmarking
 
-ERPBridge includes deterministic Go microbenchmarks for per-tool cache and
-request-preparation paths. They run in process and do not require Redis,
+ToolPlane includes deterministic Go microbenchmarks for per-tool cache and
+request-preparation paths. They run in the same process. They do not require Redis,
 MockERP, Docker, credentials, or a live MCP connection.
 
 Run the suite:
@@ -13,7 +13,7 @@ make bench
 The command uses `-run '^$'`, so it does not run ordinary tests. It reports
 latency and allocations with `ns/op`, `B/op`, and `allocs/op`.
 
-For a local comparison, keep the machine otherwise idle and collect repeated
+For a local comparison, keep the machine otherwise idle. Collect repeated
 samples:
 
 ```bash
@@ -25,9 +25,9 @@ Do not treat them as production-capacity claims or CI pass/fail thresholds.
 
 ## Local baseline
 
-The following five-sample medians were measured on 2026-08-31 with Go 1.26.2
-on Linux/amd64, using an 11th Gen Intel Core i5-1135G7. They are a local
-baseline only.
+The following table records five-sample medians measured on 2026-08-31.
+The environment used Go 1.26.2 on Linux/amd64 and an 11th Gen Intel Core
+i5-1135G7. These values are a local baseline only.
 
 | Benchmark | Median | Allocation |
 | --- | ---: | ---: |
@@ -55,7 +55,7 @@ make stress
 ```
 
 This command runs the `CacheMiddleware/hit_parallel` benchmark for five seconds
-at one and eight CPUs. On the same local environment, five-sample medians were:
+at one and eight CPUs. The following table records five-sample medians from the same local environment:
 
 | CPUs | Median | Throughput | Allocation |
 | ---: | ---: | ---: | ---: |

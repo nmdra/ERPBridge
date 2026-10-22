@@ -1,11 +1,11 @@
 # REST API Reference
 
-The ERPBridge server exposes direct HTTP endpoints. They do not require an MCP handshake. They serve the `bridgectl` CLI, scripts, and monitoring tools.
+The ToolPlane server exposes direct HTTP endpoints. They do not require an MCP handshake. They serve the `bridgectl` CLI, scripts, and monitoring tools.
 
 ## Authentication
 
-HTTP authentication is enabled when `API_AUTH_TOKEN` is non-empty. Send the
-configured admin credential or a bearer API token in every protected request:
+If `API_AUTH_TOKEN` is non-empty, HTTP authentication is enabled. Send the
+configured admin credential or a bearer API token with every protected request:
 
 ```http
 Authorization: Bearer <token>
@@ -17,8 +17,8 @@ endpoints. The registry, direct invoke, cache, and token lifecycle endpoints
 require the admin credential. `/mcp/health` remains open.
 
 When authentication is disabled, HTTP routes keep their open-mode behavior.
-This does not grant a caller a role: guarded tools still deny calls without a
-verified identity. Stdio has the same fail-closed behavior for guarded tools.
+This does not assign a role to a caller. Guarded tools still deny calls without
+a verified identity. Stdio has the same fail-closed behavior for guarded tools.
 
 ## Base URL
 
@@ -34,7 +34,8 @@ The registry API is Kubernetes-style. It stores tool definitions in SQLite.
 GET /apis/erpbridge.io/v1/tools
 ```
 
-Returns a JSON array of tool definitions.
+Returns tool definitions as a JSON array. An empty collection can be `null`;
+see [Error Responses](#error-responses).
 
 Use the optional exact-match query parameters `name` and `version` to request a specific tool version:
 
@@ -49,7 +50,19 @@ POST /apis/erpbridge.io/v1/tools
 Content-Type: application/json
 ```
 
-Body: one JSON tool definition (kind `MCPTool`). Tool names cannot contain the reserved `.rev_` exact-revision marker. Returns `201 Created` with the canonical executable-content `resourceDigest` on success. The authenticated apply is the admission decision; ERPBridge stores server-authored reviewer bookkeeping with the digest. Reapplying identical content is idempotent. Different content under an admitted name and version returns `409 REGISTRY_CONFLICT`, so the operator must create and review a new version. The digest excludes runtime lifecycle state and admission bookkeeping. The `bridgectl tool apply` command also accepts the YAML sequence or multi-document YAML emitted by `bridgectl tool generate` and sends each tool definition separately.
+Body: one JSON tool definition (kind `MCPTool`). Tool names cannot contain the
+reserved `.rev_` exact-revision marker. A successful request returns
+`201 Created` with the canonical executable-content `resourceDigest`.
+
+The authenticated apply is the admission decision. ToolPlane stores
+server-authored reviewer bookkeeping with the digest. Reapplying identical
+content is idempotent. Different content under an admitted name and version
+returns `409 REGISTRY_CONFLICT`. The operator must create and review a new
+version. The digest excludes runtime lifecycle state and admission bookkeeping.
+
+The `bridgectl tool apply` command also accepts the YAML sequence or
+multi-document YAML emitted by `bridgectl tool generate`. It sends each tool
+definition separately.
 
 ### Delete a Tool
 
@@ -77,8 +90,8 @@ routes. Authentication follows the tool registry rules above.
 
 Plugin deletion is soft by default. Use `hard=true` for permanent deletion. A
 plugin with an active binding returns `409 Conflict` and cannot be hard-deleted.
-Binding admission requires an active exact plugin version and active exact MCP
-tool version. A `raw_response` binding additionally requires configured
+Before ToolPlane admits a binding, the exact plugin version and exact MCP
+tool version must be active. A `raw_response` binding additionally requires configured
 `API_AUTH_TOKEN`, an authenticated admin request, an allowlisted plugin
 endpoint, an active HTTP-backed tool, and an explicit object-shaped output
 schema. Missing raw prerequisites prevent activation during reconciliation.
@@ -90,7 +103,7 @@ lifecycle changes flush affected tool cache entries.
 
 ### Plugin HTTP protocol
 
-For an active binding, ERPBridge sends a synchronous JSON request to
+For an active binding, ToolPlane sends a synchronous JSON request to
 `<spec.endpoint>/v1/process`. An `after_response` binding receives the
 normalized result:
 
@@ -124,11 +137,11 @@ A `raw_response` binding receives a bounded response before normalization:
 and non-JSON bodies use `base64`. Raw invocations omit `result`; legacy
 `after_response` invocations retain `result: null` when the result is nil.
 The plugin must return `{"result": <JSON value>}`. The plugin can replace only
-the body; status remains immutable. Request and response JSON are limited to
+the body. It cannot change status. Request and response JSON are limited to
 1 MiB. Redirects and retries are disabled. A timeout, non-2xx response,
 malformed or oversized response, or transformed output that fails the tool
 schema follows the binding policy. `continue` uses the original captured
-response only when it satisfies the final schema; otherwise it returns a safe
+response only when it satisfies the final schema. Otherwise, it returns a safe
 error. Use `fail` for image conversion unless a compatible fallback is known.
 Plugin URLs, payloads, credentials, and plugin error bodies are not returned to
 callers.
@@ -165,11 +178,11 @@ Body:
 }
 ```
 
-The call goes through the middleware chain: rate limiting, cache, and resilience.
+The call passes through rate limiting, cache, and resilience middleware.
 Authenticated direct calls share a limiter bucket by token principal. Tool
 execution resolves `spec.security.credentialRef` on the server and sends it in
-`spec.security.authHeader` when configured; an omitted header preserves the
-`Authorization` default. `authHeader` contains only a header name, never a
+`spec.security.authHeader` when configured; if the header is omitted, the connector uses
+`Authorization` by default. `authHeader` contains only a header name, never a
 credential value.
 
 Excess direct calls return HTTP `429` with the stable `RATE_LIMITED` error and a
@@ -180,15 +193,15 @@ throttled.
 This endpoint is admin-only when HTTP authentication is enabled. For a guarded
 tool, pass the verified role in `X-ERPBridge-Role`; do not put `role` in the
 JSON body. The header value must be present in both the caller identity and the
-tool's `allowedRoles` list. A missing or invalid selector returns `403` and a
-body/header collision returns `400`.
+tool's `allowedRoles` list. A missing or invalid selector returns `403`.
+A body/header collision returns `400`.
 
 This endpoint resolves registered tools only. MCP built-ins such as `system.progress_test` are available through MCP `tools/call`, but not through this REST endpoint.
 
 The REST endpoint returns the legacy `ToolResult` compatibility shape. MCP
 clients receive the MCP result envelope, including `content`,
 `structuredContent` when the developer declares an object-shaped output schema,
-and `isError: true` for tool execution errors. Protocol failures remain JSON-RPC
+and `isError: true` for tool execution errors. Protocol failures use JSON-RPC
 errors with standard codes. Tool execution errors use concise safe text and may
 include the namespaced `com.erpbridge/error` metadata with `type`, `retryable`,
 and `retryAfterMs` fields. A successful image-to-text tool
@@ -213,13 +226,13 @@ preserve that envelope and must not flatten structured content.
 OpenAPI-generated tools preserve path, query, header, and JSON body
 parameters through `execution.parameterLocations`; see the [tool schema
 reference](./tool-schema.md) for the legacy fallback and protected-header
-rules. Generated response unwrapping is used only when the resolved top-level
-response schema proves a `data` property.
+rules. The generator adds response unwrapping only when the resolved top-level
+response schema declares a `data` property.
 
 `/api/logs/stream` flushes its `200` response headers before the first event.
 Each event uses `data: <JSON>\n\n` framing. Closing the client request stops
-subscription. Subscribers use a bounded 100-event channel; new events are
-dropped for a slow subscriber when that channel is full. The raw stream is
+the subscription. Subscribers use a bounded 100-event channel; if that channel is full,
+the server drops new events for the slow subscriber. The raw stream is
 separate from the Console BFF, which applies its own projection and redaction.
 
 ## MCP Endpoints
@@ -231,9 +244,8 @@ separate from the Console BFF, which applies its own projection and redaction.
 | `/mcp/health` | `GET` | Returns `{"status": "ok"}`. |
 
 For a guarded MCP tool, select a role in the generated optional
-`arguments.role` field. The server checks the role against the authenticated
-token and the tool allow-list, then removes the selector before sending the
-arguments to the ERP. Open tools do not reserve `role`, so existing business
+`arguments.role` field. The server compares the role with the authenticated token and the tool
+allow-list. Before sending arguments to the ERP, it removes the selector. Open tools do not reserve `role`, so existing business
 payloads remain unchanged. Guarded read-only cache entries are shared by
 verified roles; other guarded cache entries are role-scoped.
 
@@ -256,7 +268,11 @@ SHA-256 hash.
 | `/metrics` | `GET` | Prometheus-formatted metrics. |
 | `/api/info` | `GET` | Authenticated safe build and runtime metadata. |
 
-`/api/info` also returns safe process-local reconciliation status: attempt count, last attempt and success, safe error state, desired-state hash, observed generation, and convergence. These cycle measurements reset on restart; desired resources and withdrawal tombstones remain in SQLite.
+`/api/info` also returns safe process-local reconciliation status. This status
+includes attempt count, last attempt and success, safe error state,
+desired-state hash, observed generation, and convergence. These cycle
+measurements reset on restart. Desired resources and withdrawal tombstones
+remain in SQLite.
 
 `/api/info` returns the server version, optional commit and build date, cache
 backend label, active tool count, and observation time. It does not return
@@ -269,11 +285,11 @@ are added when an error is observed.
 
 ## Error Responses
 
-A listing endpoint answers with a bare JSON array. An empty collection may be
-encoded as `null`, because a store that has never held a resource returns a nil
-slice. `bridgectl` normalizes that to `[]` in its own `-o json` and `-o yaml`
-output, so a consumer of the CLI always reads a list, but a consumer of the raw
-endpoint must accept `null` as well.
+A listing endpoint returns a bare JSON array. If the store has never held a
+resource, it returns a nil slice. The endpoint can encode this empty collection
+as `null`. `bridgectl` normalizes that to `[]` in its own `-o json` and `-o yaml`
+output. CLI consumers always receive a list. Raw endpoint consumers must also
+accept `null`.
 
 The server uses standard HTTP status codes. Control-plane failures return a
 bounded JSON object with `error`, `message`, `suggestion`, and numeric `code`.
@@ -282,13 +298,12 @@ The `error` value is stable for automation. Common values include
 `RESOURCE_NOT_FOUND`, `UPSTREAM_UNREACHABLE`, `RATE_LIMITED`, and
 `HEALTH_CHECK_FAILED`.
 Messages and suggestions never include upstream bodies, credentials, auth
-headers, or internal stack details. A `bridgectl` command checks the status
-before it decodes a typed body, so an error answer is reported as this envelope
-rather than as a decoding failure.
+headers, or internal stack details. Before decoding a typed body, `bridgectl` examines the HTTP status. It reports
+an error response as this envelope, not as a decoding failure.
 
 A configured Redis backend remains the selected backend when Redis is
 unreachable; the server does not silently fall back to memory in that case.
-Cache reads continue as misses and failed writes do not fail the tool call or
+Cache reads continue as misses. Failed writes do not fail the tool call or
 create a false cache hit. Cache health returns bounded `503 HEALTH_CHECK_FAILED`
 while `/mcp/health` remains available. MCP tool execution errors retain the MCP
 result envelope and set `isError: true`.
@@ -298,10 +313,10 @@ result envelope and set `isError: true`.
 `POST /api/apis/test` is an authenticated administrator endpoint. It accepts
 an API URL, method, authentication type, non-secret `credentialRef`, optional
 `credentialSource` (`env` or `file`), and optional auth-header name. Omitted
-source means `env`. The server resolves the credential in ERPBridge and returns
-only HTTP status, normalized content type, latency, and success. File mode
+source means `env`. ToolPlane resolves the credential on the server. It returns only HTTP status,
+normalized content type, latency, and success. File mode
 requires `ERPBRIDGE_CREDENTIALS_DIR`, reads the reference-named file on every
 probe, and fails closed without an environment fallback. It never returns an
-ERP response body or upstream headers. Use `bridgectl api test` to invoke this
-endpoint; use `--local` only for the explicit host-side diagnostic, which
-requires the CLI process to have the same mounted directory.
+ERP response body or upstream headers. To invoke this endpoint, use `bridgectl api test`. Use `--local` only for the
+explicit host-side diagnostic. That diagnostic requires the CLI process to
+have the same mounted directory.

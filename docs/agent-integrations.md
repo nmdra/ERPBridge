@@ -1,29 +1,29 @@
 # Agentic Tools MCP Integration
 
-ERPBridge implements standard Model Context Protocol (MCP). Codex CLI,
-OpenCode, OpenClaw, and Hermes Agent can connect without an ERPBridge-specific
+ToolPlane implements the Model Context Protocol (MCP). Codex CLI,
+OpenCode, OpenClaw, and Hermes Agent can connect without a ToolPlane-specific
 adapter.
 
 Use stdio when the agent and erpbridge-server run on the same machine. Use
 Streamable HTTP when the server is remote, shared, containerized, or managed
 separately from the agent.
 
-The canonical remote endpoint is https://<erpbridge-host>/mcp/. The trailing
-slash is part of the endpoint. The first request is a JSON-RPC initialize
-request sent to POST /mcp/, not to a separate /mcp/initialize route. HTTP
-sessions return Mcp-Session-Id for subsequent requests.
+Use https://<erpbridge-host>/mcp/ as the remote endpoint. Keep the trailing
+slash. Send the first JSON-RPC initialize request to POST /mcp/.
+Do not send it to a separate /mcp/initialize route. HTTP sessions return
+Mcp-Session-Id for subsequent requests.
 
 ## Prerequisites and security
 
-1. Start ERPBridge and confirm GET https://<erpbridge-host>/mcp/health returns
+1. Start ToolPlane. Make sure that GET https://<erpbridge-host>/mcp/health returns
    {"status":"ok"}.
-2. Register and activate the MCP tools that the agent should use.
+2. Register the MCP tools that the agent needs. Activate these tools.
 3. For protected HTTP deployments, create a token with the mcp scope and
    expose it to the agent through its environment or secret store.
-4. Use HTTPS for anything beyond a trusted local machine. Never commit a raw
+4. Outside a trusted local machine, use HTTPS. Never commit a raw
    bearer token to an agent config.
 
-ERPBridge accepts Authorization: Bearer <token> on protected HTTP MCP
+ToolPlane accepts Authorization: Bearer <token> on protected HTTP MCP
 requests. The administrator credential has implicit access. A scoped token
 needs the mcp scope. A token for metrics or logs alone cannot initialize MCP.
 
@@ -31,18 +31,18 @@ Example token provisioning:
 
     curl -X POST https://<erpbridge-host>/api/auth/tokens -H "Authorization: Bearer <admin-token>" -H "Content-Type: application/json" -d '{"name":"agent-mcp","scopes":["mcp"]}'
 
-The raw token is returned once. Keep it outside shell history and config files,
-then expose it to the agent host:
+The server returns the raw token once. Keep it outside shell history and config
+files. Then expose it to the agent host:
 
     export ERPBRIDGE_MCP_TOKEN='<token-from-secure-provisioning>'
 
 API_AUTH_TOKEN controls inbound HTTP authentication. ERP_PRIMARY_KEY and
-other `credentialRef` values are server-side settings for outbound ERP calls.
+other `credentialRef` values configure outbound ERP calls on the server.
 The local `bridgectl` API registry stores only these environment-variable names,
 not their values. Register APIs with `--credential-ref`, or assign one with
 `bridgectl api set-credential-ref`. Never copy an upstream ERP credential into
 an agent config. If a legacy registry contains raw `authKey` or `authToken`
-fields, run `bridgectl api scrub-credentials --yes`, then assign references
+fields, run `bridgectl api scrub-credentials --yes`. Then assign references
 again. The scrub has no plaintext backup.
 
 ## Codex CLI
@@ -69,8 +69,8 @@ server process still needs its upstream ERP credentials.
     bearer_token_env_var = "ERPBRIDGE_MCP_TOKEN"
     enabled_tools = ["list_employees", "list_departments"]
 
-bearer_token_env_var sends the environment value as a bearer token. Avoid
-static Authorization headers for secrets that belong in the environment.
+bearer_token_env_var sends the environment value as a bearer token. Keep
+secrets in the environment, not in static Authorization headers.
 Restart Codex after changing config.toml. Use codex mcp list and /mcp to
 inspect the connection.
 
@@ -115,8 +115,8 @@ starts a child process and its remote form uses Streamable HTTP.
     }
 
 The {env:NAME} substitution keeps the token out of JSONC. OpenCode does not
-document a server-native tool allowlist in this config shape; restrict
-exposure in the ERPBridge registry and use approval controls for writes.
+document a server-native tool allowlist in this config shape. Restrict tool
+exposure in the ToolPlane registry. Use approval controls for writes.
 Run opencode mcp list after editing and restart the OpenCode session if
 needed.
 
@@ -138,13 +138,13 @@ in the gateway trusted environment or supported secret configuration, not in a
 workspace file. On versions that do not expand environment variables in HTTP
 header values, use that version's secret-reference mechanism. Do not replace
 the placeholder with a committed token. OAuth is not appropriate for
-ERPBridge's static bearer-token mode and takes precedence over a static
+ToolPlane's static bearer-token mode and takes precedence over a static
 Authorization header.
 
-Use openclaw mcp show erpbridge --json to inspect the saved definition without
+Use openclaw mcp show erpbridge --json to read the saved definition without
 exposing the token. Run openclaw mcp reload or restart the owning gateway
-after changing the definition. doctor --probe performs live initialize and
-tool discovery.
+after changing the definition. doctor --probe sends a live initialize request and
+discovers tools.
 
 ### Local stdio
 
@@ -174,10 +174,10 @@ process environment.
           resources: false
           prompts: false
 
-Hermes sends the Authorization header on remote requests and supports
+Hermes sends the Authorization header on remote requests. It supports
 tools.include and tools.exclude filtering. Keep the token in ~/.hermes/.env
-or another supported secret scope and reload MCP with /reload-mcp after
-changing the config.
+or another supported secret scope. After you change the config, reload MCP
+with /reload-mcp.
 
 ### Local stdio
 
@@ -205,12 +205,12 @@ After changing a client configuration:
 
 | Symptom | Check |
 | --- | --- |
-| 401 Unauthorized | The token is missing, expired, revoked, or unavailable to the agent process. Confirm Authorization: Bearer is sent and the token has mcp. |
+| 401 Unauthorized | The token is missing, expired, revoked, or unavailable to the agent process. Make sure that the client sends Authorization: Bearer and the token has mcp. |
 | 403 Forbidden | The token lacks the mcp scope, or the operation is outside its role or tool policy. |
-| HTTP client cannot connect | Use the exact https://<host>/mcp/ URL, verify GET /mcp/health, and check reverse-proxy forwarding of POST, GET, Authorization, Mcp-Session-Id, and MCP-Protocol-Version. |
-| Tools list is empty or incomplete | Check that tools are active in the ERPBridge registry and review client-side allow or deny filters. |
-| Stdio initialization fails with parse errors | Ensure the server is started with --stdio, the binary is executable, and no wrapper prints to stdout. ERPBridge writes startup diagnostics to stderr in stdio mode. |
-| Upstream ERP calls fail | Check the server's ERP_BASE_URL and the environment variable named by each tool's credentialRef; these are server-side settings, not agent MCP settings. |
+| HTTP client cannot connect | Use the exact https://<host>/mcp/ URL. Make sure that GET /mcp/health succeeds. Make sure that the reverse proxy forwards POST, GET, Authorization, Mcp-Session-Id, and MCP-Protocol-Version. |
+| Tools list is empty or incomplete | Make sure that tools are active in the ToolPlane registry. Review client-side allow or deny filters. |
+| Stdio initialization fails with parse errors | Make sure that the server starts with --stdio, the binary is executable, and no wrapper prints to stdout. ToolPlane writes startup diagnostics to stderr in stdio mode. |
+| Upstream ERP calls fail | Make sure that the server's ERP_BASE_URL and the environment variable named by each tool's credentialRef are correct. These are server-side settings, not agent MCP settings. |
 
 For protocol details and Postman, see [Connectivity & Transport](./connectivity.md).
 For token lifecycle and scopes, see [API Tokens](./tokens.md).
@@ -218,7 +218,7 @@ For token lifecycle and scopes, see [API Tokens](./tokens.md).
 ## Management MCP server
 
 `erpbridge-server --stdio` serves published ERP tools. To let an agent manage
-ERPBridge itself, register a second, separate server that starts the
+ToolPlane itself, register a second, separate server that starts the
 `bridgectl mcp --stdio` command:
 
 ```toml
@@ -228,9 +228,9 @@ args = ["mcp", "--stdio", "--context", "staging"]
 env_vars = ["BRIDGE_API_TOKEN"]
 ```
 
-The management server exposes inspection, local validation, and generation by
-default. Write operations need an explicit startup group, and the session is
-pinned to the context selected at launch. See the
+By default, the management server exposes inspection, local validation, and
+generation. Write operations require an explicit startup group. The session
+keeps the context selected at launch. See the
 [management MCP server guide](./bridgectl-mcp.md) for the tool catalogue, the
 write groups, agent configuration examples, and recovery after an unknown write
 outcome.

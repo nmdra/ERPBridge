@@ -1,19 +1,19 @@
 # Environment Variables Reference
 
-This page lists all environment variables read by the ERPBridge server, the `bridgectl` CLI, and the mock ERP service.
+This page describes environment variables for the ToolPlane server, the `bridgectl` CLI, and MockERP.
 
 ## Server Variables
 
-The server reads these variables directly from the environment. It does not load a `.env` file. Export the variables in your shell, or set them in `docker-compose.yml`.
+The server reads these variables directly from the environment. It does not load a `.env` file. Export the variables in your shell. Or set them in `docker-compose.yml`.
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
 | `MCP_PORT` | `8080` | HTTP listen port. |
 | `MCP_TRANSPORT` | (unset) | `stdio` runs the server in stdio mode. Any other value runs the HTTP server. |
 | `MCP_ENABLE_TEST_TOOLS` | `false` | Development-only opt-in for `system.*_test` demo tools. `make dev-up` sets it; do not enable it in production. |
-| `MCP_ADVERTISE_REVISION_ALIASES` | `false` | List the exact-revision names (`<tool-name>.rev_<base64url(version)>`) in MCP `tools/list`. They stay callable and digest binding works either way; the default keeps one entry per tool. |
+| `MCP_ADVERTISE_REVISION_ALIASES` | `false` | List the exact-revision names (`<tool-name>.rev_<base64url(version)>`) in MCP `tools/list`. They stay callable and digest binding works with either setting. The default lists one entry per tool. |
 | `DATABASE_PATH` | `data/erpbridge.db` | Path of the SQLite tool registry. The parent directory is created automatically. |
-| `REDIS_URL` | (empty) | Redis URL (for example `redis://localhost:6379`). If empty, the server uses the bounded in-memory cache. A malformed value stops startup; a valid but unavailable Redis backend remains selected and reports degraded cache health. |
+| `REDIS_URL` | (empty) | Redis URL (for example `redis://localhost:6379`). If empty, the server uses the bounded in-memory cache. A malformed value stops startup. If the value is valid but Redis is unavailable, the server keeps Redis selected and reports degraded cache health. |
 | `REDIS_INSIGHT_BIND_ADDRESS` | `127.0.0.1` | Host address for the RedisInsight binding in Compose. |
 | `REDIS_INSIGHT_HOST_PORT` | `8001` | Host port for RedisInsight in Compose. |
 | `CACHE_MEMORY_MAX_ENTRIES` | `10000` | Maximum number of entries in the in-memory cache when `REDIS_URL` is empty. `0` disables memory-cache storage. Invalid or negative values use the default. |
@@ -27,7 +27,7 @@ The server reads these variables directly from the environment. It does not load
 | `LOG_TO_STDERR` | (unset) | `true` writes logs to stderr. The server sets this automatically in stdio mode. |
 | `ERP_PRIMARY_KEY` | (unset) | Example environment credential for generated ERP tools. The local API registry stores only a `credentialRef`, never this value. |
 | `<ERP_CREDENTIAL_REF>` | (unset) | Any environment variable named by an API or tool `credentialRef`; resolved at request time and never persisted by `bridgectl`. |
-| `ERPBRIDGE_CREDENTIALS_DIR` | (unset) | Optional directory for references that explicitly set `credentialSource: file`. ERPBridge reads `<dir>/<credentialRef>` on each credentialed operation. |
+| `ERPBRIDGE_CREDENTIALS_DIR` | (unset) | Optional directory for references that explicitly set `credentialSource: file`. ToolPlane reads `<dir>/<credentialRef>` on each credentialed operation. |
 | `credentialSource` | `env` when omitted | Per-resource selector. `env` preserves environment lookup; `file` requires `ERPBRIDGE_CREDENTIALS_DIR` and never falls back to the environment. This is a manifest field, not an environment variable. |
 | `PLUGIN_<NAME>` | (unset) | Environment credential named by a plugin `credentialRef`; use only for bearer or API-key values. The resolved value is never persisted. |
 | `PLUGIN_ENDPOINT_ALLOWLIST` | (unset) | Exact normalized `host:port` values allowed for credentialed plugin endpoints. Empty or nonmatching values reject credentialed plugin admission. |
@@ -39,7 +39,7 @@ The server reads these variables directly from the environment. It does not load
 Credentialed outbound ERP and plugin calls require `https://`. For private local
 fixtures only, set `INSECURE_AUTH_ALLOWED_HOSTS` to the exact normalized
 `host:port`, for example `mock-erp:8081`. Do not use this exception in
-production. ERPBridge logs a warning for each allowed credentialed HTTP call.
+production. ToolPlane logs a warning for each allowed credentialed HTTP call.
 
 ## CLI Variables (`bridgectl`)
 
@@ -48,13 +48,12 @@ The CLI reads these variables to override the active context.
 On Windows, use `$env:BRIDGE_API_TOKEN` supplied by an approved secret provider
 or parent process. Do not type a literal token into commands or client files.
 The config path is `%USERPROFILE%\.bridgectl\config.yaml`. Write YAML and
-manifests as UTF-8 without a BOM on PowerShell 5.1 and 7. Keep
-`${BRIDGE_API_TOKEN}` literal when writing YAML with a single-quoted here-string;
-the CLI expands it when loading the file. See the complete
+manifests as UTF-8 without a BOM on PowerShell 5.1 and 7. When you write YAML with a single-quoted here-string, keep
+`${BRIDGE_API_TOKEN}` literal. The CLI expands it when it loads the file. See the complete
 [PowerShell example](./windows.md#configure-a-context-without-storing-credentials).
 Restart long-running MCP and Console processes after credential changes.
-Inherited Windows directory ACLs govern file access; Unix `0600` mode is not an
-owner-only Windows ACL guarantee.
+Inherited Windows directory ACLs control file access. Unix `0600` mode does not
+guarantee an owner-only Windows ACL.
 
 | Variable | Purpose |
 | :--- | :--- |
@@ -72,10 +71,11 @@ owner-only Windows ACL guarantee.
 
 The persistent `bridgectl --token` flag has higher precedence than
 `BRIDGE_API_TOKEN`, which has higher precedence than the active context's
-`api-token` value. The CLI sends this value as a bearer token to the ERPBridge
-server; it does not change upstream ERP authentication settings.
+`api-token` value. The CLI sends this value as a bearer token to the ToolPlane
+server. It does not change upstream ERP authentication settings.
 
-An active context can store the token in `~/.bridgectl/config.yaml`:
+An active context can store the token in `~/.bridgectl/config.yaml`.
+Prefer an environment placeholder to a literal token value:
 
 ```yaml
 contexts:
@@ -84,14 +84,14 @@ contexts:
     api-token: <token-from-environment>
 ```
 
-`bridgectl api register` accepts `--credential-ref NAME` and optional `--credential-source env|file`. `bridgectl api set-credential-ref NAME --credential-ref REF` changes the logical reference without changing its source. The registry stores the name and source only. New API entries are isolated at `~/.bridgectl/registries/<context>.json`; context names are validated before they are used in a path. API names are unique within a context. Duplicate registration fails unless `api register --force` explicitly replaces the existing definition.
+`bridgectl api register` accepts `--credential-ref NAME` and optional `--credential-source env|file`. `bridgectl api set-credential-ref NAME --credential-ref REF` changes the logical reference without changing its source. The registry stores the name and source only. Each context stores new API entries at `~/.bridgectl/registries/<context>.json`. The CLI validates context names before it uses them in a path. API names are unique within a context. Duplicate registration fails unless `api register --force` explicitly replaces the existing definition.
 
-If the old global `~/.bridgectl/registry.json` exists, context-scoped API commands stop instead of ignoring it. Run `bridgectl api scrub-credentials --yes` to scrub the global file and every context registry. Scrubbing atomically removes `authKey` and `authToken` without creating a plaintext backup. Then run `bridgectl api migrate-registry --context NAME --yes` to copy the cleaned global entries into one selected context and remove the old global file. Migration refuses collisions unless `--force` is also supplied.
+If the old global `~/.bridgectl/registry.json` exists, context-scoped API commands stop instead of ignoring it. Run `bridgectl api scrub-credentials --yes` to scrub the global file and every context registry. Scrubbing atomically removes `authKey` and `authToken`. It does not create a plaintext backup. Then run `bridgectl api migrate-registry --context NAME --yes` to copy the cleaned global entries into one selected context and remove the old global file. Migration refuses collisions unless `--force` is also supplied.
 
 ### Optional mounted credential files
 
 Environment variables remain the default. To rotate one credential without
-restarting ERPBridge, configure a read-only mounted directory with
+restarting ToolPlane, configure a read-only mounted directory with
 `ERPBRIDGE_CREDENTIALS_DIR` and set `credentialSource: file` beside that
 resource's `credentialRef` in a tool, API, resource, or plugin definition:
 
@@ -102,17 +102,17 @@ security:
   credentialSource: file
 ```
 
-ERPBridge reads the file immediately before each credential-bearing operation.
+ToolPlane reads the file immediately before each credential-bearing operation.
 The file name is the validated logical reference. Missing, unreadable,
 non-regular, empty, control-character, invalid UTF-8, or larger-than-64 KiB
-files fail closed. ERPBridge does not trim, cache, or fall back to an
+files fail closed. ToolPlane does not trim, cache, or fall back to an
 environment value after a file failure. File-backed tools and authenticated
 file-backed plugin bindings bypass the response cache.
 
 For a writable local mount, write a complete temporary file in the same
-directory and atomically rename it over the live name. CSI/projected secret
-volumes are read-only and provider-managed; their update is eventual, so the
-next request observes the new value only after the mounted file has refreshed.
+directory and atomically rename it over the live name. The provider manages read-only CSI/projected secret
+volumes. Updates are eventual. The next request uses the new value only after
+the mounted file has refreshed.
 Mount the directory itself, not a Kubernetes `subPath`, because `subPath` does
 not receive projected Secret updates. A replica may observe a replacement at a
 different time from another replica, and an in-flight request may use the old
@@ -121,18 +121,18 @@ value.
 AWS EKS with the [AWS Secrets and Configuration Provider](https://docs.aws.amazon.com/eks/latest/userguide/manage-secrets.html),
 [AKS Key Vault provider](https://learn.microsoft.com/en-us/azure/aks/csi-secrets-store-configuration-options),
 and [GKE Secret Manager CSI](https://docs.cloud.google.com/secret-manager/docs/secret-manager-managed-csi-component)
-can provide this directory. Use workload identity and least-privilege access;
-enable and configure provider rotation. Adding a new remote secret name can
+can provide this directory. Use workload identity and least-privilege access.
+Enable provider rotation. Configure it. Adding a new remote secret name can
 require updating the provider mapping and rolling the workload before that
-file exists. These integrations are outside ERPBridge, which does not call
+file exists. These integrations are outside ToolPlane, which does not call
 cloud APIs directly.
 
-The CLI's server-side API probe resolves the credential in ERPBridge. The
+The CLI's server-side API probe resolves the credential in ToolPlane. The
 explicit `bridgectl api test --local` diagnostic resolves it in the CLI process,
 which must have the same directory mount. Changing an environment variable
 still requires process or container recreation.
 
-The CLI reads its defaults from `~/.bridgectl/config.yaml`. `BRIDGE_CONTEXT` and `--context` select a configured context. A missing or malformed selected context is an error; the CLI does not silently create a replacement context. Context and API listings are sorted by name. The default context uses:
+The CLI reads its defaults from `~/.bridgectl/config.yaml`. `BRIDGE_CONTEXT` and `--context` select a configured context. A missing or malformed selected context causes an error. The CLI does not silently create a replacement context. Context and API listings are sorted by name. The default context uses:
 
 | Key | Default |
 | :--- | :--- |
@@ -144,9 +144,8 @@ The CLI reads its defaults from `~/.bridgectl/config.yaml`. `BRIDGE_CONTEXT` and
 
 ## Mock ERP Variables
 
-`make dev-up` is the recommended local-stack entry point. It generates an
-in-memory, ephemeral credential pair only when both credential sources are
-empty. It does not source `.env`, write credentials, or print them. Direct
+`make dev-up` is the recommended local-stack entry point. If both credential sources are empty, it generates an
+in-memory, ephemeral credential pair. It does not source `.env`, write credentials, or print them. Direct
 Compose use requires one of the two credential sources below.
 
 | Variable | Purpose | Default |

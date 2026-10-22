@@ -1,6 +1,6 @@
 # MCP Client Guide (Python & TypeScript)
 
-> **Who is this guide for?** This guide is written for developers who are new to MCP (Model Context Protocol). It walks you through building clients that connect to an ERPBridge server using either **Streamable HTTP** or **Stdio** transport — with complete, copy-paste-ready examples in both Python and TypeScript.
+> **Who is this guide for?** This guide helps developers who are new to MCP (Model Context Protocol). Use it to build Python or TypeScript clients for ToolPlane through **Streamable HTTP** or **Stdio** transport. The examples show basic message exchange, not a complete production client.
 
 ---
 
@@ -27,23 +27,25 @@
 
 ## 1. What is MCP?
 
-**MCP (Model Context Protocol)** is a standard protocol that lets clients call tools, read resources, and use prompts exposed by a server — designed for AI and automation workflows.
+**MCP (Model Context Protocol)** is a standard protocol for AI and automation workflows. Clients use it to call tools, read resources, and use prompts exposed by a server.
 
-In this guide, the server is **ERPBridge**, which exposes business tools (like listing invoices) over MCP. Your job as a client is to:
+In this guide, **ToolPlane** exposes business tools, such as invoice listing, over MCP. The client must:
 
 1. **Connect** to the server and start a session.
 2. **Discover** which tools, resources, and prompts are available.
 3. **Interact** with them and receive results.
 
-All communication uses **JSON-RPC 2.0** — a simple, human-readable message format.
+All communication uses the **JSON-RPC 2.0** message format.
 
 ---
 
 ## 2. Prerequisites
 
-### 2.1 Start the ERPBridge Server
+<a id="21-start-the-erpbridge-server"></a>
 
-Before writing any client code, you need a running ERPBridge server to connect to.
+### 2.1 Start the ToolPlane Server
+
+Before you write client code, start a ToolPlane server.
 
 **Option A — Docker (recommended for beginners):**
 ```bash
@@ -60,26 +62,30 @@ go run services/erpbridge-server/main.go
 go run services/erpbridge-server/main.go --stdio
 ```
 
-> **Tip:** If you're unsure which option to choose, use Docker. It handles all dependencies automatically.
+> **Tip:** If you do not know which option to choose, use Docker. Compose manages the configured service dependencies.
 
 ### 2.2 Verify the Server is Running
 
-Once started, the server listens at:
+In HTTP mode, the server listens at:
 
 ```
 http://localhost:8080/mcp/
 ```
 
-You can change the port with the `MCP_PORT` environment variable or the full address with `BASE_URL`.
+To change the listening port, set the `MCP_PORT` environment variable.
+`BASE_URL` sets the server base URL used by the HTTP transport; it does not
+change the listening address.
 
-**Quick check — confirm the server responds:**
+**Quick check — make sure that the server responds:**
 ```bash
 curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/mcp/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1.0"}}}'
 ```
 
-You see `200`.
+With authentication disabled, a successful request returns `200`.
+If `API_AUTH_TOKEN` is configured, supply the bearer credential with each
+protected HTTP request. The examples below do not include authentication.
 
 ### 2.3 Install Language Dependencies
 
@@ -104,13 +110,13 @@ MCP supports two ways to communicate with the server:
 | **Streamable HTTP** | Send JSON-RPC messages over regular HTTP POST requests. Optionally receive server-sent events (SSE) for real-time notifications. | Web apps, services, API testing tools like Postman |
 | **Stdio** | Spawn the server as a child process and communicate over its standard input/output (stdin/stdout). | Local scripts, CLI tools, desktop integrations |
 
-**Not sure which to pick?** Start with **Streamable HTTP** — it's easier to debug since you can inspect requests in a browser or Postman.
+**Not sure which to pick?** Start with **Streamable HTTP**. You can inspect requests in a browser or Postman.
 
 ---
 
 ## 4. How Streamable HTTP Works
 
-Every message you send follows the **JSON-RPC 2.0** format and is sent as a `POST` to `/mcp/`. Here's the typical flow:
+Send **JSON-RPC 2.0** messages as `POST` requests to `/mcp/`. The typical flow is:
 
 ```
 Client                          ERPBridge Server
@@ -133,7 +139,10 @@ Client                          ERPBridge Server
 
 ### 4.1 Step 1 — Initialize the Session
 
-Send an `initialize` request first. The server replies with a `Mcp-Session-Id` header that you must include in all subsequent requests.
+Send an `initialize` request first. Include the returned `Mcp-Session-Id`
+header in all subsequent requests. For a complete MCP lifecycle, send
+`notifications/initialized` after initialization. The minimal examples omit
+that notification.
 
 ```json
 {
@@ -153,7 +162,7 @@ Send an `initialize` request first. The server replies with a `Mcp-Session-Id` h
 }
 ```
 
-> **Why is the session ID important?** The server uses it to associate your requests with your session. Without it, subsequent calls will fail.
+> **Why is the session ID important?** The server uses it to associate requests with a session. Subsequent calls fail without it.
 
 ---
 
@@ -161,7 +170,7 @@ Send an `initialize` request first. The server replies with a `Mcp-Session-Id` h
 
 ### 5.1 Minimal Working Example
 
-This example connects to ERPBridge, lists available tools, and calls one.
+This example connects to ToolPlane, lists available tools, and calls one.
 
 ```python
 import json
@@ -231,7 +240,7 @@ print(json.dumps(result, indent=2))
 
 ## 6. Python Client — Stdio
 
-Use this approach when you want to run the ERPBridge server as a subprocess and communicate directly through its standard input/output.
+To communicate through standard input/output, run ToolPlane as a subprocess.
 
 ### 6.1 Minimal Working Example
 
@@ -459,7 +468,7 @@ main().catch(console.error);
 
 ## 9. Working with Resources
 
-Resources are read-only data sources (like database records or documentation) that the AI can fetch.
+Resources are read-only data sources, such as database records or documentation. An AI client can retrieve them.
 
 ### 9.1 List Resources
 ```json
@@ -508,7 +517,9 @@ Prompts are predefined instruction templates that help AI agents perform specifi
 
 ## 11. Completion & Suggestions
 
-ERPBridge provides suggestions for tool, resource, and prompt arguments. This is useful for building interactive CLIs or UI components.
+ToolPlane registers completion providers for resource and prompt arguments.
+The current providers return fixed sample suggestions. They do not query ERP
+data or provide tool-argument completion.
 
 ### 11.1 Get Suggestions
 ```json
@@ -531,17 +542,24 @@ ERPBridge provides suggestions for tool, resource, and prompt arguments. This is
 
 ---
 
+<a id="12-hot-reloading"></a>
+
 ## 12. Hot Reloading & Lifecycle
 
-ERPBridge supports **Hot Reloading** and dynamic tool lifecycle management. If you add, modify, or delete tools via the `bridgectl` CLI, the server automatically updates its registry and notifies all active sessions.
+ToolPlane supports **Hot Reloading** and dynamic tool lifecycle management.
+If you apply or delete tool resources through `bridgectl`, the server updates
+its registry and notifies active sessions. Changed executable content requires
+a new tool version.
 
 ### 12.1 Standard Sync Notification
 When tools are added or removed, the server sends a standard notification:
 *   **Method**: `notifications/tools/list_changed`
 *   **Action**: Re-call `tools/list` to get the updated set.
 
-### 12.2 ERPBridge Custom Notifications
-For more granular control, ERPBridge sends specific lifecycle events:
+<a id="122-erpbridge-custom-notifications"></a>
+
+### 12.2 ToolPlane Custom Notifications
+ToolPlane also sends specific lifecycle events:
 
 #### `notifications/tool_deleted`
 Sent when a tool is deactivated (soft-deleted) from the registry.
@@ -572,7 +590,10 @@ Used for system-wide alerts or administrative broadcasts.
 
 ## 13. Error Handling
 
-JSON-RPC errors are returned inside the response body, not as HTTP error codes. Always check the response for an `error` field.
+JSON-RPC protocol errors appear in the response body. Make sure that the
+response has no `error` field. Also handle HTTP transport errors, such as
+authentication failures. Tool execution failures use `result.isError=true`
+instead of a JSON-RPC error.
 
 ### 13.1 What a JSON-RPC Error Looks Like
 
@@ -600,7 +621,12 @@ JSON-RPC errors are returned inside the response body, not as HTTP error codes. 
 
 ### 13.3 Preserve the MCP Result Envelope
 
-An MCP `tools/call` response is a JSON-RPC result. Read the `content` array and preserve any structured result fields supplied by the SDK. ERPBridge may place a JSON-encoded ERPBridge compatibility result inside a text content item, so `content[0].text` is not automatically the complete protocol response.
+An MCP `tools/call` response uses a JSON-RPC result envelope. Read the `content`
+array. Preserve `structuredContent` and `isError` when present. For a declared
+output schema and an object result, ToolPlane includes structured content.
+Text content contains the JSON result, or the extracted text when the object
+has a string `text` field. Do not treat `content[0].text` as the complete
+protocol response.
 
 The direct REST endpoint, `/api/tools/invoke`, is a registry-only compatibility endpoint and returns the legacy `ToolResult` shape. MCP built-in tools whose names start with `system.` are available through MCP, not through that REST endpoint.
 
@@ -610,27 +636,27 @@ The direct REST endpoint, `/api/tools/invoke`, is a registry-only compatibility 
 
 ### ❌ `Mcp-Session-Id` is missing from the response
 
-**Cause:** The session wasn't initialized properly.
+**Cause:** Session initialization did not succeed.
 
 **Fix:**
-- Make sure your very first request uses `"method": "initialize"`.
-- Make sure you're sending to `POST /mcp/` — not `GET`, not `/mcp` without the trailing slash.
+- Make sure that the first request uses `"method": "initialize"`.
+- Make sure that requests use `POST /mcp/`, not `GET` or `/mcp` without the trailing slash.
 
 ---
 
 ### ❌ `404 Not Found` or connection refused
 
-**Cause:** The server isn't running or the URL is wrong.
+**Cause:** The server is not running, or the URL is incorrect.
 
 **Fix:**
-- Confirm the server started successfully (check Docker logs or terminal output).
-- Verify the port: `curl http://localhost:8080/mcp/`
+- Make sure that the server started successfully. Read Docker logs or terminal output.
+- Make sure that the port is correct: `curl http://localhost:8080/mcp/`
 
 ---
 
 ## 15. Logging & Redaction
 
-ERPBridge implements standard MCP logging via `notifications/message`.
+ToolPlane implements standard MCP logging via `notifications/message`.
 
 ### 15.1 Setting the Log Level
 ```json
@@ -645,7 +671,7 @@ ERPBridge implements standard MCP logging via `notifications/message`.
 Available levels: `debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`.
 
 ### 15.2 Automatic Redaction
-For security, ERPBridge automatically redacts sensitive data (API keys, passwords, PII) from all logs sent to clients. Redacted fields appear as `[REDACTED]`.
+For security, ToolPlane automatically redacts sensitive data (API keys, passwords, PII) from all logs sent to clients. Redacted fields appear as `[REDACTED]`.
 
 ---
 
