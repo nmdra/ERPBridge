@@ -17,6 +17,36 @@ The system has three layers:
 2. **Control Plane (The Server)**: A centralized API server stores tool definitions in a persistent SQLite database, validates them against strict admission rules, and manages versioning.
 3. **Runtime Layer (MCP Engine)**: A background reconciliation controller keeps the active MCP server aligned with the desired state in the database.
 
+The CLI registry and server registry have different purposes. Registering an
+API changes the local context registry. Applying a reviewed resource sends a
+management request to the server.
+
+```mermaid
+flowchart TD
+    accTitle: Local API registry and server control plane
+    accDescr: Local API registration is separate from server resource admission, SQLite persistence, and MCP runtime reconciliation.
+    CLI["bridgectl"]
+    Local[("Local context registry<br/>ERP API registrations")]
+    API["ToolPlane management API<br/>Authenticate and validate"]
+    Store[("SQLite<br/>Tools, plugins, and bindings")]
+    Controller["Reconciliation controller"]
+    Runtime["MCP runtime<br/>Active revisions and serving pointers"]
+    Client["MCP clients"]
+
+    CLI <-->|API registration and generation inputs| Local
+    CLI -->|Apply reviewed resources over HTTP| API
+    API -->|Admit and persist| Store
+    Store -->|Read desired state| Controller
+    API -.->|Immediate reconciliation after apply| Controller
+    Controller -->|Update active resources| Runtime
+    Runtime -->|Discovery and change notifications| Client
+```
+
+These are logical components, not container or network boundaries. The
+controller also scans the store every 10 seconds. Dashed arrows show
+reconciliation triggers; solid arrows show requests or state flow. The management MCP adapter
+uses `bridgectl`; it does not write directly to the server database.
+
 ---
 
 ## 🧩 Endpoint vs. Tool: Key Concepts
@@ -27,7 +57,7 @@ Registering an **API Endpoint** and applying an **MCP Tool** are separate operat
 | :--- | :--- | :--- |
 | **Mental Model** | Technical Discovery | Declarative Management |
 | **Primary Focus** | The ERP System (technical) | The AI Agent (semantic) |
-| **Storage** | Local CLI Config (`config.yaml`) | Server Registry (`erpbridge.db`) |
+| **Storage** | Local context API registry (`~/.bridgectl/registries/<context>.json`) | Server Registry (`erpbridge.db`) |
 | **Visibility** | **Hidden from AI** | **Visible to AI** (as an MCP Tool) |
 | **Stability** | Experimental / Internal | Versioned / Stable |
 | **Command** | `bridgectl api register ...` | `bridgectl tool apply -f ...` |
@@ -53,6 +83,39 @@ Each admitted name and version is immutable executable content identified by a c
 An unqualified request such as `list_employees` selects the operator-controlled serving revision, not the highest semantic version. Every active revision also has a callable protocol-safe exact name. Clients can bind an unqualified call with the digest published in MCP `_meta`. Exact requests never select a later revision.
 
 ToolPlane clones the selected resource before argument validation and middleware construction. Validation, authorization, mapping, revision-scoped caching, response processing, and output use that one snapshot even if the serving pointer changes concurrently.
+
+The following diagram shows a successful declarative ERP tool call. Failed
+validation, policy, or dispatch checks stop execution and return an error.
+
+```mermaid
+flowchart TD
+    accTitle: Declarative ERP tool call
+    accDescr: One revision snapshot controls validation and policy. Cache hits skip ERP work. Other calls apply configured limits and dispatch checks before the connector.
+    Call["MCP tools/call"]
+    Snapshot["Resolve and clone one revision<br/>Serving, exact name, or digest"]
+    Policy["Validate arguments<br/>Apply rate limits and role checks"]
+    Cache{"Eligible cache hit?"}
+    Concurrency["Apply optional concurrency limit"]
+    Dispatch["Prepare ERP request<br/>Check approved origin and active revision"]
+    Connector["ERP connector<br/>Circuit breaker and bounded retries"]
+    ERP["Existing ERP API"]
+    Response["Process response<br/>Validate output schema"]
+    Store["Cache successful result<br/>Only when eligible"]
+    Reply["Return MCP result"]
+
+    Call --> Snapshot --> Policy --> Cache
+    Cache -->|Hit| Reply
+    Cache -->|Miss, disabled, or bypassed| Concurrency
+    Concurrency --> Dispatch --> Connector
+    Connector <-->|HTTP| ERP
+    Connector --> Response --> Store --> Reply
+```
+
+Rate and role checks apply before cache lookup. A cache hit skips the
+concurrency limit, ERP connector, and response plugins. File-backed credential
+rules can bypass cache reads and writes. The connector retries only eligible
+GET, HEAD, and OPTIONS failures. See [Connectivity](./connectivity.md#4-protection--limits)
+for retry limits and [Caching](./caching.md) for cache eligibility.
 
 ### 3. Visibility Filtering (JSON-RPC Interception)
 
@@ -101,39 +164,72 @@ identity, or original arguments. The developer owns the final object-shaped MCP
 output schema; plugins never change it dynamically. An incompatible output
 meaning requires a new MCP-visible tool name and exact tool version.
 
-For successful responses, the fixed order is:
+The response pipeline keeps ERP status separate from plugin output. Plugin
+stages run only when active bindings exist. Each phase uses ascending binding
+priority.
 
 ```mermaid
-flowchart LR
-    ERP[ERP response bytes] --> Raw[raw_response plugins]
-    Raw --> Path[responsePath]
-    Path --> Schema[output-schema validation]
-    Schema --> After[after_response plugins]
-    After --> Final[final validation and MCP result]
+flowchart TD
+    accTitle: ERP response and plugin processing
+    accDescr: Optional raw plugins preserve HTTP status. Only successful status enters normalization, output validation, and optional after-response processing.
+    ERP["Captured ERP response<br/>Bounded body and immutable status"]
+    Raw["Optional raw_response plugins"]
+    Status{"ERP status is 2xx?"}
+    Error["Return safe tool error<br/>Do not cache"]
+    Path["Normalize result<br/>Apply responsePath when configured"]
+    Schema["Validate output schema"]
+    After["Optional after_response plugins"]
+    Final["Validate transformed output<br/>If plugins ran"]
+    Result["Build MCP result"]
+
+    ERP --> Raw --> Status
+    Status -->|No, including 3xx| Error
+    Status -->|Yes| Path
+    Path --> Schema --> After --> Final --> Result
 ```
 
 Terminal non-2xx responses can be inspected by raw plugins while retaining ERP
 retry and circuit-breaker accounting. They remain errors, including 3xx. They
-do not run success-only normalization or after-response processing.
+do not run success-only normalization or after-response processing. Output
+validation also rejects results that do not match the declared schema.
+
+The sequence below shows a successful MCP call on a cache miss or bypass.
+It omits the policy and dispatch checks shown above. The same external plugin
+can have bindings in both phases, or different plugins can serve each phase.
 
 ```mermaid
 sequenceDiagram
-    participant Client as MCP or direct client
-    participant Bridge as ERPBridge
-    participant ERP as ERP
-    participant Plugin as External plugin
-    Client->>Bridge: invoke exact tool
-    Bridge->>ERP: execute tool request
-    ERP-->>Bridge: bounded response bytes and status
-    Bridge->>Plugin: raw_response with safe tagged body
-    Plugin-->>Bridge: JSON result
-    Bridge->>Plugin: optional after_response normalized result
-    Plugin-->>Bridge: final JSON result
-    Bridge-->>Client: structured content and equivalent text
+    accTitle: Successful MCP call with optional external plugins
+    accDescr: ToolPlane calls the ERP, runs configured raw and after-response bindings, validates results, and returns an MCP result envelope.
+    autonumber
+    participant Client as MCP client
+    participant TP as ToolPlane
+    participant ERP as ERP API
+    participant Plugin as External plugin process
+
+    Client->>TP: Call selected tool revision
+    TP->>ERP: Send approved ERP request
+    ERP-->>TP: Return bounded body and HTTP status
+    opt Active raw_response bindings
+        TP->>Plugin: Tagged body, status, binding config
+        Plugin-->>TP: JSON result, status unchanged
+    end
+    TP->>TP: Normalize and validate successful output
+    opt Active after_response bindings
+        TP->>Plugin: Normalized result and binding config
+        Plugin-->>TP: Transformed JSON result
+        TP->>TP: Validate transformed output
+    end
+    TP-->>Client: Return MCP result envelope
 ```
 
-The pipeline runs only on a cache miss. The cache stores the final transformed
-MCP result and never stores an error result, so a cache hit does not invoke ERP
+For object results with a declared output schema, the MCP result includes
+structured content. Text content contains the JSON result, or the extracted
+`text` field when applicable. The direct REST endpoint uses its separate
+compatibility result shape; see the [REST API Reference](./api.md).
+
+The response pipeline runs on a cache miss, or when caching is disabled or
+bypassed. The cache stores the final transformed MCP result and never stores an error result, so a cache hit does not invoke ERP
 or plugins. Applying, changing, or deleting a plugin or binding flushes the
 affected tool cache entries. `continue` uses the original captured response
 only when it satisfies the developer-owned final schema; otherwise it returns a

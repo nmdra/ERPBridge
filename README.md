@@ -32,20 +32,57 @@ This documentation rename does not change those interfaces.
 
 ## 🏗️ Project Architecture
 
+These diagrams show logical components, not deployment boundaries.
+
+**Management and reconciliation**
+
 ```mermaid
-graph TD
-    A[AI Agent / IDE] -->|MCP| B(ERPBridge Server)
-    B -->|Rate Limiter| B
-    B -->|Exact Cache| C[(Redis)]
-    B -->|Tool Execution| D{ERP Connector}
-    D --> E[Mock ERP / Legacy ERP]
-    F[bridgectl CLI] -->|apply/get/delete| G[(SQLite Registry)]
-    G -->|Reconciliation| B
+flowchart TD
+    accTitle: ToolPlane management and reconciliation
+    accDescr: bridgectl sends resources to the management API. SQLite stores desired state. Reconciliation updates the MCP runtime.
+    CLI["Operator or management MCP client<br/>via bridgectl"]
+    API["ToolPlane management API<br/>Authentication and admission"]
+    Store[("SQLite<br/>Desired resources")]
+    Controller["Reconciliation controller"]
+    Registry["MCP runtime registry<br/>Active revisions and serving selection"]
+
+    CLI -->|Management HTTP| API
+    API -->|Persist resources| Store
+    Store -->|Read desired state| Controller
+    API -.->|Reconcile after apply| Controller
+    Controller -->|Update runtime| Registry
 ```
 
-The diagram shows the Redis cache backend. If Redis is not configured, the
-server uses a bounded in-memory LRU cache. See [Exact Match Caching](./docs/caching.md)
-for cache scope, expiration, and credential-related bypass rules.
+**Tool execution**
+
+```mermaid
+flowchart TD
+    accTitle: ToolPlane tool execution
+    accDescr: MCP calls pass policy checks and cache lookup. A cache miss or bypass uses the ERP connector and optional external plugins.
+    Client["AI agent or MCP client"]
+    Runtime["ToolPlane MCP runtime<br/>Revision selection and policy checks"]
+    Cache{"Eligible cache hit?<br/>Redis or bounded memory"}
+    Execute["ERP connector and response pipeline"]
+    Result["MCP result"]
+
+    Client -->|Streamable HTTP or stdio| Runtime
+    Runtime --> Cache
+    Cache -->|Hit| Result
+    Cache -->|Miss or bypass| Execute
+    Execute <-->|HTTP| ERP["Existing ERP APIs<br/>or MockERP"]
+    Execute <-->|Optional response processing| Plugin["External plugins"]
+    Execute -->|Result or safe error| Result
+    Result -->|Return to client| Client
+```
+
+The CLI sends resource changes through the management API. It does not write
+directly to the server's SQLite database. Reconciliation updates the MCP runtime.
+
+If Redis is not configured, the server uses a bounded in-memory LRU cache.
+A cache hit returns the stored MCP result without an ERP or plugin call.
+Plugins run as separate processes. ToolPlane does not install or start them.
+See [Architecture](./docs/architecture.md) for execution order and
+[Exact Match Caching](./docs/caching.md) for cache scope, expiration, and bypass rules.
 
 - **`services/erpbridge-server/`**: The core Go service. It provides the MCP gateway and declarative control plane.
 - **MockERP**: An independent FastAPI service in [`nmdra/mockerp`](https://github.com/nmdra/mockerp). ToolPlane uses its pinned GHCR image as the legacy ERP dependency.
