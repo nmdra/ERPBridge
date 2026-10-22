@@ -1,1 +1,0 @@
-active/Plan-Bridgectl-Ops-Automatic-Knowledge-Checkpoint.md

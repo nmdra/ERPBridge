@@ -1,8 +1,0 @@
-\begin{tikzpicture}[node distance=11mm]
-\node[evalnode,text width=36mm] (client) {\textbf{MCP client}\\Request start / finish\\Client latency measured};
-\node[evalnode,text width=36mm,right=of client] (runtime) {\textbf{ERPBridge runtime}\\Configured MCP route\\Version not recorded};
-\node[evalnode,text width=36mm,right=of runtime,fill=PagePaper,draw=MutedInk] (erp) {\textbf{ERPNext API}\\Read-only list / search\\Business records};
-\draw[evalarrow] (client)--(runtime);
-\draw[evalarrow] (runtime)--(erp);
-\node[below=13mm of runtime,align=center,font=\sffamily\small,text width=133mm] (scope) {Timing covers the client-observed call, not isolated runtime processing.\\Server CPU, memory, database load, and other-user impact were not measured.};
-\end{tikzpicture}

@@ -45,6 +45,10 @@ internal/web/prebuilt/build/assets/
 
 /cache/
 
+# Local agent files and audit reports
+/.agents/
+/Audit Report/
+
 # Agents
 graphify-out/
 .antigravitycli/

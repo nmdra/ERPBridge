@@ -1,4 +1,0 @@
-case_id,principal,expected,http_status,is_error,observed,classification,notes
-reader-allowed,erpnext_reader,allow,200,false,allow,,
-reader-wrong-role,inventory_reader,deny,200,true,deny,,
-reader-missing-role,erpnext_reader,deny,200,true,deny,,

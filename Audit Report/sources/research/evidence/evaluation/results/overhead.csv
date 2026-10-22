@@ -1,3 +1,0 @@
-corpus,operation,configuration,runs,direct_p50_ms,direct_p95_ms,toolplane_p50_ms,toolplane_p95_ms,p95_overhead_ms
-real-sanitized,GET /resource/Company,cache_disabled_auth_disabled,30,20.352,23.115,14.498,24.738,1.623
-real-sanitized,GET /resource/Company,cache_disabled_admin_authenticated,30,21.020,24.005,15.355,23.664,-0.341

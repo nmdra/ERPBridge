@@ -1,3 +1,0 @@
-scenario,registration_order,advertised_has_limit_page_length,resolved_version,v2_only_argument_http_status,agreement
-pre_fix_reverse_registration,v2_then_v1,false,2.0.0,200,false
-post_fix_reverse_registration,v2_then_v1,true,2.0.0,,true
